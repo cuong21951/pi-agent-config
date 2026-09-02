@@ -66,6 +66,7 @@
   "settings": {
     "hostConfigDiscovery": "on",
     "toolResultRendering": "compact",
-    "collapsedResultLines": 2
+    "collapsedResultLines": 2,
+    "mcpFooterStatus": "compact"
   }
 }

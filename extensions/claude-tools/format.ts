@@ -19,7 +19,7 @@ export interface ResultView {
 
 const LABEL: Record<string, string> = { read: "Read", write: "Write", edit: "Update", grep: "Search", find: "Search", ls: "List" };
 const COLLAPSED_DIFF_LINES = 20;
-const INDENT = "     ";
+const INDENT = "    ";
 
 function shortPath(value: unknown, home: string): string {
 	const path = typeof value === "string" ? value : "";
@@ -108,7 +108,7 @@ function bodyLines(tool: string, args: Record<string, unknown>, outcome: ToolOut
 }
 
 export function resultText(tool: string, args: Record<string, unknown>, outcome: ToolOutcome, view: ResultView, s: Style): string {
-	const elbow = s.fg("dim", "  ⎿  ");
+	const elbow = s.fg("dim", "  └ ");
 	if (view.isPartial) return elbow + s.fg("dim", "…");
 	if (outcome.isError) {
 		const [first, ...rest] = outcome.text.split("\n");
@@ -135,21 +135,21 @@ if (process.env.CLAUDE_TOOLS_SELFTEST) {
 	check(callLine("ls", {}, plain) === "● List(.)", "ls defaults to cwd");
 	check(callLine("edit", { path: "x.ts" }, plain) === "● Update(x.ts)", "edit is Update");
 	const ok = (text: string, details?: unknown): ToolOutcome => ({ text, isError: false, details });
-	check(resultText("read", { path: "a" }, ok("l1\nl2\nl3\n"), view(), plain) === "  ⎿  Read 3 lines (ctrl+o to expand)", "read summary counts lines");
-	check(resultText("read", { path: "a" }, ok("only"), view(), plain) === "  ⎿  Read 1 line (ctrl+o to expand)", "singular line");
-	check(resultText("read", { path: "a" }, ok("l1\nl2"), view(true), plain) === "  ⎿  Read 2 lines\n     l1\n     l2", "expanded shows output");
-	check(resultText("grep", {}, ok("No matches found"), view(), plain) === "  ⎿  Found 0 lines", "grep zero result has no hint");
-	check(resultText("ls", {}, ok("(empty directory)"), view(), plain) === "  ⎿  Listed 0 entries", "ls empty directory");
-	check(resultText("write", { path: "/home/me/n.ts", content: "a\nb" }, ok("Successfully wrote"), view(), plain) === "  ⎿  Wrote 2 lines to ~/n.ts (ctrl+o to expand)", "write counts content");
-	check(resultText("write", { path: "n.ts", content: "a\nb" }, ok("Successfully wrote"), view(true), plain) === "  ⎿  Wrote 2 lines to n.ts\n     a\n     b", "write expands to the written content");
+	check(resultText("read", { path: "a" }, ok("l1\nl2\nl3\n"), view(), plain) === "  └ Read 3 lines (ctrl+o to expand)", "read summary counts lines");
+	check(resultText("read", { path: "a" }, ok("only"), view(), plain) === "  └ Read 1 line (ctrl+o to expand)", "singular line");
+	check(resultText("read", { path: "a" }, ok("l1\nl2"), view(true), plain) === "  └ Read 2 lines\n    l1\n    l2", "expanded shows output");
+	check(resultText("grep", {}, ok("No matches found"), view(), plain) === "  └ Found 0 lines", "grep zero result has no hint");
+	check(resultText("ls", {}, ok("(empty directory)"), view(), plain) === "  └ Listed 0 entries", "ls empty directory");
+	check(resultText("write", { path: "/home/me/n.ts", content: "a\nb" }, ok("Successfully wrote"), view(), plain) === "  └ Wrote 2 lines to ~/n.ts (ctrl+o to expand)", "write counts content");
+	check(resultText("write", { path: "n.ts", content: "a\nb" }, ok("Successfully wrote"), view(true), plain) === "  └ Wrote 2 lines to n.ts\n    a\n    b", "write expands to the written content");
 	const diff = "+1 a\n-2 b\n 3 c\n+4 d";
 	check(
-		resultText("edit", { path: "x.ts" }, ok("done", { diff }), view(), plain) === "  ⎿  Updated x.ts with 2 additions and 1 removal\n     +1 a\n     -2 b\n      3 c\n     +4 d",
+		resultText("edit", { path: "x.ts" }, ok("done", { diff }), view(), plain) === "  └ Updated x.ts with 2 additions and 1 removal\n    +1 a\n    -2 b\n     3 c\n    +4 d",
 		"edit summary and diff always shown",
 	);
-	check(resultText("edit", { path: "x.ts" }, ok("done", {}), view(), plain) === "  ⎿  Updated x.ts with 0 additions and 0 removals", "edit without diff details");
+	check(resultText("edit", { path: "x.ts" }, ok("done", {}), view(), plain) === "  └ Updated x.ts with 0 additions and 0 removals", "edit without diff details");
 	const longDiff = Array.from({ length: 25 }, (_, i) => `+${i} x`).join("\n");
-	check(resultText("edit", { path: "x" }, ok("", { diff: longDiff }), view(), plain).startsWith("  ⎿  Updated x with 25 additions and 0 removals (ctrl+o to expand)"), "long diff collapses with hint");
-	check(resultText("read", {}, { text: "ENOENT\nmore", isError: true, details: undefined }, view(), plain) === "  ⎿  ✗ ENOENT", "error shows first line");
-	check(resultText("read", {}, ok(""), { ...view(), isPartial: true }, plain) === "  ⎿  …", "partial");
+	check(resultText("edit", { path: "x" }, ok("", { diff: longDiff }), view(), plain).startsWith("  └ Updated x with 25 additions and 0 removals (ctrl+o to expand)"), "long diff collapses with hint");
+	check(resultText("read", {}, { text: "ENOENT\nmore", isError: true, details: undefined }, view(), plain) === "  └ ✗ ENOENT", "error shows first line");
+	check(resultText("read", {}, ok(""), { ...view(), isPartial: true }, plain) === "  └ …", "partial");
 }

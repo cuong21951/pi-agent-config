@@ -30,7 +30,6 @@
     "npm:@juicesharp/rpiv-ask-user-question",
     "npm:pi-notify",
     "npm:pi-worktree",
-    "npm:pi-powerline-footer",
     "npm:@tintinweb/pi-subagents",
     "npm:@gotgenes/pi-permission-system",
     "npm:pi-auto-fallback"
@@ -62,9 +61,5 @@
   "treeFilterMode": "no-tools",
   "outputPad": 1,
   "tuiMode": "fullscreen",
-  "fullscreenExitOutput": "resume-hint",
-  "powerline": {
-    "preset": "default",
-    "welcome": false
-  }
+  "fullscreenExitOutput": "resume-hint"
 }

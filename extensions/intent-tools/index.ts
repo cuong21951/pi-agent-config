@@ -1,5 +1,6 @@
 import { createBashTool, type BashToolDetails, type ExtensionAPI } from "@earendil-works/pi-coding-agent";
 import { Text } from "@earendil-works/pi-tui";
+import { callLine, resultLines } from "./render.ts";
 
 // ponytail: map is only a fallback when the model omits `description`.
 // Claude's real mechanism is a model-supplied `description` field per bash call.
@@ -83,43 +84,20 @@ export default function (pi: ExtensionAPI) {
 
 		renderCall(args, theme) {
 			const intent = (args as any).description?.trim() || describe((args as any).command);
-			let text = theme.fg("toolTitle", theme.bold("● "));
-			text += theme.fg("accent", intent);
-			return new Text(text, 0, 0);
+			return new Text(callLine(intent, theme), 0, 0);
 		},
 
 		renderResult(result, { expanded, isPartial }, theme) {
-			if (isPartial) return new Text(theme.fg("dim", "  ⎿ ") + theme.fg("warning", "Đang chạy..."), 0, 0);
+			if (isPartial) return new Text(theme.fg("dim", "  └ ") + theme.fg("dim", "Running…"), 0, 0);
 
 			const details = result.details as BashToolDetails | undefined;
 			const content = result.content[0];
 			const output = content?.type === "text" ? content.text : "";
-
 			const exitMatch = output.match(/exit(?:ed with)? code:? (\d+)/);
 			const exitCode = exitMatch ? parseInt(exitMatch[1], 10) : null;
-			const lineCount = output.split("\n").filter((l) => l.trim()).length;
-
-			let text = theme.fg("dim", "  ⎿ ");
-			text += exitCode === 0 || exitCode === null
-				? theme.fg("success", "✓")
-				: theme.fg("error", `✗ exit ${exitCode}`);
-			text += theme.fg("dim", ` ${lineCount} dòng`);
-
-			if (details?.truncation?.truncated) {
-				text += theme.fg("warning", " [truncated]");
-			}
-
-			if (expanded) {
-				const lines = output.split("\n").slice(0, 20);
-				for (const line of lines) {
-					text += `\n${theme.fg("dim", line)}`;
-				}
-				if (output.split("\n").length > 20) {
-					text += `\n${theme.fg("muted", `... ${output.split("\n").length - 20} dòng nữa`)}`;
-				}
-			}
-
-			return new Text(text, 0, 0);
+			const [head, ...rest] = resultLines(output, exitCode, expanded, details?.truncation?.truncated === true);
+			const painted = theme.fg(exitCode && exitCode !== 0 ? "error" : "dim", head);
+			return new Text([painted, ...rest.map((line) => theme.fg("toolOutput", line))].join("\n"), 0, 0);
 		},
 	});
 }
