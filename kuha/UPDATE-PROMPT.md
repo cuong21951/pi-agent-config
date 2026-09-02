@@ -9,7 +9,7 @@ Cập nhật trợ lý pi và bộ Kuha trên máy này lên bản mới nhất,
    macOS: bash ~/.pi/agent/git/github.com/cuong21951/pi-agent-config/kuha/install.sh
    Windows: pwsh -File "%USERPROFILE%\.pi\agent\git\github.com\cuong21951\pi-agent-config\kuha\install.ps1"
 3. Chạy thử `pi -p --no-session "Trả lời đúng một từ: OK"`, phải ra OK.
-4. Đọc https://github.com/cuong21951/pi-agent-config/blob/main/kuha/README.md và cho tôi biết có gì mới cần biết trong 3 dòng.
+4. Đọc https://github.com/cuong21951/pi-agent-config/blob/main/kuha/CHANGELOG.md và tóm tắt cho tôi có gì mới trong 3 dòng.
 ```
 
 Chạy tay (macOS):
