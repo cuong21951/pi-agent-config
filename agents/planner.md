@@ -2,6 +2,7 @@
 name: planner
 description: Creates implementation plans from context and requirements
 tools: read, grep, find, ls
+color: purple
 model: commandcode/z-ai/glm-5.3-flash
 ---
 

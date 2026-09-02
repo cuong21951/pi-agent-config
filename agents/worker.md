@@ -1,6 +1,7 @@
 ---
 name: worker
 description: General-purpose subagent with full capabilities, isolated context
+color: green
 model: commandcode/z-ai/glm-5.3-flash
 ---
 

@@ -6,6 +6,8 @@ tích tài chính, tra cứu pháp luật, ghi biên bản họp và làm slide 
 Kuha — không cần biết lập trình.
 
 ## Cài đặt trên Windows 11 (làm theo thứ tự)
+> Muốn để Claude tự cài toàn bộ thay vì làm tay: dùng khối prompt trong `SETUP-PROMPT.md` (Cuong điền key trước khi gửi).
+
 
 ### 1. Cài công cụ nền (mở PowerShell, chạy từng lệnh)
 
