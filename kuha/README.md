@@ -211,6 +211,8 @@ Mọi báo cáo, nghiên cứu, phân tích... được lưu trong `~/Documents/
 
 ## Cập nhật
 
+Nhanh nhất: dán prompt trong `UPDATE-PROMPT.md` vào Claude Code, hoặc:
+
 Khi Cuong cập nhật gói kỹ năng, chạy lại (macOS và Windows đều giống nhau):
 
 ```

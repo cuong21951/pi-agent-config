@@ -29,7 +29,8 @@
     "npm:pi-notify",
     "npm:pi-worktree",
     "npm:pi-powerline-footer",
-    "npm:@tintinweb/pi-subagents"
+    "npm:@tintinweb/pi-subagents",
+    "npm:@gotgenes/pi-permission-system"
   ],
   "extensions": [
     "C:/Users/cuong/AppData/Roaming/npm/node_modules/@earendil-works/pi-coding-agent/examples/extensions/plan-mode",
