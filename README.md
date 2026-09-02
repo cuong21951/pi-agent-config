@@ -20,7 +20,7 @@ Cuong's [pi](https://pi.dev) harness, kept in git so it can be restored on any m
 | `settings.json` | Model, packages, skills, prompts, fullscreen TUI, theme. Paths are absolute to this machine. |
 | `mcp.example.json` | MCP servers with direct tools. Copy to `mcp.json` and fill in the Azure DevOps PAT; `mcp.json` is gitignored. |
 | `extensions/` | claude-memory (shared memory index + `remember` tool), claude-working (Claude-style sparkle spinner, shimmering verb, elapsed/tokens line), claude-tools (read/write/edit/grep/find/ls rendered as `● Read(path)` / `⎿ Read N lines`, `● Update(path)` + diff, `● Search(pattern: …)`), claude-messages (`● ` before assistant text, `✻ Thinking…` label), intent-tools (labelled compact bash rows), claude-header, cheap-models, claude-mcp-render, rtk-bash, deepseek-guards, no-code-comments. |
-| `keybindings.json` | Fullscreen mode: `up`/`down` scroll the transcript (herdr on Windows turns the wheel into arrow keys), `alt+up/down` move the cursor, `ctrl+p/ctrl+n` browse prompt history. |
+| `keybindings.json` | `ctrl+p`/`ctrl+n` browse prompt history (Up/Down on an empty prompt scroll the transcript instead, see herdr-wheel). |
 | `agents/`, `prompts/` | scout / planner / worker / reviewer for `@tintinweb/pi-subagents`, and the `/implement`, `/implement-and-review`, `/scout-and-plan` chains. |
 | `themes/claude-dark.json` | Dark theme with daltonized diff colours and Claude orange accents. |
 | `skills/` | Local skills (browser-tools patched for Windows, film-download, research helpers). |
@@ -41,7 +41,7 @@ The root `package.json` declares the pi manifest (Kuha skills and prompts, the t
 
 ## Running pi inside herdr
 
-herdr on native Windows never forwards mouse events to a mouse-reporting pane ([herdr #1528](https://github.com/herdrdev/herdr/issues/1528), closed as not planned), so the wheel always arrives as Up/Down keys, whatever mouse mode pi requests. `keybindings.json` therefore routes `up`/`down` to the transcript scroll in fullscreen mode; prompt history is on `ctrl+p`/`ctrl+n` and the editor cursor on `alt+up`/`alt+down`. The `TMUX=1` wrapper below is kept so pi asks for button-motion mode only (cheaper for the multiplexer), but it does not fix the wheel on its own. PowerShell profile:
+herdr on native Windows never forwards mouse events to a mouse-reporting pane ([herdr #1528](https://github.com/herdrdev/herdr/issues/1528), closed as not planned), so the wheel always arrives as Up/Down keys, whatever mouse mode pi requests. The `herdr-wheel` extension swaps in a `CustomEditor` subclass: with an empty prompt and no autocomplete open, Up/Down scroll the transcript; with text, or inside selectors, autocomplete and workflow pickers, the keys behave as stock (a global `up`/`down` keybinding would steal them from those lists). Prompt history moves to `ctrl+p`/`ctrl+n`. The `TMUX=1` wrapper below is kept so pi asks for button-motion mode only (cheaper for the multiplexer), but it does not fix the wheel on its own. PowerShell profile:
 
 ```powershell
 function pi {

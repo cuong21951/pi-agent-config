@@ -1,8 +1,4 @@
 {
-  "tui.altScreen.lineUp": "up",
-  "tui.altScreen.lineDown": "down",
-  "tui.editor.cursorUp": "alt+up",
-  "tui.editor.cursorDown": "alt+down",
   "tui.editor.historyPrevious": "ctrl+p",
   "tui.editor.historyNext": "ctrl+n"
 }
