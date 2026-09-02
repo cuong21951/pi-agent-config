@@ -14,7 +14,8 @@ const SPINNER = ["·", "✢", "✳", "✶", "✻", "✽", "✻", "✶", "✳", "
 
 function elapsed(ms: number): string {
 	const s = Math.floor(ms / 1000);
-	return s < 60 ? `${s}s` : `${Math.floor(s / 60)}m ${s % 60}s`;
+	const text = s < 60 ? `${s}s` : `${Math.floor(s / 60)}m ${String(s % 60).padStart(2, "0")}s`;
+	return text.padStart(6);
 }
 
 function tokens(n: number): string {
@@ -41,8 +42,8 @@ export default function (pi: ExtensionAPI) {
 	pi.on("session_start", (_event, ctx) => {
 		if (!ctx.hasUI) return;
 		ctx.ui.setWorkingIndicator({
-			frames: SPINNER.map((glyph) => ctx.ui.theme.fg("warning", glyph)),
-			intervalMs: 110,
+			frames: SPINNER.map((glyph) => `${ctx.ui.theme.fg("warning", glyph)} `),
+			intervalMs: 120,
 		});
 	});
 
@@ -76,8 +77,9 @@ if (process.env.CLAUDE_WORKING_SELFTEST) {
 		if (!ok) throw new Error(`FAIL: ${msg}`);
 		console.log(`ok - ${msg}`);
 	};
-	check(elapsed(4000) === "4s", "seconds only");
+	check(elapsed(4000) === "    4s", "seconds only, fixed width");
 	check(elapsed(289000) === "4m 49s", "minutes and seconds");
+	check(elapsed(65000) === "4m 05s".replace("4m", "1m"), "seconds zero-padded so the line never shifts");
 	check(tokens(950) === "950", "small token count");
 	check(tokens(14500) === "14.5k", "thousands");
 	check(detail(0, "high") === "thinking with high effort", "effort shown before first tokens");
