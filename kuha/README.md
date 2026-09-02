@@ -1,5 +1,13 @@
 # Kuha — Trợ lý pi cho dự án Kuha
 
+> **Lời tựa của Cuong**
+>
+> Bộ này làm cho vợ tôi, Phương, người mà tôi yêu và thỉnh thoảng thấy hơi ngốc nghếch một
+> cách rất đáng yêu. Tôi bỏ thời gian gom đủ kỹ năng cần thiết vào đây để em đọc được báo cáo
+> tài chính, tra được luật, ghi được biên bản họp và làm được slide mà không cần hỏi chồng.
+> Mục tiêu cuối cùng: vợ tôi trở thành **corgi tài chính** của dự án Kuha, chân ngắn nhưng chạy
+> số rất nhanh. Nếu có gì không hiểu, cứ hỏi trợ lý trước, hỏi chồng sau.
+
 Đây là gói kỹ năng (skills) và câu lệnh nhanh (prompts) cho **pi coding agent**
 (https://pi.dev), giúp Phương làm nghiên cứu thị trường, viết báo cáo, phân
 tích tài chính, tra cứu pháp luật, ghi biên bản họp và làm slide cho dự án
