@@ -1,6 +1,6 @@
 # Prompt cài đặt tự động cho Phương
 
-Cách dùng: Cuong điền hai chỗ `{{...}}` bên dưới, gửi cả khối cho Phương. Phương mở
+Cách dùng: Cuong điền chỗ `{{OPENROUTER_API_KEY}}` bên dưới, gửi cả khối cho Phương. Phương mở
 **Claude Code** trên máy Windows (hoặc Claude Desktop có quyền chạy lệnh), dán nguyên
 khối này vào và bấm Enter. Claude sẽ tự cài mọi thứ, kiểm tra, rồi hướng dẫn Phương
 dùng. Không cần biết lập trình.
@@ -22,7 +22,6 @@ máy Windows này, cấu hình sẵn API key, chạy thử, rồi hướng dẫn
 THÔNG TIN BÍ MẬT (chỉ dùng để cấu hình, không in ra màn hình, không ghi vào file nào khác
 ngoài chỗ được chỉ định)
 - OPENROUTER_API_KEY: {{OPENROUTER_API_KEY}}
-- GITHUB_TOKEN (quyền đọc repo riêng cuong21951/pi-agent-config): {{GITHUB_TOKEN}}
 
 CÁC BƯỚC (làm tuần tự, sau mỗi bước kiểm tra rồi mới sang bước sau)
 
@@ -37,10 +36,8 @@ CÁC BƯỚC (làm tuần tự, sau mỗi bước kiểm tra rồi mới sang b�
 
 2. Cài pi: `npm install -g @earendil-works/pi-coding-agent`, kiểm tra `pi --version`.
 
-3. Lấy bộ Kuha từ repo riêng. Dùng token để git truy cập mà không lộ token trong lịch sử
-   lệnh: thiết lập biến môi trường tạm `GIT_ASKPASS` hoặc dùng
-   `git config --global credential.helper manager` rồi đăng nhập bằng token khi git hỏi.
-   Sau đó chạy: `pi install git:github.com/cuong21951/pi-agent-config`
+3. Lấy bộ Kuha từ repo public (không cần đăng nhập GitHub):
+   `pi install git:github.com/cuong21951/pi-agent-config`
    Kiểm tra: `pi list` phải liệt kê git:github.com/cuong21951/pi-agent-config và thư mục
    %USERPROFILE%\.pi\agent\git\github.com\cuong21951\pi-agent-config\kuha\skills có 9 thư mục.
 
@@ -81,7 +78,7 @@ CÁC BƯỚC (làm tuần tự, sau mỗi bước kiểm tra rồi mới sang b�
    %USERPROFILE%\Documents\Kuha\HUONG-DAN.md và đọc lại cho tôi.
 
 QUY TẮC
-- Không hiển thị giá trị key/token trong câu trả lời hay trong log.
+- Không hiển thị giá trị key trong câu trả lời hay trong log.
 - Không xoá file của tôi. Không cài gì ngoài danh sách trên trừ khi bắt buộc, và nói rõ.
 - Mỗi bước: cho tôi biết đang làm gì bằng một câu ngắn, kết quả kiểm tra là gì.
 - Nếu một bước thất bại 2 lần, dừng và hỏi tôi thay vì thử cách lạ.

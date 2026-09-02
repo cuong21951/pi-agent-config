@@ -45,9 +45,7 @@ Khuyến nghị dùng OpenRouter:
 
 ### 4. Lấy bộ kỹ năng Kuha
 
-**Cách khuyến nghị** — cài trực tiếp từ repo riêng tư (Cuong cần thêm bạn làm
-collaborator của repo `cuong21951/pi-agent-config` trên GitHub trước, hoặc bạn
-dùng token cá nhân):
+**Cách khuyến nghị** — cài trực tiếp từ repo public `cuong21951/pi-agent-config`:
 
 ```powershell
 pi install git:github.com/cuong21951/pi-agent-config
