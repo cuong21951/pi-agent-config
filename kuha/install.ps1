@@ -182,6 +182,12 @@ if ($managedByPackage) {
     }
 }
 
+if (-not $settings.PSObject.Properties['quietStartup']) {
+    $settings | Add-Member -NotePropertyName 'quietStartup' -NotePropertyValue $true
+}
+if (-not $settings.PSObject.Properties['powerline']) {
+    $settings | Add-Member -NotePropertyName 'powerline' -NotePropertyValue ([pscustomobject]@{ preset = 'default'; welcome = $false })
+}
 if (-not $settings.PSObject.Properties['tuiMode']) {
     $settings | Add-Member -NotePropertyName 'tuiMode' -NotePropertyValue 'fullscreen'
 }

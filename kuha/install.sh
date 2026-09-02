@@ -210,6 +210,8 @@ else:
         add_unique("prompts", prompts_dir)
 
 settings.setdefault("tuiMode", "fullscreen")
+settings.setdefault("quietStartup", True)
+settings.setdefault("powerline", {"preset": "default", "welcome": False})
 settings.setdefault("defaultThinkingLevel", "medium")
 
 with open(settings_path, "w", encoding="utf-8") as f:

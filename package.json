@@ -3,8 +3,16 @@
   "private": true,
   "description": "Cuong's pi harness plus the Kuha business pack (research, finance, Vietnamese law, documents, meeting minutes)",
   "pi": {
-    "skills": ["./kuha/skills"],
-    "prompts": ["./kuha/prompts"],
-    "extensions": ["./extensions/claude-working", "./extensions/intent-tools"]
+    "skills": [
+      "./kuha/skills"
+    ],
+    "prompts": [
+      "./kuha/prompts"
+    ],
+    "extensions": [
+      "./extensions/claude-working",
+      "./extensions/intent-tools",
+      "./extensions/claude-header"
+    ]
   }
 }
