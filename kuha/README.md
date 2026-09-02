@@ -1,12 +1,12 @@
 # Kuha — Trợ lý pi cho dự án Kuha
 
-> **Lời tựa của Cuong**
+> **Gửi Phương**
 >
-> Bộ này làm cho vợ tôi, Phương, người mà tôi yêu và thỉnh thoảng thấy hơi ngốc nghếch một
-> cách rất đáng yêu. Tôi bỏ thời gian gom đủ kỹ năng cần thiết vào đây để em đọc được báo cáo
-> tài chính, tra được luật, ghi được biên bản họp và làm được slide mà không cần hỏi chồng.
-> Mục tiêu cuối cùng: vợ tôi trở thành **corgi tài chính** của dự án Kuha, chân ngắn nhưng chạy
-> số rất nhanh. Nếu có gì không hiểu, cứ hỏi trợ lý trước, hỏi chồng sau.
+> Bộ trợ lý này anh làm riêng cho em. Anh yêu em, kể cả những lúc em ngốc nghếch một cách rất
+> đáng yêu. Anh bỏ thời gian gom đủ kỹ năng vào đây để em tự đọc được báo cáo tài chính, tra
+> được luật, ghi được biên bản họp và làm được slide mà không phải chờ chồng. Mục tiêu của anh:
+> em thành **corgi tài chính** của dự án Kuha, chân ngắn nhưng chạy số rất nhanh. Không hiểu gì
+> thì hỏi trợ lý trước, hỏi anh sau. Anh yêu em.
 
 Đây là gói kỹ năng (skills) và câu lệnh nhanh (prompts) cho **pi coding agent**
 (https://pi.dev), giúp Phương làm nghiên cứu thị trường, viết báo cáo, phân
