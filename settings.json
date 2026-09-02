@@ -1,0 +1,61 @@
+{
+  "defaultProvider": "commandcode",
+  "defaultModel": "z-ai/glm-5.3-flash",
+  "defaultThinkingLevel": "high",
+  "enabledModels": [
+    "commandcode/deepseek/*",
+    "commandcode/z-ai/*",
+    "commandcode/zai-org/*"
+  ],
+  "compaction": {
+    "enabled": true,
+    "reserveTokens": 200000,
+    "keepRecentTokens": 80000
+  },
+  "retry": {
+    "enabled": true,
+    "maxRetries": 3,
+    "provider": {
+      "maxRetries": 0
+    }
+  },
+  "packages": [
+    "git:github.com/badlogic/pi-skills",
+    "npm:pi-mcp-adapter",
+    "npm:@dietrichgebert/ponytail",
+    "npm:pi-deepseek-search",
+    "npm:pi-web-access",
+    "npm:@juicesharp/rpiv-ask-user-question",
+    "npm:pi-notify",
+    "npm:pi-worktree",
+    "npm:pi-powerline-footer"
+  ],
+  "extensions": [
+    "C:/Users/cuong/AppData/Roaming/npm/node_modules/@earendil-works/pi-coding-agent/examples/extensions/plan-mode",
+    "C:/Users/cuong/AppData/Roaming/npm/node_modules/@earendil-works/pi-coding-agent/examples/extensions/subagent",
+    "C:/Users/cuong/AppData/Roaming/npm/node_modules/@earendil-works/pi-coding-agent/examples/extensions/todo.ts"
+  ],
+  "skills": [
+    "C:/Users/cuong/.pi/agent/git/github.com/badlogic/pi-skills/brave-search",
+    "C:/Users/cuong/.pi/agent/skills/browser-tools",
+    "C:/Users/cuong/.pi/agent/git/github.com/badlogic/pi-skills/gccli",
+    "C:/Users/cuong/.pi/agent/git/github.com/badlogic/pi-skills/gdcli",
+    "C:/Users/cuong/.pi/agent/git/github.com/badlogic/pi-skills/gmcli",
+    "C:/Users/cuong/.pi/agent/git/github.com/badlogic/pi-skills/transcribe",
+    "C:/Users/cuong/.pi/agent/git/github.com/badlogic/pi-skills/vscode",
+    "C:/Users/cuong/.pi/agent/git/github.com/badlogic/pi-skills/youtube-transcript",
+    "C:/Users/cuong/.claude/skills",
+    "C:/TimeBlock/.claude/skills",
+    "C:/Users/cuong/.claude/plugins/cache/openai-codex/codex/1.0.5/skills"
+  ],
+  "lastChangelogVersion": "0.84.4",
+  "showHardwareCursor": true,
+  "defaultProjectTrust": "always",
+  "theme": "claude-dark",
+  "hideThinkingBlock": true,
+  "quietStartup": true,
+  "treeFilterMode": "no-tools",
+  "outputPad": 1,
+  "tuiMode": "fullscreen",
+  "fullscreenExitOutput": "resume-hint"
+}

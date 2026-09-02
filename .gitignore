@@ -1,0 +1,18 @@
+# secrets
+auth.json
+auth.json.bak
+# caches and runtime state
+sessions/
+models-store.json
+mcp-cache.json
+mcp-npx-cache.json
+trust.json
+powerline-footer/
+*.log
+# installed packages (restored with `pi install` from settings.json)
+npm/node_modules/
+npm/package-lock.json
+git/
+# backups and scratch
+*.bak
+__pycache__/
