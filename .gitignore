@@ -17,3 +17,4 @@ git/
 *.bak
 __pycache__/
 mcp.json
+extensions/pi-permission-system/logs/
