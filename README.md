@@ -1,5 +1,15 @@
 # pi-agent-config
 
+> **Gửi Phương**
+>
+> Bộ trợ lý này anh làm riêng cho em. Anh yêu em, kể cả những lúc em ngốc nghếch một cách rất
+> đáng yêu. Anh bỏ thời gian gom đủ kỹ năng vào đây để em tự đọc được báo cáo tài chính, tra
+> được luật, ghi được biên bản họp và làm được slide mà không phải chờ chồng. Mục tiêu của anh:
+> em thành **corgi tài chính** của dự án Kuha, chân ngắn nhưng chạy số rất nhanh. Không hiểu gì
+> thì hỏi trợ lý trước, hỏi anh sau. Anh yêu em.
+>
+> Hướng dẫn cài đặt cho em ở đây: [kuha/README.md](kuha/README.md)
+
 Cuong's [pi](https://pi.dev) harness, kept in git so it can be restored on any machine, plus the **Kuha** business pack: the skills I built so my wife Phương can become the finance corgi of the Kuha project (see `kuha/README.md`).
 
 ## What is here
