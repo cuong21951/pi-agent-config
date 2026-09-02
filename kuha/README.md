@@ -14,7 +14,7 @@ tích tài chính, tra cứu pháp luật, ghi biên bản họp và làm slide 
 Kuha — không cần biết lập trình.
 
 ## Cài đặt
-> Muốn để Claude tự cài toàn bộ thay vì làm tay: dùng khối prompt trong `SETUP-PROMPT.md` (Cuong điền key trước khi gửi).
+> Muốn để Claude tự cài toàn bộ thay vì làm tay: dùng prompt ngắn trong `SETUP-PROMPT-SHORT.md` (Claude tự đọc README này), hoặc bản chi tiết từng bước trong `SETUP-PROMPT.md`. Cuong điền key trước khi gửi.
 
 Máy của Phương là **macOS** — làm theo track "macOS" bên dưới. Track "Windows 11" giữ lại cho
 máy nào chạy Windows.

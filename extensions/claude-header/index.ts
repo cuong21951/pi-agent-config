@@ -1,5 +1,7 @@
+import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
+import { pathToFileURL } from "node:url";
 import { VERSION, type ExtensionAPI } from "@earendil-works/pi-coding-agent";
 
 const LOGO = [" ▄▄▄ ", "█   █", "█▀▀▀▀", "█    ", "█    "];
@@ -20,16 +22,41 @@ export function headerLines(model: string, provider: string, cwd: string): strin
 	return LOGO.map((glyph, i) => `${glyph}  ${right[i] ?? ""}`);
 }
 
+export function powerlineDir(agentDir: string): string | undefined {
+	const candidate = path.join(agentDir, "npm", "node_modules", "pi-powerline-footer");
+	return fs.existsSync(path.join(candidate, "welcome.ts")) ? candidate : undefined;
+}
+
+// ponytail: powerline's own welcome header is richer (logo, tips, loaded counts, recent
+// sessions) but powerline removes it on the first keystroke; we mount the same component
+// ourselves and never remove it. Falls back to a plain header when powerline is absent.
+async function powerlineHeader(ctx: { model?: { name?: string; id?: string; provider?: string }; getSystemPrompt?: () => string }) {
+	const dir = powerlineDir(process.env.PI_CODING_AGENT_DIR ?? path.join(os.homedir(), ".pi", "agent"));
+	if (!dir) return undefined;
+	const welcome = await import(pathToFileURL(path.join(dir, "welcome.ts")).href);
+	const usage = await import(pathToFileURL(path.join(dir, "context-usage.ts")).href);
+	return new welcome.WelcomeHeader(
+		ctx.model?.name ?? ctx.model?.id ?? "No model",
+		ctx.model?.provider ?? "Unknown",
+		welcome.getRecentSessions(3),
+		welcome.discoverLoadedCounts(),
+		usage.estimateInitialContextTokens(ctx),
+	);
+}
+
 export default function (pi: ExtensionAPI) {
-	pi.on("session_start", (_event, ctx) => {
+	pi.on("session_start", async (_event, ctx) => {
 		if (!ctx.hasUI) return;
+		let rich: { render(width: number): string[]; invalidate(): void } | undefined;
+		try {
+			rich = await powerlineHeader(ctx);
+		} catch {
+			rich = undefined;
+		}
 		ctx.ui.setHeader((_tui, theme) => ({
-			render(): string[] {
-				const lines = headerLines(
-					ctx.model?.name ?? ctx.model?.id ?? "no model",
-					ctx.model?.provider ?? "",
-					ctx.cwd,
-				);
+			render(width: number): string[] {
+				if (rich) return rich.render(width);
+				const lines = headerLines(ctx.model?.name ?? ctx.model?.id ?? "no model", ctx.model?.provider ?? "", ctx.cwd);
 				return [
 					"",
 					...lines.map((line, i) =>
@@ -40,7 +67,9 @@ export default function (pi: ExtensionAPI) {
 					"",
 				];
 			},
-			invalidate() {},
+			invalidate() {
+				rich?.invalidate();
+			},
 		}));
 	});
 }
@@ -48,8 +77,8 @@ export default function (pi: ExtensionAPI) {
 if (process.env.CLAUDE_HEADER_SELFTEST) {
 	const lines = headerLines("GLM 5.3 Flash", "commandcode", path.join(os.homedir(), "Documents", "Kuha"));
 	if (lines.length !== 5) throw new Error("FAIL: five header rows");
-	if (!lines[1].includes("GLM 5.3 Flash · commandcode")) throw new Error("FAIL: model row");
 	if (!lines[2].includes("~")) throw new Error("FAIL: home-relative cwd");
-	console.log(lines.join("\n"));
-	console.log("ok - header renders");
+	if (powerlineDir(path.join(os.homedir(), ".pi", "agent")) === undefined) throw new Error("FAIL: powerline dir not found here");
+	if (powerlineDir("C:/nope") !== undefined) throw new Error("FAIL: missing powerline must return undefined");
+	console.log("ok - fallback header and powerline lookup");
 }

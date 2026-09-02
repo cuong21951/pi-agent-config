@@ -10,12 +10,11 @@ const VERBS = [
 	"Transmuting", "Vibing", "Wibbling", "Working", "Wrangling",
 ];
 
-const SPINNER = ["·", "✢", "✳", "✶", "✻", "✽", "✻", "✶", "✳", "✢"];
+const SPINNER = ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"];
 
 function elapsed(ms: number): string {
 	const s = Math.floor(ms / 1000);
-	const text = s < 60 ? `${s}s` : `${Math.floor(s / 60)}m ${String(s % 60).padStart(2, "0")}s`;
-	return text.padStart(6);
+	return s < 60 ? `${s}s` : `${Math.floor(s / 60)}m ${String(s % 60).padStart(2, "0")}s`;
 }
 
 function tokens(n: number): string {
@@ -42,8 +41,8 @@ export default function (pi: ExtensionAPI) {
 	pi.on("session_start", (_event, ctx) => {
 		if (!ctx.hasUI) return;
 		ctx.ui.setWorkingIndicator({
-			frames: SPINNER.map((glyph) => `${ctx.ui.theme.fg("warning", glyph)} `),
-			intervalMs: 120,
+			frames: SPINNER.map((glyph) => ctx.ui.theme.fg("warning", glyph)),
+			intervalMs: 90,
 		});
 	});
 
@@ -77,7 +76,7 @@ if (process.env.CLAUDE_WORKING_SELFTEST) {
 		if (!ok) throw new Error(`FAIL: ${msg}`);
 		console.log(`ok - ${msg}`);
 	};
-	check(elapsed(4000) === "    4s", "seconds only, fixed width");
+	check(elapsed(4000) === "4s", "seconds only");
 	check(elapsed(289000) === "4m 49s", "minutes and seconds");
 	check(elapsed(65000) === "4m 05s".replace("4m", "1m"), "seconds zero-padded so the line never shifts");
 	check(tokens(950) === "950", "small token count");
@@ -86,5 +85,5 @@ if (process.env.CLAUDE_WORKING_SELFTEST) {
 	check(detail(0, "off") === "thinking", "no effort label when thinking is off");
 	check(detail(213, "high") === "↓ 213 tokens", "tokens once output flows");
 	check(pickVerb("Swirling") !== "Swirling", "verb changes between turns");
-	check(SPINNER.length === 10 && SPINNER[0] === "·", "spinner frames match Claude's cycle");
+	check(SPINNER.length === 10 && SPINNER.every((g) => g.length === 1), "braille spinner, one cell per frame");
 }
