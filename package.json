@@ -13,6 +13,8 @@
       "./extensions/claude-working",
       "./extensions/intent-tools",
       "./extensions/claude-header",
+      "./extensions/claude-tools",
+      "./extensions/claude-messages",
       "./extensions/cheap-models"
     ]
   }

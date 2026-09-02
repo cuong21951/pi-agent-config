@@ -10,20 +10,37 @@ const VERBS = [
 	"Transmuting", "Vibing", "Wibbling", "Working", "Wrangling",
 ];
 
-const SPINNER = ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"];
+// ponytail: Claude's set also has ✳ (U+2733), but Windows Terminal draws that one as a green emoji box.
+const SPARKLE = ["·", "✢", "✶", "✻", "✽", "✻", "✶", "✢"];
+const ORANGE = "\x1b[38;2;217;119;87m";
+const GLOW = "\x1b[38;2;252;236;222m";
+const RESET_FG = "\x1b[39m";
+const SHIMMER_WIDTH = 3;
+const FRAME_MS = 100;
 
-function elapsed(ms: number): string {
+export function elapsed(ms: number): string {
 	const s = Math.floor(ms / 1000);
-	return s < 60 ? `${s}s` : `${Math.floor(s / 60)}m ${String(s % 60).padStart(2, "0")}s`;
+	return s < 60 ? `${s}s` : `${Math.floor(s / 60)}m ${s % 60}s`;
 }
 
-function tokens(n: number): string {
+export function tokens(n: number): string {
 	return n < 1000 ? `${n}` : `${(n / 1000).toFixed(1)}k`;
 }
 
-function detail(output: number, thinking: string | undefined): string {
+export function detail(output: number, thinking: string | undefined): string {
 	if (output > 0) return `↓ ${tokens(output)} tokens`;
 	return thinking && thinking !== "off" ? `thinking with ${thinking} effort` : "thinking";
+}
+
+export function shimmer(text: string, frame: number): string {
+	const chars = Array.from(text);
+	const start = (frame % (chars.length + SHIMMER_WIDTH)) - SHIMMER_WIDTH;
+	let out = "";
+	for (let i = 0; i < chars.length; i++) {
+		const lit = i >= start && i < start + SHIMMER_WIDTH;
+		out += (lit ? GLOW : ORANGE) + chars[i];
+	}
+	return out + RESET_FG;
 }
 
 function pickVerb(previous: string): string {
@@ -36,13 +53,14 @@ export default function (pi: ExtensionAPI) {
 	let started = 0;
 	let output = 0;
 	let verb = "";
+	let frame = 0;
 	let timer: ReturnType<typeof setInterval> | undefined;
 
 	pi.on("session_start", (_event, ctx) => {
 		if (!ctx.hasUI) return;
 		ctx.ui.setWorkingIndicator({
-			frames: SPINNER.map((glyph) => ctx.ui.theme.fg("warning", glyph)),
-			intervalMs: 90,
+			frames: SPARKLE.map((glyph) => ctx.ui.theme.fg("warning", glyph)),
+			intervalMs: 120,
 		});
 	});
 
@@ -50,14 +68,15 @@ export default function (pi: ExtensionAPI) {
 		if (!ctx.hasUI) return;
 		started = Date.now();
 		output = 0;
+		frame = 0;
 		verb = pickVerb(verb);
 		clearInterval(timer);
-		const paint = () =>
-			ctx.ui.setWorkingMessage(
-				`${ctx.ui.theme.fg("warning", ctx.ui.theme.bold(`${verb}…`))} ${ctx.ui.theme.fg("dim", `(${elapsed(Date.now() - started)} · ${detail(output, ctx.thinkingLevel)})`)}`,
-			);
+		const paint = () => {
+			const timing = `(${elapsed(Date.now() - started)} · ${detail(output, ctx.thinkingLevel)} · esc to interrupt)`;
+			ctx.ui.setWorkingMessage(`${shimmer(`${verb}…`, frame++)} ${ctx.ui.theme.fg("dim", timing)}`);
+		};
 		paint();
-		timer = setInterval(paint, 1000);
+		timer = setInterval(paint, FRAME_MS);
 	});
 
 	pi.on("message_end", (event) => {
@@ -76,14 +95,18 @@ if (process.env.CLAUDE_WORKING_SELFTEST) {
 		if (!ok) throw new Error(`FAIL: ${msg}`);
 		console.log(`ok - ${msg}`);
 	};
+	const visible = (s: string) => s.replace(/\x1b\[[0-9;]*m/g, "");
 	check(elapsed(4000) === "4s", "seconds only");
 	check(elapsed(289000) === "4m 49s", "minutes and seconds");
-	check(elapsed(65000) === "4m 05s".replace("4m", "1m"), "seconds zero-padded so the line never shifts");
+	check(elapsed(65000) === "1m 5s", "no zero padding, like Claude Code");
 	check(tokens(950) === "950", "small token count");
 	check(tokens(14500) === "14.5k", "thousands");
 	check(detail(0, "high") === "thinking with high effort", "effort shown before first tokens");
 	check(detail(0, "off") === "thinking", "no effort label when thinking is off");
 	check(detail(213, "high") === "↓ 213 tokens", "tokens once output flows");
 	check(pickVerb("Swirling") !== "Swirling", "verb changes between turns");
-	check(SPINNER.length === 10 && SPINNER.every((g) => g.length === 1), "braille spinner, one cell per frame");
+	check(visible(shimmer("Percolating…", 5)) === "Percolating…", "shimmer keeps the text");
+	check(shimmer("abc", 0) !== shimmer("abc", 1), "shimmer moves between frames");
+	check(shimmer("abc", 0) === shimmer("abc", 6), "shimmer wraps around");
+	check(SPARKLE.every((g) => Array.from(g).length === 1), "sparkle glyphs are one cell");
 }

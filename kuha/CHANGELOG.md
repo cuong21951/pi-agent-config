@@ -1,5 +1,13 @@
 # Có gì mới (cho Phương)
 
+## 2026-09-03 (giao diện giống Claude Code)
+- Mỗi thao tác của trợ lý hiện rõ ràng như Claude Code: `● Read(tên file)` rồi `⎿ Read 42 lines`,
+  `● Search(pattern: "...")` rồi `⎿ Found 5 lines`, `● Update(tên file)` kèm phần diff đổi gì,
+  `● Write(tên file)` rồi `⎿ Wrote 10 lines`. Bấm Ctrl+O để mở xem chi tiết một dòng.
+- Câu trả lời của trợ lý bắt đầu bằng dấu `●`, dòng "Thinking..." đổi thành `✻ Thinking…`.
+- Dòng loading mới: ngôi sao xoay `· ✢ ✶ ✻ ✽` màu cam, chữ động từ sáng chạy như Claude, kèm thời
+  gian, số token và nhắc `esc to interrupt`.
+
 ## 2026-09-03
 - File kết quả (báo cáo, nghiên cứu, biên bản...) giờ lưu theo **thư mục dự án** — thư mục nơi
   mở `pi` — thay vì đường dẫn cố định `Documents/Kuha` như trước.

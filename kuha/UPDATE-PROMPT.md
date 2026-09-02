@@ -26,8 +26,16 @@ không hỏi trừ khi bắt buộc.
    Phải in OK. Sau đó mở file .jsonl mới nhất trong ~/.pi/agent/sessions/ và xác nhận trường
    "model" của tin nhắn trợ lý là "z-ai/glm-5.3-flash" với "provider": "openrouter".
    Nếu là model khác, dừng lại và báo tôi ngay.
-6. Đọc https://github.com/cuong21951/pi-agent-config/blob/main/kuha/CHANGELOG.md và tóm tắt cho
+6. Kiểm tra giao diện mới đã được nạp: hai thư mục
+   ~/.pi/agent/git/github.com/cuong21951/pi-agent-config/extensions/claude-tools và
+   .../extensions/claude-messages phải tồn tại, và file package.json trong repo đó phải liệt kê
+   "./extensions/claude-tools" và "./extensions/claude-messages". Thiếu thì chạy lại `pi update`
+   rồi kiểm tra lại; vẫn thiếu thì báo tôi.
+7. Đọc https://github.com/cuong21951/pi-agent-config/blob/main/kuha/CHANGELOG.md và tóm tắt cho
    tôi có gì mới trong 3 dòng.
+8. Cuối cùng nhắc tôi: mở pi trong thư mục dự án, gõ một yêu cầu bất kỳ có đọc file; các thao tác
+   phải hiện dạng "● Read(...)" / "⎿ Read N lines", câu trả lời bắt đầu bằng "●", dòng loading
+   có ngôi sao cam xoay. Nếu vẫn thấy dạng cũ ("read file.ts" nền xám) thì gõ /reload trong pi.
 ```
 
 Chạy tay (macOS):
