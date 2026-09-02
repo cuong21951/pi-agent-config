@@ -6,16 +6,18 @@ license: Proprietary. LICENSE.txt has complete terms
 
 # DOCX creation, editing, and analysis
 
-## Windows notes (Kuha)
+## Ghi chú Windows / macOS (Kuha)
 
-- Run every script here as `py -3.12 {baseDir}/scripts/<name>.py ...`. Confirmed pure-Python and Windows-safe: `merge_runs.py`, `comment.py`, `office/validate.py` (no LibreOffice needed for validation).
-- `scripts/accept_changes.py` và các script dùng `office/soffice.py` chạy được trên Windows: bản Kuha đã vá `soffice.py` để bỏ bước dò socket Linux và tự tìm `C:\Program Files\LibreOffice\program\soffice.exe`. Cần cài LibreOffice (`winget install TheDocumentFoundation.LibreOffice`).
-- **No `zip`/`unzip` CLI on plain Windows** (Git Bash on this machine does have `unzip`, but not `zip`). Pack step: `py -3.12 -c "import shutil,os; os.chdir('unpacked'); shutil.make_archive('../out','zip','.'); os.replace('../out.zip','../out.docx')"`. Unpack: `py -3.12 -c "import zipfile; zipfile.ZipFile('doc.docx').extractall('unpacked')"`.
-- **LibreOffice is already installed** at `C:\Program Files\LibreOffice\program\soffice.exe` (needed for the "Verify the output" PDF render and for legacy `.doc` conversion). Otherwise: `winget install TheDocumentFoundation.LibreOffice`.
-- **`pdftoppm` (Poppler) is not installed** — the "render and look at it" step needs a substitute: `py -3.12 -m pip install pymupdf`, then render pages with `fitz.open("output.pdf")`, or open the LibreOffice-converted PDF directly in a viewer.
-- **`pandoc` is not installed** — the "Read content" shortcut (`pandoc -t markdown file.docx`) needs `winget install --id JohnMacFarlane.Pandoc` first, or read with python-docx instead (`for p in doc.paragraphs: p.text`) — already installed and verified on this machine.
-- **`docx` (npm) is NOT globally installed** here (checked with `npm ls -g`) — the "write a docx-js script" path needs `npm i -g docx` first. Until then, prefer **python-docx** — verified working here — for document creation.
-- **Vietnamese text**: set the font on every run explicitly to `"Arial"`, `"Calibri"`, or `"Times New Roman"` — these ship with Windows and render Vietnamese diacritics correctly; don't rely on the document's default theme font without checking it.
+Trên Windows dùng `py -3.12`; trên macOS/Linux dùng `python3`. Ghi chú dưới đây viết lệnh theo dạng `python3 {baseDir}/scripts/<name>.py ...` — trên Windows (kể cả trong Git Bash, nơi `python3` có thể chưa cài), thay bằng `py -3.12 {baseDir}/scripts/<name>.py ...`.
+
+- Run every script here as `python3 {baseDir}/scripts/<name>.py ...` (Windows: `py -3.12 ...`). Confirmed pure-Python and cross-platform-safe: `merge_runs.py`, `comment.py`, `office/validate.py` (no LibreOffice needed for validation).
+- `scripts/accept_changes.py` và các script dùng `office/soffice.py` chạy được trên cả Windows và macOS: bản Kuha đã vá `soffice.py` để bỏ bước dò socket Linux và tự tìm soffice ở các vị trí thường gặp (Windows: `C:\Program Files\LibreOffice\program\soffice.exe`; macOS: `/Applications/LibreOffice.app/Contents/MacOS/soffice`). Cần cài LibreOffice (Windows: `winget install TheDocumentFoundation.LibreOffice`; macOS: `brew install --cask libreoffice`).
+- **No `zip`/`unzip` CLI on plain Windows** (macOS/Linux ship both; Git Bash on Windows does have `unzip`, but not `zip`). Pack step on Windows: `py -3.12 -c "import shutil,os; os.chdir('unpacked'); shutil.make_archive('../out','zip','.'); os.replace('../out.zip','../out.docx')"`. Unpack: `py -3.12 -c "import zipfile; zipfile.ZipFile('doc.docx').extractall('unpacked')"`.
+- **LibreOffice on Windows** is already installed at `C:\Program Files\LibreOffice\program\soffice.exe` (needed for the "Verify the output" PDF render and for legacy `.doc` conversion). Otherwise: `winget install TheDocumentFoundation.LibreOffice` (Windows) or `brew install --cask libreoffice` (macOS).
+- **`pdftoppm` (Poppler) is not installed** — the "render and look at it" step needs a substitute: `python3 -m pip install pymupdf` (Windows: `py -3.12 -m pip install pymupdf`), then render pages with `fitz.open("output.pdf")`, or open the LibreOffice-converted PDF directly in a viewer. macOS: `brew install poppler` also gets you real `pdftoppm`.
+- **`pandoc` is not installed** — the "Read content" shortcut (`pandoc -t markdown file.docx`) needs `winget install --id JohnMacFarlane.Pandoc` (Windows) or `brew install pandoc` (macOS) first, or read with python-docx instead (`for p in doc.paragraphs: p.text`) — already installed and verified on Windows.
+- **`docx` (npm) is NOT globally installed** here (checked with `npm ls -g` on Windows) — the "write a docx-js script" path needs `npm i -g docx` first. Until then, prefer **python-docx** — verified working here — for document creation.
+- **Vietnamese text**: set the font on every run explicitly to `"Arial"`, `"Calibri"`, or `"Times New Roman"` — these ship with Windows and render Vietnamese diacritics correctly; on macOS these same names resolve via Office/LibreOffice's font substitution. Don't rely on the document's default theme font without checking it.
 
 A `.docx` is a ZIP archive of XML files. Choose your approach by task:
 

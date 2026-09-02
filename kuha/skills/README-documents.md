@@ -1,8 +1,9 @@
 # Kuha – Bộ kỹ năng tạo tài liệu (PowerPoint, Word, Excel, PDF)
 
 Bốn skill trong thư mục này (`pptx/`, `docx/`, `xlsx/`, `pdf/`) lấy nguyên gốc từ Anthropic
-(`github.com/anthropics/skills`), có thêm mục **"Windows notes (Kuha)"** ở đầu mỗi `SKILL.md`
-ghi rõ lệnh nào chạy được thẳng trên máy Windows này, lệnh nào cần cài thêm, và cách thay thế.
+(`github.com/anthropics/skills`), có thêm mục **"Ghi chú Windows / macOS (Kuha)"** ở đầu mỗi
+`SKILL.md` ghi rõ lệnh nào chạy được thẳng, lệnh nào cần cài thêm, và cách thay thế trên từng hệ
+điều hành.
 
 ## Bốn skill làm gì
 
@@ -11,19 +12,24 @@ ghi rõ lệnh nào chạy được thẳng trên máy Windows này, lệnh nào
 - **xlsx** — Tạo, đọc, sửa bảng tính Excel (`.xlsx`): công thức, định dạng, báo cáo tài chính.
 - **pdf** — Đọc, gộp, tách, đóng dấu, tạo mới file PDF; điền form PDF.
 
-## Cài đặt trên Windows (một dòng)
+## Cài đặt (một dòng)
+
+Trên Windows dùng `py -3.12`; trên macOS/Linux dùng `python3`:
 
 ```
-py -3.12 -m pip install python-pptx python-docx openpyxl reportlab pypdf pdfplumber
+python3 -m pip install python-pptx python-docx openpyxl reportlab pypdf pdfplumber
+# Windows: py -3.12 -m pip install python-pptx python-docx openpyxl reportlab pypdf pdfplumber
 ```
 
-Không cần ffmpeg. LibreOffice là tùy chọn (đã có sẵn trên máy này tại
-`C:\Program Files\LibreOffice\program\soffice.exe`; nếu máy khác chưa có thì cài bằng
-`winget install TheDocumentFoundation.LibreOffice`) — chỉ cần khi xuất PDF xem trước hoặc tính
-lại công thức Excel qua dòng lệnh.
+Không cần ffmpeg. LibreOffice là tùy chọn — chỉ cần khi xuất PDF xem trước hoặc tính lại công
+thức Excel qua dòng lệnh. Trên Windows đã có sẵn tại
+`C:\Program Files\LibreOffice\program\soffice.exe` (nếu máy khác chưa có thì cài bằng
+`winget install TheDocumentFoundation.LibreOffice`); trên macOS cài bằng
+`brew install --cask libreoffice` (mặc định ở `/Applications/LibreOffice.app/Contents/MacOS/soffice`).
 
-Luôn đặt font chữ **Arial**, **Calibri**, hoặc **Times New Roman** cho mọi chữ tiếng Việt —
-ba font này có sẵn trên Windows và hiển thị đúng dấu tiếng Việt.
+Luôn đặt font chữ **Arial**, **Calibri**, hoặc **Times New Roman** cho mọi chữ tiếng Việt — ba
+font này có sẵn trên Windows và hiển thị đúng dấu tiếng Việt; trên macOS các tên font này cũng
+sẵn có (qua Office hoặc `/Library/Fonts`, `/System/Library/Fonts/Supplemental`).
 
 ## Ví dụ câu lệnh cho từng skill
 

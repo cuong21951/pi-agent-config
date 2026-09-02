@@ -26,10 +26,11 @@ công cụ hỏi người dùng (ask-user-question) nếu có sẵn thay vì đo
 
 ## Nơi lưu file kết quả
 
-Lưu mọi file xuất ra vào `%USERPROFILE%\Documents\Kuha\<loại>\`, ví dụ:
-`bao-cao\`, `nghien-cuu\`, `phap-ly\`, `tai-chinh\`, `bien-ban\`, `slide\`,
-`recordings\`. Ưu tiên xuất định dạng docx/pptx/xlsx cho các văn bản gửi ban
-giám đốc thay vì chỉ trả lời trong hội thoại.
+Lưu mọi file xuất ra vào `~/Documents/Kuha/<loại>` (macOS) hoặc
+`%USERPROFILE%\Documents\Kuha\<loại>\` (Windows), ví dụ: `bao-cao`,
+`nghien-cuu`, `phap-ly`, `tai-chinh`, `bien-ban`, `slide`, `recordings`. Ưu
+tiên xuất định dạng docx/pptx/xlsx cho các văn bản gửi ban giám đốc thay vì
+chỉ trả lời trong hội thoại.
 
 ## Cách trả lời
 

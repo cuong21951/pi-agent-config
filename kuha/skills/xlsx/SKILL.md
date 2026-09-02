@@ -6,14 +6,16 @@ license: Proprietary. LICENSE.txt has complete terms
 
 # XLSX creation, editing, and analysis
 
-## Windows notes (Kuha)
+## Ghi chú Windows / macOS (Kuha)
 
-- Run every script here as `py -3.12 {baseDir}/scripts/<name>.py ...`.
-- `scripts/recalc.py` chạy được trên Windows (đã kiểm tra: `py -3.12 {baseDir}/scripts/recalc.py file.xlsx` trả về `status: success`): bản Kuha đã vá `office/soffice.py` để bỏ bước dò socket Linux và tự tìm `C:\Program Files\LibreOffice\program\soffice.exe`. Cần cài LibreOffice (`winget install TheDocumentFoundation.LibreOffice`).
-- **LibreOffice is already installed** at `C:\Program Files\LibreOffice\program\soffice.exe`. Otherwise: `winget install TheDocumentFoundation.LibreOffice`.
-- **`markitdown` is not installed** — `py -3.12 -m pip install markitdown` for the CLI quick-look, or just use `pandas.read_excel()` (already installed and verified here) to preview a sheet.
-- **`openpyxl` and `pandas` are already installed** and verified working on this machine — the primary create/edit path needs nothing extra.
-- **Vietnamese text**: set cell/font `name` explicitly to `"Arial"`, `"Calibri"`, or `"Times New Roman"` in `openpyxl.styles.Font(...)` — these ship with Windows and render Vietnamese diacritics correctly.
+Trên Windows dùng `py -3.12`; trên macOS/Linux dùng `python3`. Ghi chú dưới đây viết lệnh theo dạng `python3 {baseDir}/scripts/<name>.py ...` — trên Windows (kể cả trong Git Bash, nơi `python3` có thể chưa cài), thay bằng `py -3.12 {baseDir}/scripts/<name>.py ...`.
+
+- Run every script here as `python3 {baseDir}/scripts/<name>.py ...` (Windows: `py -3.12 ...`).
+- `scripts/recalc.py` chạy được trên cả Windows và macOS (đã kiểm tra trên Windows: `py -3.12 {baseDir}/scripts/recalc.py file.xlsx` trả về `status: success`): bản Kuha đã vá `office/soffice.py` để bỏ bước dò socket Linux và tự tìm soffice ở các vị trí thường gặp (Windows: `C:\Program Files\LibreOffice\program\soffice.exe`; macOS: `/Applications/LibreOffice.app/Contents/MacOS/soffice`). Cần cài LibreOffice (Windows: `winget install TheDocumentFoundation.LibreOffice`; macOS: `brew install --cask libreoffice`).
+- **LibreOffice on Windows** is already installed at `C:\Program Files\LibreOffice\program\soffice.exe`. Otherwise: `winget install TheDocumentFoundation.LibreOffice` (Windows) or `brew install --cask libreoffice` (macOS).
+- **`markitdown` is not installed** — `python3 -m pip install markitdown` (Windows: `py -3.12 -m pip install markitdown`) for the CLI quick-look, or just use `pandas.read_excel()` (already installed and verified here) to preview a sheet.
+- **`openpyxl` and `pandas` are already installed** and verified working on Windows — the primary create/edit path needs nothing extra (same packages on macOS via `install.sh`).
+- **Vietnamese text**: set cell/font `name` explicitly to `"Arial"`, `"Calibri"`, or `"Times New Roman"` in `openpyxl.styles.Font(...)` — these ship with Windows and render Vietnamese diacritics correctly; on macOS these same names resolve via Excel/LibreOffice's font substitution.
 
 | Task | Approach |
 |---|---|

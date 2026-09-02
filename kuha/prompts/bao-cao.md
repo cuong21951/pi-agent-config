@@ -9,5 +9,5 @@ cho từng mục (Lưu trú, Công viên, Show, F&B, Nhân sự, Tài chính, R�
 không tự bịa, thiếu thì ghi rõ. Cần số liệu ngoài thì dùng skill
 `business-research` trước. Dùng skill `business-report` và mẫu phù hợp để
 soạn nội dung theo nguyên tắc kim tự tháp, rồi bàn giao cho skill `docx`
-(hoặc `pptx` nếu là slide) xuất file vào
-`%USERPROFILE%\Documents\Kuha\bao-cao\`.
+(hoặc `pptx` nếu là slide) xuất file vào `~/Documents/Kuha/bao-cao` (macOS)
+hoặc `%USERPROFILE%\Documents\Kuha\bao-cao\` (Windows).

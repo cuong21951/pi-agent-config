@@ -51,8 +51,14 @@ def _soffice_binary() -> str:
     found = shutil.which("soffice")
     if found:
         return found
-    windows_default = Path(r"C:\Program Files\LibreOffice\program\soffice.exe")
-    return str(windows_default) if windows_default.exists() else "soffice"
+    candidates = [
+        Path(r"C:\Program Files\LibreOffice\program\soffice.exe"),
+        Path("/Applications/LibreOffice.app/Contents/MacOS/soffice"),
+    ]
+    for candidate in candidates:
+        if candidate.exists():
+            return str(candidate)
+    return "soffice"
 
 
 

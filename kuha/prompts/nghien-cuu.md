@@ -10,4 +10,5 @@ Dùng skill `business-research`. Nếu chủ đề còn mơ hồ (chưa rõ th�
 số liệu thực tế/ước tính/nhận định. Tham khảo
 `references/vietnam-tourism-sources.md` nếu liên quan du lịch/khách sạn/công
 viên. Viết theo mẫu `templates/nghien-cuu.md`, kết thúc bằng độ tin cậy. Lưu
-vào `%USERPROFILE%\Documents\Kuha\nghien-cuu\`.
+vào `~/Documents/Kuha/nghien-cuu` (macOS) hoặc
+`%USERPROFILE%\Documents\Kuha\nghien-cuu\` (Windows).

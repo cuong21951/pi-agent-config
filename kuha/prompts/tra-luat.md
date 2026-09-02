@@ -9,4 +9,5 @@ lao động, thuế...) hoặc phạm vi áp dụng, hỏi lại một câu trư
 văn bản, số hiệu, điều khoản, ngày hiệu lực; ghi rõ nếu đã sửa đổi/thay thế.
 Không kết luận chắc chắn khi chỉ có nguồn thứ cấp — ghi rõ đây không phải tư
 vấn pháp lý chính thức, khuyến nghị hỏi luật sư nếu rủi ro cao. Lưu vào
-`%USERPROFILE%\Documents\Kuha\phap-ly\`.
+`~/Documents/Kuha/phap-ly` (macOS) hoặc
+`%USERPROFILE%\Documents\Kuha\phap-ly\` (Windows).

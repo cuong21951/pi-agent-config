@@ -6,16 +6,35 @@ license: Proprietary. LICENSE.txt has complete terms
 
 # PDF Processing Guide
 
-## Windows notes (Kuha)
+## Ghi chú Windows / macOS (Kuha)
 
-- Run every script here as `py -3.12 {baseDir}/scripts/<name>.py ...`.
-- **`pypdf` and `reportlab` are already installed** and verified working on this machine — merge/split/rotate/watermark/encrypt (pypdf) and PDF creation from scratch (reportlab) need nothing extra.
-- **`pdfplumber` is not installed** — `py -3.12 -m pip install pdfplumber` for table/layout extraction.
-- **No Poppler on this machine** — `pdftotext`, `pdftoppm`, `pdfimages` (all under "poppler-utils" in the SKILL/reference docs) are not on PATH, and `pdf2image`'s `convert_from_path` (used by `scripts/convert_pdf_to_images.py`) needs Poppler and will fail without it. Fallback for page-to-image rendering: `py -3.12 -m pip install pymupdf`, then `import fitz; doc = fitz.open("file.pdf"); doc[0].get_pixmap(dpi=200).save("page1.png")` — no external binary required. If you specifically want Poppler, search `winget search poppler` for a current package id, or install LibreOffice (below) and use it to rasterize instead.
-- **No `qpdf` or `pdftk` on this machine** — those command-line merge/split/rotate/decrypt examples in the docs need `winget install QPDF.QPDF` (qpdf) first; until then use the `pypdf` Python examples in this same file, which do the same job and are already verified working here.
-- **LibreOffice is installed** at `C:\Program Files\LibreOffice\program\soffice.exe` — useful for converting other Office formats to PDF (`--headless --convert-to pdf`) as an input step, not required for anything pypdf/reportlab-based.
-- **OCR** (`pytesseract` path in this file) needs Tesseract installed separately — `winget install UB-Mannheim.TesseractOCR` — and is not verified on this machine; not needed for text-native PDFs.
-- **Vietnamese text**: the reportlab default fonts (Helvetica, Times) have **no Vietnamese glyphs** and silently drop diacritics. Register a real TTF first — `pdfmetrics.registerFont(TTFont("Arial", r"C:\Windows\Fonts\arial.ttf"))` (or `times.ttf`, `calibri.ttf`) — and use that font name for every Vietnamese string. Verified on this machine: text extracted back from a reportlab PDF built this way keeps full diacritics.
+Trên Windows dùng `py -3.12`; trên macOS/Linux dùng `python3`. Ghi chú dưới đây viết lệnh theo dạng `python3 {baseDir}/scripts/<name>.py ...` — trên Windows (kể cả trong Git Bash, nơi `python3` có thể chưa cài), thay bằng `py -3.12 {baseDir}/scripts/<name>.py ...`.
+
+- Run every script here as `python3 {baseDir}/scripts/<name>.py ...` (Windows: `py -3.12 ...`).
+- **`pypdf` and `reportlab` are already installed** and verified working on Windows — merge/split/rotate/watermark/encrypt (pypdf) and PDF creation from scratch (reportlab) need nothing extra (same packages on macOS via `install.sh`).
+- **`pdfplumber` is not installed** — `python3 -m pip install pdfplumber` (Windows: `py -3.12 -m pip install pdfplumber`) for table/layout extraction.
+- **No Poppler by default** — `pdftotext`, `pdftoppm`, `pdfimages` (all under "poppler-utils" in the SKILL/reference docs) may not be on PATH, and `pdf2image`'s `convert_from_path` (used by `scripts/convert_pdf_to_images.py`) needs Poppler and will fail without it. Fallback for page-to-image rendering: `python3 -m pip install pymupdf` (Windows: `py -3.12 -m pip install pymupdf`), then `import fitz; doc = fitz.open("file.pdf"); doc[0].get_pixmap(dpi=200).save("page1.png")` — no external binary required. If you specifically want Poppler: macOS `brew install poppler`; on Windows search `winget search poppler` for a current package id, or install LibreOffice (below) and use it to rasterize instead.
+- **No `qpdf` or `pdftk` by default** — those command-line merge/split/rotate/decrypt examples in the docs need `winget install QPDF.QPDF` (Windows) or `brew install qpdf` (macOS) first; until then use the `pypdf` Python examples in this same file, which do the same job and are already verified working on Windows.
+- **LibreOffice**: on Windows it's installed at `C:\Program Files\LibreOffice\program\soffice.exe`; on macOS install with `brew install --cask libreoffice` (default path `/Applications/LibreOffice.app/Contents/MacOS/soffice`) — useful for converting other Office formats to PDF (`--headless --convert-to pdf`) as an input step, not required for anything pypdf/reportlab-based.
+- **OCR** (`pytesseract` path in this file) needs Tesseract installed separately — `winget install UB-Mannheim.TesseractOCR` (Windows) or `brew install tesseract` (macOS) — and is not verified on this machine; not needed for text-native PDFs.
+- **Vietnamese text**: the reportlab default fonts (Helvetica, Times) have **no Vietnamese glyphs** and silently drop diacritics. Register a real TTF first, trying candidates in order until one exists:
+  ```python
+  from reportlab.pdfbase import pdfmetrics
+  from reportlab.pdfbase.ttfonts import TTFont
+  import os
+
+  arial_candidates = [
+      r"C:\Windows\Fonts\arial.ttf",          # Windows
+      "/Library/Fonts/Arial.ttf",              # macOS (user/shared fonts)
+      "/System/Library/Fonts/Supplemental/Arial.ttf",  # macOS (system)
+  ]
+  path = next((p for p in arial_candidates if os.path.exists(p)), None)
+  if path is None:
+      # Fallback: Times New Roman ships on both OSes too
+      path = "/System/Library/Fonts/Supplemental/Times New Roman.ttf"
+  pdfmetrics.registerFont(TTFont("Arial", path))
+  ```
+  Use that font name for every Vietnamese string. Verified on Windows: text extracted back from a reportlab PDF built this way keeps full diacritics. On macOS, prefer `/Library/Fonts/Arial.ttf` when Microsoft Office is installed, otherwise fall back to the `/System/Library/Fonts/Supplemental/` copies.
 
 ## Overview
 

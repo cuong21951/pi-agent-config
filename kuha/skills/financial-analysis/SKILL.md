@@ -7,6 +7,10 @@ description: Analyze Vietnamese business and financial reports (báo cáo kinh d
 
 Skill này giúp đọc báo cáo tài chính (BCTC) và báo cáo kinh doanh (BCKD) tiếng Việt, tính các chỉ số tài chính chuẩn và KPI vận hành đặc thù ngành khách sạn/công viên/show diễn, và dựng số liệu khả thi cho dự án đầu tư (capex).
 
+## Ghi chú Windows / macOS (Kuha)
+
+Trên Windows dùng `py -3.12`; trên macOS/Linux dùng `python3`. Các lệnh trong skill này viết theo dạng `python3 {baseDir}/scripts/<script>.py ...` — trên Windows (kể cả trong Git Bash, nơi `python3` có thể chưa cài), thay bằng `py -3.12 {baseDir}/scripts/<script>.py ...`.
+
 ## Khi nào dùng skill này
 
 - Người dùng gửi một file Excel BCTC/BCKD và muốn phân tích, tính chỉ số, hoặc đánh giá "tình hình tài chính".
@@ -21,7 +25,7 @@ Skill này giúp đọc báo cáo tài chính (BCTC) và báo cáo kinh doanh (B
 
 ## Công cụ (`scripts/`)
 
-Tất cả chạy bằng `py -3.12` (không dùng `python` trần) và nhận đường dẫn tuyệt đối, chạy được từ bất kỳ thư mục làm việc nào:
+Tất cả chạy bằng `python3` trên macOS/Linux (Windows: `py -3.12`; không dùng `python` trần) và nhận đường dẫn tuyệt đối, chạy được từ bất kỳ thư mục làm việc nào:
 
 - `scripts/ratios.py <bctc.xlsx> [--sheet TEN] [--out report.md] [--charts thu_muc]` — đọc file Excel BCTC (2 cột Chỉ tiêu|Giá trị hoặc nhiều cột theo kỳ), nhận diện nhãn dòng tiếng Việt theo kiểu mờ (không phân biệt hoa/thường, dấu), tính các tỷ số trong `references/vas-ifrs.md`, xuất báo cáo markdown tiếng Việt kèm nhận xét tự động cho các chỉ số vượt khoảng tham khảo. In ra danh sách chỉ tiêu không tìm thấy.
 - `scripts/feasibility.py <input.json|.yaml> [--out report.md]` — tính NPV, IRR (bisection thuần Python, không cần numpy), thời gian hoàn vốn cho một dự án capex, kèm bảng độ nhạy theo doanh thu (±10%/±20%) và lãi suất chiết khấu.

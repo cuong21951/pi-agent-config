@@ -7,6 +7,10 @@ description: Research Vietnamese law reliably for the Kuha project (hotel, amuse
 
 Skill này giúp agent tra cứu pháp luật Việt Nam một cách đáng tin cậy cho người dùng không phải luật sư, đang vận hành dự án Kuha (khách sạn + công viên giải trí + biểu diễn nghệ thuật). Mục tiêu: **không bao giờ bịa quy định**, luôn trích dẫn từ văn bản đã thực sự fetch được, luôn kiểm tra hiệu lực, và luôn nhắc đây không phải tư vấn pháp lý chính thức.
 
+## Ghi chú Windows / macOS (Kuha)
+
+Trên Windows dùng `py -3.12`; trên macOS/Linux dùng `python3`. Các lệnh trong skill này viết theo dạng `python3 {baseDir}/scripts/<script>.py ...` — trên Windows (kể cả trong Git Bash, nơi `python3` có thể chưa cài), thay bằng `py -3.12 {baseDir}/scripts/<script>.py ...`.
+
 ## Tài liệu trong skill này
 
 - `references/sources.md` — danh sách nguồn tra cứu chính thống, cách dùng từng nguồn, hệ thống thứ bậc văn bản, cách đọc "văn bản hợp nhất"/"sửa đổi bổ sung"/"hết hiệu lực một phần", định dạng trích dẫn bắt buộc. **Đọc file này trước khi tra cứu bất kỳ vấn đề nào.**
@@ -18,8 +22,8 @@ Skill này giúp agent tra cứu pháp luật Việt Nam một cách đáng tin 
 
 1. **Xác định vấn đề**: làm rõ câu hỏi thuộc mảng nào (lưu trú / công viên giải trí / biểu diễn / vấn đề chung như thuế, lao động, đất đai...), và có yếu tố địa phương cụ thể không (tỉnh/thành nơi đặt dự án).
 2. **Tra `references/domain-map.md`** để biết văn bản nào có khả năng liên quan. Đây chỉ là gợi ý định hướng, không phải kết luận.
-3. **Tìm văn bản gốc trên nguồn chính thống**: dùng công cụ tìm kiếm web (web search) để tìm đúng số hiệu văn bản trên vbpl.vn hoặc thuvienphapluat.vn trước, đối chiếu congbao.chinhphu.vn/luatvietnam.vn khi cần. Có thể dùng `py -3.12 scripts/fetch_law.py --search "<từ khoá>"` để lấy nhanh các URL tìm kiếm, sau đó dùng công cụ fetch/browse của agent để mở kết quả (vbpl.vn và thuvienphapluat.vn thường chặn request tự động của script, xem phần "Giới hạn đã biết" bên dưới).
-4. **Fetch toàn văn** bằng công cụ fetch_url của agent, hoặc thử `py -3.12 scripts/fetch_law.py <url> --out <file>.md`. Đọc kỹ nội dung điều/khoản liên quan trực tiếp đến câu hỏi.
+3. **Tìm văn bản gốc trên nguồn chính thống**: dùng công cụ tìm kiếm web (web search) để tìm đúng số hiệu văn bản trên vbpl.vn hoặc thuvienphapluat.vn trước, đối chiếu congbao.chinhphu.vn/luatvietnam.vn khi cần. Có thể dùng `python3 scripts/fetch_law.py --search "<từ khoá>"` (Windows: `py -3.12 scripts/fetch_law.py --search "<từ khoá>"`) để lấy nhanh các URL tìm kiếm, sau đó dùng công cụ fetch/browse của agent để mở kết quả (vbpl.vn và thuvienphapluat.vn thường chặn request tự động của script, xem phần "Giới hạn đã biết" bên dưới).
+4. **Fetch toàn văn** bằng công cụ fetch_url của agent, hoặc thử `python3 scripts/fetch_law.py <url> --out <file>.md` (Windows: `py -3.12 scripts/fetch_law.py <url> --out <file>.md`). Đọc kỹ nội dung điều/khoản liên quan trực tiếp đến câu hỏi.
 5. **Kiểm tra hiệu lực và văn bản thay thế** theo quy trình ở `references/sources.md` §5 — bắt buộc, không được bỏ qua bước này kể cả khi văn bản trông "hiển nhiên còn hiệu lực".
 6. **Trích nguyên văn điều khoản** liên quan, theo đúng định dạng trích dẫn ở `references/sources.md` §4.
 7. **Phân tích** cách quy định áp dụng vào tình huống cụ thể của Kuha, bằng tiếng Việt dễ hiểu cho người không có nền tảng luật.
