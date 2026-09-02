@@ -12,7 +12,8 @@
     "extensions": [
       "./extensions/claude-working",
       "./extensions/intent-tools",
-      "./extensions/claude-header"
+      "./extensions/claude-header",
+      "./extensions/cheap-models"
     ]
   }
 }

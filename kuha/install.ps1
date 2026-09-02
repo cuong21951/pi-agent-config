@@ -215,6 +215,13 @@ if ($managedByPackage) {
     }
 }
 
+if (-not $settings.PSObject.Properties['enabledModels']) {
+    $settings | Add-Member -NotePropertyName 'enabledModels' -NotePropertyValue @('openrouter/z-ai/glm-5.3-flash', 'openrouter/deepseek/deepseek-v4-flash*')
+}
+if (-not $settings.PSObject.Properties['defaultProvider']) {
+    $settings | Add-Member -NotePropertyName 'defaultProvider' -NotePropertyValue 'openrouter'
+    $settings | Add-Member -NotePropertyName 'defaultModel' -NotePropertyValue 'z-ai/glm-5.3-flash'
+}
 if (-not $settings.PSObject.Properties['hideThinkingBlock']) {
     $settings | Add-Member -NotePropertyName 'hideThinkingBlock' -NotePropertyValue $true
 }

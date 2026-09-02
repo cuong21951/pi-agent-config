@@ -15,3 +15,7 @@
 - Dòng loading kiểu Claude: động từ + thời gian + số token, spinner không nháy.
 - Hỗ trợ macOS đầy đủ: install.sh, ghi âm bằng record.sh, lệnh `python3`.
 - Prompt cài đặt ngắn (SETUP-PROMPT-SHORT.md) và prompt cập nhật (UPDATE-PROMPT.md).
+
+## 2026-09-03 (an toàn chi phí)
+- Extension `cheap-models`: chỉ cho phép model rẻ (GLM 5.3 Flash, DeepSeek V4 Flash). Chọn nhầm model đắt trong `/model` hoặc do cấu hình thiếu, pi tự đổi về model rẻ trước khi gửi request và báo trên màn hình.
+- Nguyên nhân sự cố: khi chưa đặt model mặc định, pi tự lấy model đầu tiên trong danh sách OpenRouter, mà model đó là Claude Fable (rất đắt). Installer giờ luôn đặt model mặc định và giới hạn danh sách model.

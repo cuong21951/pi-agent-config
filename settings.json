@@ -3,9 +3,11 @@
   "defaultModel": "z-ai/glm-5.3-flash",
   "defaultThinkingLevel": "high",
   "enabledModels": [
+    "commandcode/z-ai/glm-5.3-flash",
     "commandcode/deepseek/*",
-    "commandcode/z-ai/*",
-    "commandcode/zai-org/*"
+    "deepseek/deepseek-v4-flash*",
+    "openrouter/z-ai/glm-5.3-flash",
+    "openrouter/deepseek/deepseek-v4-flash*"
   ],
   "compaction": {
     "enabled": true,
