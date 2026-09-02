@@ -23,7 +23,8 @@
         "replace_symbol_body",
         "get_diagnostics_for_file"
       ],
-      "lifecycle": "keep-alive"
+      "lifecycle": "keep-alive",
+      "requestTimeoutMs": 180000
     },
     "azure-devops": {
       "command": "mcp-server-azuredevops",
