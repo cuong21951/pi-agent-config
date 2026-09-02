@@ -16,3 +16,4 @@ git/
 # backups and scratch
 *.bak
 __pycache__/
+mcp.json

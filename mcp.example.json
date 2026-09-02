@@ -1,0 +1,70 @@
+{
+  "mcpServers": {
+    "chrome-devtools": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "chrome-devtools-mcp@latest",
+        "--browserUrl",
+        "http://127.0.0.1:9222"
+      ]
+    },
+    "serena": {
+      "command": "serena",
+      "args": [
+        "start-mcp-server",
+        "--context=ide-assistant",
+        "--project-from-cwd"
+      ],
+      "directTools": [
+        "find_symbol",
+        "find_referencing_symbols",
+        "get_symbols_overview",
+        "replace_symbol_body",
+        "get_diagnostics_for_file"
+      ],
+      "lifecycle": "keep-alive"
+    },
+    "azure-devops": {
+      "command": "mcp-server-azuredevops",
+      "args": [
+        "Communited",
+        "-a",
+        "pat"
+      ],
+      "env": {
+        "PERSONAL_ACCESS_TOKEN": "<PAT from Azure DevOps>"
+      },
+      "lifecycle": "keep-alive",
+      "directTools": [
+        "wit_work_item",
+        "wit_query",
+        "search_workitem",
+        "repo_pull_request",
+        "repo_pull_request_thread",
+        "repo_pull_request_thread_write",
+        "repo_file",
+        "core_list_project_teams",
+        "work_list_team_iterations"
+      ]
+    },
+    "azure-devops-tbr": {
+      "command": "mcp-server-azuredevops",
+      "args": [
+        "TIMEBLOCKR"
+      ],
+      "lifecycle": "lazy",
+      "directTools": [
+        "pipelines_build",
+        "pipelines_definition",
+        "pipelines_run",
+        "repo_file"
+      ]
+    }
+  },
+  "settings": {
+    "hostConfigDiscovery": "on",
+    "toolResultRendering": "compact",
+    "collapsedResultLines": 2
+  }
+}

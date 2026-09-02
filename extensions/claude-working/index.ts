@@ -1,6 +1,16 @@
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
 
-const VERBS = ["Swirling", "Wibbling", "Pondering", "Musing", "Brewing", "Percolating", "Noodling", "Tinkering"];
+const VERBS = [
+	"Accomplishing", "Actualizing", "Baking", "Brewing", "Calculating", "Cerebrating", "Churning", "Coalescing",
+	"Cogitating", "Computing", "Conjuring", "Considering", "Cooking", "Crafting", "Crunching", "Deliberating",
+	"Determining", "Finagling", "Forging", "Generating", "Hatching", "Herding", "Honking", "Hustling", "Ideating",
+	"Inferring", "Manifesting", "Marinating", "Moseying", "Mulling", "Mustering", "Musing", "Noodling",
+	"Percolating", "Pondering", "Processing", "Puttering", "Reticulating", "Ruminating", "Schlepping", "Shimmying",
+	"Simmering", "Smooshing", "Spinning", "Stewing", "Swirling", "Synthesizing", "Thinking", "Tinkering",
+	"Transmuting", "Vibing", "Wibbling", "Working", "Wrangling",
+];
+
+const SPINNER = ["·", "✢", "✳", "✶", "✻", "✽", "✻", "✶", "✳", "✢"];
 
 function elapsed(ms: number): string {
 	const s = Math.floor(ms / 1000);
@@ -11,23 +21,43 @@ function tokens(n: number): string {
 	return n < 1000 ? `${n}` : `${(n / 1000).toFixed(1)}k`;
 }
 
+function detail(output: number, thinking: string | undefined): string {
+	if (output > 0) return `↓ ${tokens(output)} tokens`;
+	return thinking && thinking !== "off" ? `thinking with ${thinking} effort` : "thinking";
+}
+
+function pickVerb(previous: string): string {
+	let verb = previous;
+	while (verb === previous) verb = VERBS[Math.floor(Math.random() * VERBS.length)];
+	return verb;
+}
+
 export default function (pi: ExtensionAPI) {
 	let started = 0;
 	let output = 0;
-	let verb = VERBS[0];
+	let verb = "";
 	let timer: ReturnType<typeof setInterval> | undefined;
+
+	pi.on("session_start", (_event, ctx) => {
+		if (!ctx.hasUI) return;
+		ctx.ui.setWorkingIndicator({
+			frames: SPINNER.map((glyph) => ctx.ui.theme.fg("warning", glyph)),
+			intervalMs: 110,
+		});
+	});
 
 	pi.on("agent_start", (_event, ctx) => {
 		if (!ctx.hasUI) return;
 		started = Date.now();
 		output = 0;
-		verb = VERBS[Math.floor(Math.random() * VERBS.length)];
+		verb = pickVerb(verb);
 		clearInterval(timer);
-		timer = setInterval(() => {
+		const paint = () =>
 			ctx.ui.setWorkingMessage(
-				`${ctx.ui.theme.fg("warning", ctx.ui.theme.bold(`${verb}…`))} ${ctx.ui.theme.fg("dim", `(${elapsed(Date.now() - started)} · ↓ ${tokens(output)} tokens)`)}`,
+				`${ctx.ui.theme.fg("warning", ctx.ui.theme.bold(`${verb}…`))} ${ctx.ui.theme.fg("dim", `(${elapsed(Date.now() - started)} · ${detail(output, ctx.thinkingLevel)})`)}`,
 			);
-		}, 1000);
+		paint();
+		timer = setInterval(paint, 1000);
 	});
 
 	pi.on("message_end", (event) => {
@@ -50,4 +80,9 @@ if (process.env.CLAUDE_WORKING_SELFTEST) {
 	check(elapsed(289000) === "4m 49s", "minutes and seconds");
 	check(tokens(950) === "950", "small token count");
 	check(tokens(14500) === "14.5k", "thousands");
+	check(detail(0, "high") === "thinking with high effort", "effort shown before first tokens");
+	check(detail(0, "off") === "thinking", "no effort label when thinking is off");
+	check(detail(213, "high") === "↓ 213 tokens", "tokens once output flows");
+	check(pickVerb("Swirling") !== "Swirling", "verb changes between turns");
+	check(SPINNER.length === 10 && SPINNER[0] === "·", "spinner frames match Claude's cycle");
 }
