@@ -37,3 +37,15 @@ The root `package.json` declares the pi manifest (Kuha skills and prompts, the t
 ## Not in git
 
 `auth.json`, `mcp.json`, `sessions/`, model and MCP caches, `npm/node_modules`, cloned git packages, `*.bak`.
+
+## Running pi inside herdr
+
+herdr does not understand pi's all-motion mouse mode, so the wheel arrives as arrow keys. Wrap `pi` so it runs with `TMUX=1` under herdr (button-motion mode). PowerShell profile:
+
+```powershell
+function pi {
+    $real = Get-Command pi -CommandType Application | Select-Object -First 1
+    if ($env:HERDR_ENV -eq '1' -and -not $env:TMUX) { $env:TMUX = '1'; try { & $real.Source @args } finally { Remove-Item Env:TMUX -ErrorAction SilentlyContinue } }
+    else { & $real.Source @args }
+}
+```
