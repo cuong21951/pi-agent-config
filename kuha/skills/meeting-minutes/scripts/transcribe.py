@@ -1,28 +1,15 @@
-#!/usr/bin/env python
-"""
-Transcribe an audio/video recording (Vietnamese by default) with faster-whisper.
+"""Chuyển file ghi âm/video sang văn bản tiếng Việt bằng faster-whisper.
 
-Usage:
-    py -3.12 transcribe.py <audio> [--model large-v3-turbo|medium|small] [--lang vi] [--out file.txt]
+    py -3.12 transcribe.py <audio> [--model medium|small|large-v3-turbo] [--lang vi] [--out file.txt]
 
-Models (downloaded on first use to the default faster-whisper/huggingface cache,
-usually C:\\Users\\<you>\\.cache\\huggingface):
-    small            ~500 MB download, fastest, lowest accuracy. Good for quick tests.
-    medium           ~1.5 GB download. On a CPU-only laptop, roughly 1x realtime
-                      (a 30-minute recording takes roughly 30 minutes to transcribe).
-    large-v3-turbo   ~1.6 GB download. Better accuracy than medium, noticeably slower
-                      than medium on CPU. Prefer it when accuracy matters more than time.
-
-Handles .m4a/.mp4/.mp3/.wav: faster-whisper decodes audio internally via PyAV. If
-that fails on a given file (e.g. an unusual mp4 container), this script falls back
-to converting the file to a 16 kHz mono WAV with ffmpeg first.
+Model tải về lần đầu (small ~500 MB, medium ~1.5 GB, large-v3-turbo ~1.6 GB) vào
+cache huggingface rồi dùng offline. Trên CPU, medium chạy xấp xỉ 1x thời lượng audio.
 """
 import argparse
 import os
 import subprocess
 import sys
 import tempfile
-from datetime import timedelta
 
 
 def format_ts(seconds: float) -> str:
@@ -32,131 +19,66 @@ def format_ts(seconds: float) -> str:
     return f"{h:02d}:{m:02d}:{s:02d}"
 
 
-def has_cuda() -> bool:
-    try:
-        result = subprocess.run(
-            ["nvidia-smi"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL
-        )
-        return result.returncode == 0
-    except FileNotFoundError:
-        return False
-
-
 def convert_to_wav(src: str) -> str:
     fd, wav_path = tempfile.mkstemp(suffix=".wav")
     os.close(fd)
-    cmd = ["ffmpeg", "-y", "-i", src, "-ar", "16000", "-ac", "1", wav_path]
-    result = subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+    result = subprocess.run(
+        ["ffmpeg", "-y", "-i", src, "-ar", "16000", "-ac", "1", wav_path],
+        stdout=subprocess.DEVNULL, stderr=subprocess.PIPE, stdin=subprocess.DEVNULL, timeout=600,
+    )
     if result.returncode != 0:
         os.unlink(wav_path)
-        raise RuntimeError(
-            "ffmpeg khong chuyen doi duoc file audio:\n"
-            + result.stderr.decode(errors="ignore")
-        )
+        raise RuntimeError("ffmpeg không chuyển đổi được file:\n" + result.stderr.decode(errors="ignore"))
     return wav_path
 
 
-def main():
-    parser = argparse.ArgumentParser(
-        description="Transcribe audio/video to text with faster-whisper (Vietnamese by default)."
-    )
-    parser.add_argument("audio", help="Duong dan file audio/video (.m4a, .mp3, .wav, .mp4, ...)")
-    parser.add_argument(
-        "--model",
-        default="medium",
-        help="Model whisper: large-v3-turbo | medium | small (hoac ten model faster-whisper khac). "
-        "Mac dinh: medium (can bang toc do/do chinh xac tren CPU).",
-    )
-    parser.add_argument("--lang", default="vi", help="Ma ngon ngu (mac dinh vi = Tieng Viet)")
-    parser.add_argument(
-        "--out", default=None, help="File transcript output (.txt). Mac dinh: <audio>.transcript.txt"
-    )
+def transcribe(model, path: str, lang: str):
+    segments, info = model.transcribe(path, language=lang, vad_filter=True)
+    segments = iter(segments)
+    first = next(segments, None)
+    return first, segments, info
+
+
+def main() -> None:
+    for stream in (sys.stdout, sys.stderr):
+        stream.reconfigure(encoding="utf-8", line_buffering=True)
+    parser = argparse.ArgumentParser(description="Chuyển audio/video sang văn bản tiếng Việt")
+    parser.add_argument("audio", help="Đường dẫn file audio/video (.m4a, .mp3, .wav, .mp4)")
+    parser.add_argument("--model", default="medium", help="small | medium | large-v3-turbo (mặc định medium)")
+    parser.add_argument("--lang", default="vi", help="Mã ngôn ngữ (mặc định vi)")
+    parser.add_argument("--out", help="File transcript đầu ra (mặc định <audio>.transcript.txt)")
     args = parser.parse_args()
 
-    audio_path = os.path.abspath(args.audio)
-    if not os.path.isfile(audio_path):
-        print(f"Loi: khong tim thay file audio: {audio_path}", file=sys.stderr)
-        sys.exit(1)
+    audio = os.path.abspath(args.audio)
+    if not os.path.isfile(audio):
+        sys.exit(f"Không tìm thấy file: {audio}")
+    out = args.out or os.path.splitext(audio)[0] + ".transcript.txt"
 
-    out_path = args.out or (os.path.splitext(audio_path)[0] + ".transcript.txt")
-
-    print(f"File audio: {audio_path}")
-    print(f"Model: {args.model} | Ngon ngu: {args.lang}")
-
-    device = "cuda" if has_cuda() else "cpu"
-    compute_type = "int8"
-    print(f"Thiet bi xu ly: {device} (compute_type={compute_type})")
-    if args.model == "medium":
-        print(
-            "Uoc tinh: model ~1.5 GB (tai lan dau), toc do CPU xap xi 1x thoi luong thuc "
-            "(audio 30 phut ~ 30 phut xu ly)."
-        )
-    elif args.model == "large-v3-turbo":
-        print(
-            "Uoc tinh: model ~1.6 GB (tai lan dau), chinh xac hon medium nhung cham hon "
-            "tren CPU. Dung --model medium neu can nhanh hon."
-        )
-    elif args.model == "small":
-        print("Uoc tinh: model ~500 MB (tai lan dau), nhanh nhat, do chinh xac thap hon.")
-
+    print(f"File: {audio}\nModel: {args.model} | Ngôn ngữ: {args.lang}\nĐang tải model (lần đầu sẽ tải về)...")
     from faster_whisper import WhisperModel
 
-    print("Dang tai model (lan dau se tai ve cache mac dinh cua huggingface)...")
-    model = WhisperModel(args.model, device=device, compute_type=compute_type)
-
-    transcribe_path = audio_path
+    model = WhisperModel(args.model, device="cpu", compute_type="int8")
     temp_wav = None
     try:
         try:
-            print("Dang nhan dien audio...")
-            segments_iter, info = model.transcribe(
-                transcribe_path, language=args.lang, vad_filter=True
-            )
-            segments_iter = iter(segments_iter)
-            first_segment = next(segments_iter, None)
-        except Exception as e:
-            print(
-                f"[Canh bao] Khong doc truc tiep duoc file ({e}); chuyen doi qua ffmpeg "
-                "sang WAV 16kHz..."
-            )
-            temp_wav = convert_to_wav(audio_path)
-            transcribe_path = temp_wav
-            segments_iter, info = model.transcribe(
-                transcribe_path, language=args.lang, vad_filter=True
-            )
-            segments_iter = iter(segments_iter)
-            first_segment = next(segments_iter, None)
-
-        print(f"Ngon ngu nhan dien: {info.language} (do tin cay {info.language_probability:.2f})")
-        print(f"Thoi luong: {format_ts(info.duration)}")
-        print("Dang xu ly cac doan...")
-
-        lines_ts = []
-        lines_plain = []
-
-        def handle(seg):
+            first, rest, info = transcribe(model, audio, args.lang)
+        except Exception as error:
+            print(f"Không đọc trực tiếp được file ({error}); chuyển qua ffmpeg sang WAV 16 kHz...")
+            temp_wav = convert_to_wav(audio)
+            first, rest, info = transcribe(model, temp_wav, args.lang)
+        print(f"Thời lượng: {format_ts(info.duration)} | Ngôn ngữ nhận diện: {info.language} ({info.language_probability:.2f})")
+        stamped, plain = [], []
+        for seg in ([first] if first else []) + list(rest):
             text = seg.text.strip()
-            ts = format_ts(seg.start)
-            lines_ts.append(f"[{ts}] {text}")
-            lines_plain.append(text)
-            print(f"  [{ts}] {text}")
-
-        if first_segment is not None:
-            handle(first_segment)
-        for seg in segments_iter:
-            handle(seg)
-
-        if not lines_ts:
-            print("Khong nhan dien duoc noi dung nao (file co the im lang hoac qua ngan).")
-
-        with open(out_path, "w", encoding="utf-8") as f:
-            f.write("=== TRANSCRIPT CO MOC THOI GIAN ===\n")
-            f.write("\n".join(lines_ts))
-            f.write("\n\n=== TRANSCRIPT DANG VAN BAN THUAN ===\n")
-            f.write(" ".join(lines_plain))
-            f.write("\n")
-
-        print(f"\nDa luu transcript tai: {out_path}")
+            stamped.append(f"[{format_ts(seg.start)}] {text}")
+            plain.append(text)
+            print(stamped[-1])
+        if not stamped:
+            print("Không nhận diện được nội dung (file im lặng hoặc quá ngắn).")
+        with open(out, "w", encoding="utf-8") as f:
+            f.write("=== TRANSCRIPT CÓ MỐC THỜI GIAN ===\n" + "\n".join(stamped))
+            f.write("\n\n=== VĂN BẢN THUẦN ===\n" + " ".join(plain) + "\n")
+        print(f"\nĐã lưu transcript: {out}")
     finally:
         if temp_wav and os.path.exists(temp_wav):
             os.unlink(temp_wav)
