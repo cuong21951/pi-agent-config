@@ -182,6 +182,9 @@ if ($managedByPackage) {
     }
 }
 
+if (-not $settings.PSObject.Properties['hideThinkingBlock']) {
+    $settings | Add-Member -NotePropertyName 'hideThinkingBlock' -NotePropertyValue $true
+}
 if (-not $settings.PSObject.Properties['quietStartup']) {
     $settings | Add-Member -NotePropertyName 'quietStartup' -NotePropertyValue $true
 }

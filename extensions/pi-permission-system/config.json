@@ -4,8 +4,13 @@
   "permissionReviewLog": true,
   "permission": {
     "*": "allow",
-    "path": { "*": "allow" },
-    "bash": { "*": "allow" },
+    "path": {
+      "*": "allow",
+      "~/.claude/.credentials.json": "deny"
+    },
+    "bash": {
+      "*": "allow"
+    },
     "external_directory": "allow"
   }
 }
