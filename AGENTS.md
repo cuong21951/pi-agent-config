@@ -107,11 +107,3 @@ root-cause-over-symptom, and the `ponytail:` marker — not repeated here.
 4. Readable beats short. Drop details that wouldn't change what he does next, rather than compressing into fragments, arrow chains, or abbreviations.
 5. Plain markdown, no emoji unless he asks.
 6. Answer in English or Vietnamese, matching his language. Default to English when ambiguous.
-
-# Azure DevOps (org Communited, project Timeblockr)
-
-1. Always pass `project: "Timeblockr"` explicitly; without it wit_*/work_* tools open a picker or hang.
-2. The real teams are `MASTERS OF INNOVATION` (default), `DevOps Team`, `MASTERS OF STABILITY`, `Customer Success`, `Sales`, `Onboarding Tool project team`, `IAM Project Team`. There is no "Timeblockr Team"; confirm with `core_list_project_teams` before naming one.
-3. Deploy pipelines live in a separate org (TIMEBLOCKR, project "PoC Azure Pipelines") reached through `azure-devops-tbr`.
-4. `core_list_project_teams` and other core_* tools time out when given the project name; pass the project id `dd97691f-c08f-43a3-b829-af3e523025d1` instead. wit_*/repo_* tools accept the name.
-5. Prefer the direct tools (`azure-devops_wit_work_item`, `azure-devops_repo_pull_request`, ...); they connect on their own. Use `mcp({ search })` only for a tool that is not exposed directly.

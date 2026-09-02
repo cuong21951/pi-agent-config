@@ -29,7 +29,7 @@
     "azure-devops": {
       "command": "mcp-server-azuredevops",
       "args": [
-        "Communited",
+        "<your-ado-org>",
         "-a",
         "pat"
       ],
@@ -52,7 +52,7 @@
     "azure-devops-tbr": {
       "command": "mcp-server-azuredevops",
       "args": [
-        "TIMEBLOCKR"
+        "<second-ado-org>"
       ],
       "lifecycle": "lazy",
       "directTools": [
