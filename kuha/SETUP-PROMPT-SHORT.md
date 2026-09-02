@@ -11,11 +11,16 @@ mọi bước, hỏi tôi khi cần quyết định, trả lời bằng tiếng 
 Hướng dẫn đầy đủ: https://github.com/cuong21951/pi-agent-config/blob/main/kuha/README.md
 (làm theo mục cài đặt đúng hệ điều hành của máy này, rồi chạy install.sh hoặc install.ps1).
 
+Trước khi chạy install.sh/install.ps1: hỏi tôi thư mục dự án Kuha nằm ở đâu (đoán mặc định
+~/KuHa nếu đã tồn tại), rồi truyền thư mục đó cho installer (`install.sh "<thư mục>"` hoặc
+`install.ps1 -Dir "<thư mục>"`) — mọi file kết quả sẽ lưu vào đây, chia theo loại.
+
 Khóa API OpenRouter của tôi: {{OPENROUTER_API_KEY}} — ghi vào ~/.pi/agent/auth.json dạng
 {"openrouter": {"type": "api_key", "key": "..."}} và đặt model mặc định z-ai/glm-5.3-flash.
 Không in khóa ra màn hình.
 
-Xong thì chạy thử `pi -p --no-session "Trả lời đúng một từ: OK"`, tạo shortcut mở pi trong
-~/Documents/Kuha, và viết cho tôi file ~/Documents/Kuha/HUONG-DAN.md ngắn gọn: cách mở, 6 lệnh
-/nghien-cuu /bao-cao /phan-tich-bctc /tra-luat /bien-ban-hop /slide với ví dụ, file lưu ở đâu.
+Xong thì chạy thử `pi -p --no-session "Trả lời đúng một từ: OK"` từ trong thư mục dự án (bản
+thân installer đã tự tạo sẵn shortcut mở pi trong thư mục đó), và viết cho tôi file
+HUONG-DAN.md ngay trong thư mục dự án, ngắn gọn: cách mở, 6 lệnh /nghien-cuu /bao-cao
+/phan-tich-bctc /tra-luat /bien-ban-hop /slide với ví dụ, file lưu ở đâu.
 ```

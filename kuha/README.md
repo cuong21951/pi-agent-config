@@ -95,8 +95,12 @@ bash ~/.pi/agent/kuha/install.sh
 
 Script sẽ tự kiểm tra công cụ còn thiếu (in lệnh `brew install` cần chạy nếu thiếu), cài các gói
 Python cần dùng (đọc/ghi Word, Excel, PowerPoint, PDF, chuyển ghi âm thành văn bản...), đăng ký
-các kỹ năng Kuha vào pi, và tạo sẵn thư mục lưu kết quả. Chạy lại bao nhiêu lần cũng an toàn
-(không tạo trùng lặp).
+các kỹ năng Kuha vào pi, và tạo sẵn thư mục lưu kết quả trong thư mục dự án. Chạy lại bao nhiêu
+lần cũng an toàn (không tạo trùng lặp).
+
+Thư mục dự án: mặc định script tự tìm (theo thứ tự) `~/KuHa`, `~/Kuha`, `~/kuha`. Nếu chưa có
+thư mục nào, truyền đường dẫn: `bash install.sh ~/KuHa` — nếu không truyền và không tìm thấy,
+script sẽ không tạo gì cả, chỉ nhắc mở `pi` ngay trong thư mục dự án lần sau.
 
 #### 6. Chạy thử
 
@@ -184,8 +188,14 @@ Nếu dùng cách zip:
 
 Script sẽ tự kiểm tra công cụ còn thiếu, cài các gói Python cần dùng (đọc/ghi
 Word, Excel, PowerPoint, PDF, chuyển ghi âm thành văn bản...), đăng ký các kỹ
-năng Kuha vào pi, và tạo sẵn thư mục lưu kết quả. Chạy lại bao nhiêu lần cũng
-an toàn (không tạo trùng lặp).
+năng Kuha vào pi, và tạo sẵn thư mục lưu kết quả trong thư mục dự án. Chạy lại
+bao nhiêu lần cũng an toàn (không tạo trùng lặp).
+
+Thư mục dự án: mặc định script tự tìm (theo thứ tự) `%USERPROFILE%\KuHa`,
+`%USERPROFILE%\Kuha`, `%USERPROFILE%\kuha`, `%USERPROFILE%\Documents\Kuha`.
+Nếu chưa có thư mục nào, truyền đường dẫn: `install.ps1 -Dir
+"$env:USERPROFILE\KuHa"` — nếu không truyền và không tìm thấy, script sẽ
+không tạo gì cả, chỉ nhắc mở `pi` ngay trong thư mục dự án lần sau.
 
 #### 6. Chạy thử
 
@@ -204,10 +214,14 @@ Trong pi, thử các lệnh sau (thay phần trong ngoặc bằng nội dung th�
 
 ## File kết quả được lưu ở đâu
 
-Mọi báo cáo, nghiên cứu, phân tích... được lưu trong `~/Documents/Kuha/`
-(macOS) hoặc `%USERPROFILE%\Documents\Kuha\` (Windows), chia theo loại:
-`bao-cao`, `nghien-cuu`, `phap-ly`, `tai-chinh`, `bien-ban`, `slide`,
-`recordings`.
+Mọi báo cáo, nghiên cứu, phân tích... được lưu trong **thư mục dự án** — thư
+mục nơi mở `pi` (không còn một đường dẫn cố định `Documents/Kuha` như bản
+cũ), chia theo loại: `bao-cao`, `nghien-cuu`, `phap-ly`, `tai-chinh`,
+`bien-ban`, `slide`, `recordings`. Trình cài (`install.sh`/`install.ps1`) tạo
+sẵn các thư mục này trong thư mục dự án và đặt shortcut trên Desktop để mở
+`pi` đúng chỗ. Nếu thư mục dự án đã có sẵn cây thư mục riêng (ví dụ tên tiếng
+Việt), trợ lý sẽ hỏi một lần thư mục nào tương ứng với từng loại và ghi nhớ
+trong `.pi/kuha-folders.json`.
 
 ## Cập nhật
 

@@ -8,6 +8,6 @@ Dùng skill `financial-analysis`. Nếu thiếu đường dẫn file hoặc chư
 cáo, hỏi lại trước khi mở file. Kiểm tra đơn vị (VND/USD), kỳ, và dữ liệu
 thiếu trước khi tính toán — không suy diễn số liệu thiếu, ghi rõ "thiếu dữ
 liệu". Tóm tắt theo nguyên tắc kim tự tháp (kết luận trước). Nếu cần văn bản
-trình bày, chuyển sang skill `business-report`. Lưu kết quả vào
-`~/Documents/Kuha/tai-chinh` (macOS) hoặc
-`%USERPROFILE%\Documents\Kuha\tai-chinh\` (Windows).
+trình bày, chuyển sang skill `business-report`. Lưu kết quả vào thư mục con
+`tai-chinh` trong thư mục dự án (nơi mở pi) — theo quy tắc "Nơi lưu file kết
+quả" trong AGENTS.md.

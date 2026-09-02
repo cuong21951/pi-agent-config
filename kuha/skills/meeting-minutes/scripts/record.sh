@@ -7,7 +7,7 @@
 #                    Neu bo trong, dung thiet bi dau tien tim thay.
 # --minutes N       so phut ghi am toi da. Bat buoc khi ghi am that.
 # --out path        duong dan file .m4a output. Mac dinh:
-#                    ~/Documents/Kuha/recordings/<yyyy-MM-dd_HHmm>.m4a
+#                    ./recordings/<yyyy-MM-dd_HHmm>.m4a (duoi thu muc dang chay lenh nay)
 #
 # Ghi am se ket thuc khi het thoi gian (--minutes) hoac khi nhan Ctrl+C -- ffmpeg
 # tu hoan thien (finalize) file khi nhan tin hieu dung, khong can thao tac gi them.
@@ -87,7 +87,7 @@ fi
 
 if [ -z "$out" ]; then
     timestamp="$(date +%Y-%m-%d_%H%M)"
-    recordings_dir="$HOME/Documents/Kuha/recordings"
+    recordings_dir="./recordings"
     mkdir -p "$recordings_dir"
     out="$recordings_dir/$timestamp.m4a"
 else

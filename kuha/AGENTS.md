@@ -26,11 +26,21 @@ công cụ hỏi người dùng (ask-user-question) nếu có sẵn thay vì đo
 
 ## Nơi lưu file kết quả
 
-Lưu mọi file xuất ra vào `~/Documents/Kuha/<loại>` (macOS) hoặc
-`%USERPROFILE%\Documents\Kuha\<loại>\` (Windows), ví dụ: `bao-cao`,
-`nghien-cuu`, `phap-ly`, `tai-chinh`, `bien-ban`, `slide`, `recordings`. Ưu
-tiên xuất định dạng docx/pptx/xlsx cho các văn bản gửi ban giám đốc thay vì
-chỉ trả lời trong hội thoại.
+"Thư mục dự án" = thư mục nơi mở pi (thư mục làm việc hiện tại, cwd) — không
+phải một đường dẫn cố định. Lưu mọi file xuất ra vào
+`<thư mục dự án>/<loại>/`, ví dụ: `bao-cao`, `nghien-cuu`, `phap-ly`,
+`tai-chinh`, `bien-ban`, `slide`, `recordings`.
+
+Nếu thư mục dự án đã có sẵn cây thư mục riêng (ví dụ tên tiếng Việt như
+"Báo cáo", "Pháp lý"), hỏi người dùng đúng một lần thư mục nào tương ứng với
+từng loại cần dùng, rồi ghi lại vào `.pi/kuha-folders.json` ở gốc thư mục dự
+án (map đơn giản loại → đường dẫn tương đối, ví dụ
+`{"bao-cao": "Báo cáo", "phap-ly": "Pháp lý"}`). Nếu file này đã có, dùng
+luôn, không hỏi lại. Loại nào chưa có trong file thì hỏi bổ sung rồi ghi
+thêm, không hỏi lại các loại đã có.
+
+Ưu tiên xuất định dạng docx/pptx/xlsx cho các văn bản gửi ban giám đốc thay
+vì chỉ trả lời trong hội thoại.
 
 ## Cách trả lời
 

@@ -4,10 +4,18 @@
     Cai dat goi ky nang Kuha cho pi coding agent.
 .DESCRIPTION
     Idempotent installer: kiem tra cong cu he thong, cai goi Python, dang ky
-    skills/prompts cua Kuha vao settings.json cua pi, tao thu muc luu file.
-    Honour bien moi truong PI_CODING_AGENT_DIR de tro thu muc agent (dung khi
-    test trong sandbox, khong dung ~/.pi/agent that).
+    skills/prompts cua Kuha vao settings.json cua pi, tao thu muc luu file
+    trong thu muc du an. Honour bien moi truong PI_CODING_AGENT_DIR de tro
+    thu muc agent (dung khi test trong sandbox, khong dung ~/.pi/agent that).
+.PARAMETER Dir
+    Thu muc du an (noi luu bao-cao/nghien-cuu/... va noi mo pi lam viec). Bo
+    qua thi tu tim thu muc dau tien co san trong: %USERPROFILE%\KuHa,
+    %USERPROFILE%\Kuha, %USERPROFILE%\kuha, %USERPROFILE%\Documents\Kuha,
+    %USERPROFILE%\Documents\KuHa. Khong tim thay thi khong tao gi ca.
 #>
+param(
+    [string]$Dir
+)
 
 $ErrorActionPreference = 'Stop'
 
@@ -35,8 +43,33 @@ if ($env:PI_CODING_AGENT_DIR) {
     $AgentDir = Join-Path $HOME '.pi\agent'
 }
 
+function Find-ProjectDir {
+    $candidates = @(
+        (Join-Path $env:USERPROFILE 'KuHa'),
+        (Join-Path $env:USERPROFILE 'Kuha'),
+        (Join-Path $env:USERPROFILE 'kuha'),
+        (Join-Path $env:USERPROFILE 'Documents\Kuha'),
+        (Join-Path $env:USERPROFILE 'Documents\KuHa')
+    )
+    foreach ($c in $candidates) {
+        if (Test-Path $c -PathType Container) { return $c }
+    }
+    return $null
+}
+
+if ($Dir) {
+    $ProjectDir = $Dir
+} else {
+    $ProjectDir = Find-ProjectDir
+}
+
 Write-Host "Kuha installer cho pi coding agent" -ForegroundColor Green
 Write-Host "Thu muc agent dich: $AgentDir"
+if ($ProjectDir) {
+    Write-Host "Thu muc du an: $ProjectDir"
+} else {
+    Write-Host "Thu muc du an: chua xac dinh (xem phan 'Thu muc du an' ben duoi)"
+}
 
 # ---------------------------------------------------------------------------
 # 1. Kiem tra cong cu he thong
@@ -168,7 +201,7 @@ foreach ($pkg in $requiredPackages) {
     Add-UniqueArrayItem -Object $settings -PropertyName 'packages' -Value $pkg
 }
 
-$managedByPackage = $KuhaDir -match '\git\github\.com\'
+$managedByPackage = $KuhaDir -like '*\git\github.com\*'
 if ($managedByPackage) {
     Write-Host "Kuha duoc cai qua 'pi install git:...': skills/prompts da duoc package.json dang ky, bo qua buoc dang ky thu cong."
 } else {
@@ -226,20 +259,66 @@ if (-not (Test-Path $TargetAgentsMd)) {
 }
 
 # ---------------------------------------------------------------------------
-# 6. Thu muc luu file ket qua
+# 6. Thu muc du an (noi luu file ket qua) va shortcut
 # ---------------------------------------------------------------------------
 
-Write-Section "Thu muc luu ket qua (Documents\Kuha)"
+Write-Section "Thu muc du an"
 
-$DocsRoot = Join-Path $env:USERPROFILE 'Documents\Kuha'
 $subDirs = @('bao-cao', 'nghien-cuu', 'phap-ly', 'tai-chinh', 'bien-ban', 'slide', 'recordings')
-foreach ($d in $subDirs) {
-    $full = Join-Path $DocsRoot $d
-    if (-not (Test-Path $full)) {
-        New-Item -ItemType Directory -Path $full -Force | Out-Null
+
+function Test-HasSubdirs($path) {
+    return [bool](Get-ChildItem -Path $path -Directory -Force -ErrorAction SilentlyContinue | Select-Object -First 1)
+}
+
+if (-not $ProjectDir) {
+    Write-Host "[BO QUA] Khong tim thay thu muc du an co san (KuHa, Kuha, kuha," -ForegroundColor Yellow
+    Write-Host "Documents\Kuha, Documents\KuHa duoi $env:USERPROFILE) va khong co tham so -Dir."
+    Write-Host "Hay tao thu muc du an truoc (vi du $env:USERPROFILE\KuHa), roi chay lai:"
+    Write-Host "  install.ps1 -Dir `"$env:USERPROFILE\KuHa`""
+    Write-Host "Hoac chi can mo 'pi' ngay ben trong thu muc du an do - khong bat buoc"
+    Write-Host "phai chay lai installer."
+} else {
+    if (-not (Test-Path $ProjectDir)) {
+        New-Item -ItemType Directory -Path $ProjectDir -Force | Out-Null
+    }
+    if (Test-HasSubdirs $ProjectDir) {
+        Write-Host "[BO QUA] $ProjectDir da co san thu muc con, khong tao them 7 thu muc" -ForegroundColor Yellow
+        Write-Host "loai chuan de tranh xao tron cay thu muc co san. Tro ly se hoi anh/chi"
+        Write-Host "thu muc nao dung cho loai nao khi lam viec (xem AGENTS.md)."
+    } else {
+        foreach ($d in $subDirs) {
+            $full = Join-Path $ProjectDir $d
+            if (-not (Test-Path $full)) {
+                New-Item -ItemType Directory -Path $full -Force | Out-Null
+            }
+        }
+        Write-Host "[OK] $ProjectDir\{$($subDirs -join ',')}"
+    }
+
+    $Launcher = Join-Path $env:USERPROFILE 'Desktop\Kuha.cmd'
+    $writeLauncher = $true
+    if (Test-Path $Launcher) {
+        $existingLauncher = Get-Content -Raw -Path $Launcher -ErrorAction SilentlyContinue
+        if ($existingLauncher -notmatch [regex]::Escape(':: kuha-launcher')) {
+            $writeLauncher = $false
+            Write-Host "[BO QUA] $Launcher da ton tai va khong phai do Kuha tao, khong ghi de." -ForegroundColor Yellow
+        }
+    }
+    if ($writeLauncher) {
+        $launcherDir = Split-Path -Parent $Launcher
+        if (-not (Test-Path $launcherDir)) {
+            New-Item -ItemType Directory -Path $launcherDir -Force | Out-Null
+        }
+        $launcherContent = @"
+@echo off
+:: kuha-launcher
+cd /d "$ProjectDir"
+pi
+"@
+        Set-Content -Path $Launcher -Value $launcherContent -Encoding ascii
+        Write-Host "[OK] Da tao $Launcher"
     }
 }
-Write-Host "[OK] $DocsRoot\{$($subDirs -join ',')}"
 
 # ---------------------------------------------------------------------------
 # 7. Tom tat
@@ -250,9 +329,9 @@ Write-Section "Hoan tat"
 Write-Host "Thu muc agent   : $AgentDir"
 Write-Host "settings.json   : $SettingsPath"
 Write-Host "AGENTS.md       : $TargetAgentsMd"
-Write-Host "File ket qua    : $DocsRoot"
+Write-Host "Thu muc du an   : $(if ($ProjectDir) { $ProjectDir } else { 'chua xac dinh' })"
 Write-Host ""
 Write-Host "Buoc tiep theo:" -ForegroundColor Green
 Write-Host "  1. Neu chua co API key: chay 'pi' roi go /login, hoac dat bien moi truong OPENROUTER_API_KEY."
 Write-Host "  2. Mo terminal moi (de nhan PATH cap nhat neu vua cai cong cu)."
-Write-Host "  3. Chay 'pi' trong bat ky thu muc nao va thu lenh: /nghien-cuu, /bao-cao, /phan-tich-bctc, /tra-luat, /bien-ban-hop, /slide"
+Write-Host "  3. Chay 'pi' trong thu muc du an va thu lenh: /nghien-cuu, /bao-cao, /phan-tich-bctc, /tra-luat, /bien-ban-hop, /slide"

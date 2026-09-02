@@ -25,12 +25,12 @@ avfoundation) — xem bước 1.
      - Xem danh sách microphone: `pwsh -File "{baseDir}/scripts/record.ps1" -ListDevices`
      - Ghi âm tối đa 60 phút: `pwsh -File "{baseDir}/scripts/record.ps1" -Device "<tên thiết bị>" -Minutes 60`
      - Bỏ `-Device` thì dùng microphone đầu tiên; bỏ `-Out` thì file lưu vào
-       `Documents\Kuha\recordings\<ngày_giờ>.m4a`.
+       `recordings\<ngày_giờ>.m4a` trong thư mục dự án (nơi mở pi).
    - **macOS**:
      - Xem danh sách microphone: `bash "{baseDir}/scripts/record.sh" --list`
      - Ghi âm tối đa 60 phút: `bash "{baseDir}/scripts/record.sh" --device 0 --minutes 60`
      - Bỏ `--device` thì dùng microphone đầu tiên; bỏ `--out` thì file lưu vào
-       `~/Documents/Kuha/recordings/<ngày_giờ>.m4a`. Lần đầu chạy, macOS sẽ hỏi
+       `recordings/<ngày_giờ>.m4a` trong thư mục dự án (nơi mở pi). Lần đầu chạy, macOS sẽ hỏi
        quyền truy cập microphone cho ứng dụng đang chạy lệnh này (Terminal,
        iTerm2, ...) — cấp quyền trong System Settings > Privacy & Security >
        Microphone rồi chạy lại.
@@ -70,5 +70,5 @@ avfoundation) — xem bước 1.
   ghi `[chưa xác định]`.
 - Transcript không nêu đủ thành phần tham dự (chủ trì, thư ký, thành viên) thì
   hỏi người dùng trước khi hoàn tất, không tự điền.
-- Lưu file biên bản vào `~/Documents/Kuha/bien-ban` (macOS) hoặc
-  `%USERPROFILE%\Documents\Kuha\bien-ban` (Windows).
+- Lưu file biên bản vào thư mục con `bien-ban` trong thư mục dự án (nơi mở
+  pi) — theo quy tắc "Nơi lưu file kết quả" trong AGENTS.md.

@@ -3,10 +3,16 @@
 # Cai dat goi ky nang Kuha cho pi coding agent (macOS + Linux).
 #
 # Idempotent installer: kiem tra cong cu he thong, cai goi Python, dang ky
-# skills/prompts cua Kuha vao settings.json cua pi, tao thu muc luu file.
-# Honour bien moi truong PI_CODING_AGENT_DIR de tro thu muc agent (dung khi
-# test trong sandbox, khong dung ~/.pi/agent that). Day la ban mirror cua
-# install.ps1 (Windows) cho macOS/Linux.
+# skills/prompts cua Kuha vao settings.json cua pi, tao thu muc luu file
+# trong thu muc du an. Honour bien moi truong PI_CODING_AGENT_DIR de tro thu
+# muc agent (dung khi test trong sandbox, khong dung ~/.pi/agent that). Day
+# la ban mirror cua install.ps1 (Windows) cho macOS/Linux.
+#
+# Usage: install.sh [DIR]
+#   DIR  thu muc du an (noi luu bao-cao/nghien-cuu/... va noi mo pi lam viec).
+#        Bo qua thi tu tim thu muc dau tien co san trong: ~/KuHa, ~/Kuha,
+#        ~/kuha, ~/Documents/Kuha, ~/Documents/KuHa. Khong tim thay thi
+#        khong tao gi ca (xem phan 6 ben duoi).
 
 set -uo pipefail
 
@@ -26,8 +32,34 @@ KUHA_AGENTS_MD="$KUHA_DIR/AGENTS.md"
 
 AGENT_DIR="${PI_CODING_AGENT_DIR:-$HOME/.pi/agent}"
 
+PROJECT_DIR_ARG="${1:-}"
+
+detect_project_dir() {
+    local candidate
+    for candidate in "$HOME/KuHa" "$HOME/Kuha" "$HOME/kuha" "$HOME/Documents/Kuha" "$HOME/Documents/KuHa"; do
+        if [ -d "$candidate" ]; then
+            echo "$candidate"
+            return 0
+        fi
+    done
+    return 1
+}
+
+if [ -n "$PROJECT_DIR_ARG" ]; then
+    PROJECT_DIR="$PROJECT_DIR_ARG"
+elif detected="$(detect_project_dir)"; then
+    PROJECT_DIR="$detected"
+else
+    PROJECT_DIR=""
+fi
+
 echo "Kuha installer cho pi coding agent (macOS/Linux)"
 echo "Thu muc agent dich: $AGENT_DIR"
+if [ -n "$PROJECT_DIR" ]; then
+    echo "Thu muc du an: $PROJECT_DIR"
+else
+    echo "Thu muc du an: chua xac dinh (xem phan 'Thu muc du an' ben duoi)"
+fi
 
 # ---------------------------------------------------------------------------
 # 1. Kiem tra cong cu he thong
@@ -251,19 +283,56 @@ else
 fi
 
 # ---------------------------------------------------------------------------
-# 6. Thu muc luu file ket qua (Documents/Kuha)
+# 6. Thu muc du an (noi luu file ket qua) va shortcut
 # ---------------------------------------------------------------------------
 
-section "Thu muc luu ket qua (Documents/Kuha)"
+section "Thu muc du an"
 
-DOCS_ROOT="$HOME/Documents/Kuha"
 SUB_DIRS=(bao-cao nghien-cuu phap-ly tai-chinh bien-ban slide recordings)
-for d in "${SUB_DIRS[@]}"; do
-    mkdir -p "$DOCS_ROOT/$d"
-done
-IFS=,
-echo "[OK] $DOCS_ROOT/{${SUB_DIRS[*]}}"
-unset IFS
+
+has_subdirs() {
+    find "$1" -mindepth 1 -maxdepth 1 -type d 2>/dev/null | grep -q .
+}
+
+if [ -z "$PROJECT_DIR" ]; then
+    echo "[BO QUA] Khong tim thay thu muc du an co san (~/KuHa, ~/Kuha, ~/kuha,"
+    echo "~/Documents/Kuha, ~/Documents/KuHa) va khong co tham so DIR."
+    echo "Hay tao thu muc du an truoc (vi du ~/KuHa), roi chay lai:"
+    echo "  bash install.sh ~/KuHa"
+    echo "Hoac chi can mo 'pi' ngay ben trong thu muc du an do — khong bat buoc"
+    echo "phai chay lai installer."
+else
+    mkdir -p "$PROJECT_DIR"
+    if has_subdirs "$PROJECT_DIR"; then
+        echo "[BO QUA] $PROJECT_DIR da co san thu muc con, khong tao them 7 thu muc"
+        echo "loai chuan de tranh xao tron cay thu muc co san. Tro ly se hoi anh/chi"
+        echo "thu muc nao dung cho loai nao khi lam viec (xem AGENTS.md)."
+    else
+        for d in "${SUB_DIRS[@]}"; do
+            mkdir -p "$PROJECT_DIR/$d"
+        done
+        IFS=,
+        echo "[OK] $PROJECT_DIR/{${SUB_DIRS[*]}}"
+        unset IFS
+    fi
+
+    LAUNCHER="$HOME/Desktop/Kuha.command"
+    write_launcher=1
+    if [ -f "$LAUNCHER" ] && ! grep -qF "# kuha-launcher" "$LAUNCHER"; then
+        write_launcher=0
+        echo "[BO QUA] $LAUNCHER da ton tai va khong phai do Kuha tao, khong ghi de."
+    fi
+    if [ "$write_launcher" = 1 ]; then
+        mkdir -p "$(dirname "$LAUNCHER")"
+        cat > "$LAUNCHER" <<EOF
+#!/bin/bash
+# kuha-launcher
+cd "$PROJECT_DIR" && pi
+EOF
+        chmod +x "$LAUNCHER"
+        echo "[OK] Da tao $LAUNCHER"
+    fi
+fi
 
 # ---------------------------------------------------------------------------
 # 7. Tom tat
@@ -274,9 +343,9 @@ section "Hoan tat"
 echo "Thu muc agent   : $AGENT_DIR"
 echo "settings.json   : $SETTINGS_PATH"
 echo "AGENTS.md       : $TARGET_AGENTS_MD"
-echo "File ket qua    : $DOCS_ROOT"
+echo "Thu muc du an   : ${PROJECT_DIR:-chua xac dinh}"
 echo
 echo "Buoc tiep theo:"
 echo "  1. Neu chua co API key: chay 'pi' roi go /login, hoac dat bien moi truong OPENROUTER_API_KEY."
 echo "  2. Mo terminal moi (de nhan PATH cap nhat neu vua cai cong cu qua brew)."
-echo "  3. Chay 'pi' trong bat ky thu muc nao va thu lenh: /nghien-cuu, /bao-cao, /phan-tich-bctc, /tra-luat, /bien-ban-hop, /slide"
+echo "  3. Chay 'pi' trong thu muc du an va thu lenh: /nghien-cuu, /bao-cao, /phan-tich-bctc, /tra-luat, /bien-ban-hop, /slide"

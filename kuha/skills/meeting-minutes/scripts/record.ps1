@@ -9,7 +9,7 @@
                   dùng thiết bị đầu tiên tìm thấy.
     -Minutes      số phút ghi âm tối đa. Bắt buộc khi ghi âm thật.
     -Out          đường dẫn file .m4a output. Mặc định:
-                  %USERPROFILE%\Documents\Kuha\recordings\<yyyy-MM-dd_HHmm>.m4a
+                  .\recordings\<yyyy-MM-dd_HHmm>.m4a (dưới thư mục đang chạy lệnh này)
 
     Ghi âm sẽ kết thúc khi hết thời gian (-Minutes) hoặc khi nhấn Ctrl+C — ffmpeg
     tự hoàn thiện (finalize) file khi nhận tín hiệu dừng, không cần thao tác gì thêm.
@@ -90,7 +90,7 @@ if (-not $Device) {
 
 if (-not $Out) {
     $timestamp = Get-Date -Format 'yyyy-MM-dd_HHmm'
-    $recordingsDir = Join-Path $env:USERPROFILE 'Documents\Kuha\recordings'
+    $recordingsDir = Join-Path (Get-Location) 'recordings'
     if (-not (Test-Path $recordingsDir)) {
         New-Item -ItemType Directory -Path $recordingsDir -Force | Out-Null
     }

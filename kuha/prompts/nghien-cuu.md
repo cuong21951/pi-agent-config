@@ -10,5 +10,5 @@ Dùng skill `business-research`. Nếu chủ đề còn mơ hồ (chưa rõ th�
 số liệu thực tế/ước tính/nhận định. Tham khảo
 `references/vietnam-tourism-sources.md` nếu liên quan du lịch/khách sạn/công
 viên. Viết theo mẫu `templates/nghien-cuu.md`, kết thúc bằng độ tin cậy. Lưu
-vào `~/Documents/Kuha/nghien-cuu` (macOS) hoặc
-`%USERPROFILE%\Documents\Kuha\nghien-cuu\` (Windows).
+vào thư mục con `nghien-cuu` trong thư mục dự án (nơi mở pi) — theo quy tắc
+"Nơi lưu file kết quả" trong AGENTS.md.
