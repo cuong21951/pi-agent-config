@@ -7,8 +7,7 @@ type Bold = (text: string) => string;
 
 const FRAMES = 6;
 
-// ponytail: Claude's header is mascot + three lines; the mascot here is a cat that blinks,
-// wags its tail and drops a heart. Nothing else animates, so the transcript never repaints.
+// ponytail: Claude's header is mascot + three lines; the mascot here is a cat.
 export function catFrame(frame: number): string[] {
 	const eyes = frame % FRAMES === 4 ? "-.-" : "o.o";
 	const tail = ["~ ", " ~", "~ ", " ~", "~ ", " ~"][frame % FRAMES];
@@ -41,34 +40,24 @@ export function composeHeader(
 }
 
 export default function (pi: ExtensionAPI) {
-	let timer: ReturnType<typeof setInterval> | undefined;
-
+	// ponytail: the cat used to animate on a 700 ms timer; in regular TUI mode the header lives in scrollback,
+	// so every frame forced a full repaint and the screen flickered. One still frame now.
 	pi.on("session_start", (_event, ctx) => {
 		if (!ctx.hasUI) return;
-		let frame = 0;
-		clearInterval(timer);
-		ctx.ui.setHeader((tui, theme) => {
-			timer = setInterval(() => {
-				frame++;
-				tui.requestRender();
-			}, 700);
-			return {
-				render: (width: number) =>
-					composeHeader(
-						ctx.model?.name ?? ctx.model?.id ?? "no model",
-						ctx.model?.provider ?? "",
-						ctx.thinkingLevel ?? "off",
-						ctx.cwd,
-						frame,
-						(role, text) => theme.fg(role as never, text),
-						(text) => theme.bold(text),
-					).map((line) => truncateToWidth(line, width)),
-				invalidate() {},
-			};
-		});
+		ctx.ui.setHeader((_tui, theme) => ({
+			render: (width: number) =>
+				composeHeader(
+					ctx.model?.name ?? ctx.model?.id ?? "no model",
+					ctx.model?.provider ?? "",
+					ctx.thinkingLevel ?? "off",
+					ctx.cwd,
+					0,
+					(role, text) => theme.fg(role as never, text),
+					(text) => theme.bold(text),
+				).map((line) => truncateToWidth(line, width)),
+			invalidate() {},
+		}));
 	});
-
-	pi.on("session_shutdown", () => clearInterval(timer));
 }
 
 if (process.env.CLAUDE_HEADER_SELFTEST) {
