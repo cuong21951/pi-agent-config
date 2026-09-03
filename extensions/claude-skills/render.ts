@@ -7,7 +7,7 @@ const INDENT = "    ";
 
 export function callLine(name: unknown, s: Style): string {
 	const skill = typeof name === "string" && name.trim() !== "" ? name.trim() : "?";
-	return s.fg("toolTitle", s.bold("● ")) + s.fg("accent", s.bold("Skill")) + s.fg("toolTitle", `(${skill})`);
+	return s.fg("customMessageLabel", s.bold("● ")) + s.fg("toolTitle", s.bold("Skill")) + s.fg("toolTitle", `(${skill})`);
 }
 
 export interface ResultState {
@@ -18,13 +18,13 @@ export interface ResultState {
 }
 
 export function resultLine(state: ResultState, s: Style): string {
-	const elbow = s.fg("dim", "  └ ");
+	const elbow = s.fg("toolTitle", "  └ ");
 	if (state.isPartial) return elbow + s.fg("dim", "…");
 	if (state.isError) {
 		const [first] = state.text.split("\n");
 		return elbow + s.fg("error", `✗ ${first}`);
 	}
-	let line = elbow + s.fg("dim", "Successfully loaded skill");
+	let line = elbow + s.fg("toolTitle", "Successfully loaded skill");
 	if (state.expanded) {
 		const lines = state.text.replace(/\n$/, "").split("\n");
 		line += "\n" + lines.map((l) => INDENT + s.fg("toolOutput", l)).join("\n");
