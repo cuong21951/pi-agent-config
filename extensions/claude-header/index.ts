@@ -6,8 +6,15 @@ type Paint = (role: string, text: string) => string;
 type Bold = (text: string) => string;
 
 const FRAMES = 6;
+const FRAME_MS = 700;
 
-// ponytail: Claude's header is mascot + three lines; the mascot here is a cat.
+// ponytail: the frame comes from the wall clock, not a timer. The cat advances on
+// repaints driven by anything else (spinner ticks while working) and never
+// schedules its own, so an idle screen stays still instead of flickering.
+export const frameNow = (now = Date.now()): number => Math.floor(now / FRAME_MS) % FRAMES;
+
+// ponytail: Claude's header is mascot + three lines; the mascot here is a cat that blinks,
+// wags its tail and drops a heart.
 export function catFrame(frame: number): string[] {
 	const eyes = frame % FRAMES === 4 ? "-.-" : "o.o";
 	const tail = ["~ ", " ~", "~ ", " ~", "~ ", " ~"][frame % FRAMES];
@@ -40,8 +47,6 @@ export function composeHeader(
 }
 
 export default function (pi: ExtensionAPI) {
-	// ponytail: the cat used to animate on a 700 ms timer; in regular TUI mode the header lives in scrollback,
-	// so every frame forced a full repaint and the screen flickered. One still frame now.
 	pi.on("session_start", (_event, ctx) => {
 		if (!ctx.hasUI) return;
 		ctx.ui.setHeader((_tui, theme) => ({
@@ -51,7 +56,7 @@ export default function (pi: ExtensionAPI) {
 					ctx.model?.provider ?? "",
 					ctx.thinkingLevel ?? "off",
 					ctx.cwd,
-					0,
+					frameNow(),
 					(role, text) => theme.fg(role as never, text),
 					(text) => theme.bold(text),
 				).map((line) => truncateToWidth(line, width)),
@@ -69,6 +74,8 @@ if (process.env.CLAUDE_HEADER_SELFTEST) {
 	if (!lines[3].includes("~")) throw new Error("FAIL: cwd row is home-relative");
 	if (catFrame(0)[2] === catFrame(1)[2]) throw new Error("FAIL: tail must wag");
 	if (!catFrame(4)[1].includes("-.-")) throw new Error("FAIL: blink frame");
+	if (frameNow(0) !== 0 || frameNow(699) !== 0 || frameNow(700) !== 1) throw new Error("FAIL: frame advances every 700 ms");
+	if (frameNow(2800) !== 4 || frameNow(4200) !== 0) throw new Error("FAIL: frame wraps every 6 frames");
 	console.log(lines.join("\n"));
 	console.log("ok - claude layout with a cat");
 }
