@@ -59,9 +59,12 @@ Luôn có phần tóm tắt ở đầu nếu câu trả lời dài hơn vài dò
 - `meeting-minutes` — chuyển ghi âm cuộc họp thành biên bản.
 - `docx` / `pptx` / `xlsx` / `pdf` — xuất file Word/PowerPoint/Excel/PDF cuối
   cùng, dùng sau khi nội dung đã được soạn xong.
+- `update-pack` — cập nhật pack Kuha lên bản mới khi người dùng yêu cầu
+  ("cập nhật pack", hoặc khi pi hiện banner "Package Updates Available").
 
 Sáu lệnh nhanh: `/nghien-cuu`, `/bao-cao`, `/phan-tich-bctc`, `/tra-luat`,
-`/bien-ban-hop`, `/slide`.
+`/bien-ban-hop`, `/slide`. Cập nhật pack không cần lệnh — chỉ cần nói
+"cập nhật pack".
 
 ## An toàn
 

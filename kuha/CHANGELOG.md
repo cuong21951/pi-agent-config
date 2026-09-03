@@ -1,5 +1,10 @@
 # Có gì mới (cho Phương)
 
+## 2026-09-04 (tự cập nhật pack)
+- Giờ có thể bảo trợ lý "cập nhật pack" trực tiếp trong pi: trợ lý sẽ tự chạy
+  update, cài lại và kiểm tra model rẻ, không cần dán prompt nào cả. Khi pi
+  hiện banner vàng "Package Updates Available" chỉ cần nói vậy.
+
 ## 2026-09-03 (giao diện giống Claude Code)
 - Mỗi thao tác của trợ lý hiện rõ ràng như Claude Code: `● Read(tên file)` rồi `⎿ Read 42 lines`,
   `● Search(pattern: "...")` rồi `⎿ Found 5 lines`, `● Update(tên file)` kèm phần diff đổi gì,
