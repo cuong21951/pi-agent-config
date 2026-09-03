@@ -9,23 +9,6 @@
         "http://127.0.0.1:9222"
       ]
     },
-    "serena": {
-      "command": "serena",
-      "args": [
-        "start-mcp-server",
-        "--context=ide-assistant",
-        "--project-from-cwd"
-      ],
-      "directTools": [
-        "find_symbol",
-        "find_referencing_symbols",
-        "get_symbols_overview",
-        "replace_symbol_body",
-        "get_diagnostics_for_file"
-      ],
-      "lifecycle": "keep-alive",
-      "requestTimeoutMs": 180000
-    },
     "azure-devops": {
       "command": "mcp-server-azuredevops",
       "args": [
