@@ -42,10 +42,11 @@ What the harness matches today, and what it does not, so the next pass starts fr
 **Not matched yet**
 
 - Markdown inside messages. Link, inline-code and heading colours are still pi's own; Claude's were never measured, so they were left alone rather than guessed.
-- No `accept edits` mode. Claude cycles through one; the permission extension exposes no runtime API for a narrower auto-approve, so the cycle stops at yolo.
-- Yolo is not instant. It writes the permission config and reloads extensions, because that extension reads its config once at load.
+- `auto` is enforced by this harness, not by the permission extension, which exposes no runtime API for a narrower auto-approve. If your own permission policy also asks for bash, you will see two prompts.
+- Yolo takes effect from your next message, not mid-turn, because the permission extension re-reads its config at the start of each turn.
 - Plan mode has two owners. `claude-modes` enforces it, while pi's bundled `plan-mode` example still ships its own `/plan` and `/todos` on `ctrl+alt+p`.
 - The collapsed thinking line says `✻ Thought` with no duration; Claude says `Thought for Ns`.
+- Assistant body text is the terminal's default foreground, not `#ffffff`. pi's markdown renderer paints headings, links and code from the theme but leaves paragraph text uncoloured, and the theme has no key for it, so matching Claude's pure white would take a patch to pi itself.
 - The header cat keeps its own orange. The `warning` role was deliberately left on `#d97757` so the cat does not change.
 
 ## Restore on a new machine
