@@ -221,11 +221,14 @@ def add_unique(key, value):
 required_packages = [
     "npm:pi-web-access",
     "npm:@juicesharp/rpiv-ask-user-question",
-    "npm:pi-powerline-footer",
     "npm:pi-notify",
 ]
 for pkg in required_packages:
     add_unique("packages", pkg)
+
+# powerline used to own the footer and the editor; it overrode claude-footer/claude-input
+settings["packages"] = [p for p in settings.get("packages", []) if p != "npm:pi-powerline-footer"]
+settings.pop("powerline", None)
 
 if managed_by_package:
     print(
@@ -247,7 +250,6 @@ settings.setdefault("hideThinkingBlock", True)
 settings.setdefault("enabledModels", ["openrouter/z-ai/glm-5.3-flash", "openrouter/deepseek/deepseek-v4-flash*"])
 settings.setdefault("defaultProvider", "openrouter")
 settings.setdefault("defaultModel", "z-ai/glm-5.3-flash")
-settings.setdefault("powerline", {"preset": "default", "welcome": False})
 settings.setdefault("defaultThinkingLevel", "medium")
 
 with open(settings_path, "w", encoding="utf-8") as f:

@@ -21,6 +21,8 @@ trả lời tiếng Việt, không hỏi lại trừ khi một bước lỗi th�
    - "defaultProvider" là "openrouter", "defaultModel" là "z-ai/glm-5.3-flash"
    - Không có giá trị model nào chứa "fable", "opus", "sonnet", "gpt-5"
    - Thư mục ~/.pi/agent/git/github.com/cuong21951/pi-agent-config/extensions/cheap-models tồn tại
+   - "packages" KHÔNG còn "npm:pi-powerline-footer" và không còn key "powerline"
+     (gói này đè footer và ô nhập kiểu Claude; installer bước 2 tự gỡ)
    Sai thì sửa settings.json đúng như trên; vẫn sai sau khi sửa thì dừng và báo tôi.
 4. Kiểm tra bản mới đã về trọn vẹn: file package.json trong thư mục
    pi-agent-config phải liệt kê "./extensions/claude-footer" và
@@ -29,8 +31,9 @@ trả lời tiếng Việt, không hỏi lại trừ khi một bước lỗi th�
 5. Đọc file CHANGELOG.md trong thư mục kuha/ của pack và tóm tắt trong tối đa
    3 dòng tiếng Việt những gì mới kể từ bản trước.
 6. Cuối cùng nhắc tôi: thoát pi (Ctrl+C hai lần) rồi mở lại trong thư mục dự án
-   để nhận bản mới. Sau khi mở lại, footer dưới cùng phải hiện số dư key
-   "openrouter $..." (xanh/vàng/đỏ theo mức tiền), và thao tác của trợ lý phải
+   để nhận bản mới. Sau khi mở lại, ô nhập phải là khung bo tròn ╭─╮ với dấu ">",
+   footer dưới cùng là MỘT dòng mờ "model · think … · ctx … · openrouter $..."
+   (số dư xanh/vàng/đỏ theo mức tiền), và thao tác của trợ lý phải
    hiện dạng Claude: "● Read(tên file)" rồi "⎿ Read N lines".
 ```
 

@@ -1,5 +1,10 @@
 # Có gì mới (cho Phương)
 
+## 2026-09-04 (sửa giao diện không đổi trên macOS)
+- Gói `pi-powerline-footer` cũ vẫn nằm trong settings và đè lên footer + ô nhập kiểu
+  Claude. Installer giờ tự gỡ gói này; chạy lại update là ô nhập bo tròn và footer
+  một dòng hiện đúng.
+
 ## 2026-09-04 (tự cập nhật pack)
 - Giờ có thể bảo trợ lý "cập nhật pack" trực tiếp trong pi: trợ lý sẽ tự chạy
   update, cài lại và kiểm tra model rẻ, không cần dán prompt nào cả. Khi pi

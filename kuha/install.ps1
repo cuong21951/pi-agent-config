@@ -194,12 +194,14 @@ function Add-UniqueArrayItem {
 $requiredPackages = @(
     'npm:pi-web-access',
     'npm:@juicesharp/rpiv-ask-user-question',
-    'npm:pi-powerline-footer',
     'npm:pi-notify'
 )
 foreach ($pkg in $requiredPackages) {
     Add-UniqueArrayItem -Object $settings -PropertyName 'packages' -Value $pkg
 }
+# powerline used to own the footer and the editor; it overrode claude-footer/claude-input
+$settings.packages = @($settings.packages | Where-Object { $_ -ne 'npm:pi-powerline-footer' })
+if ($settings.PSObject.Properties['powerline']) { $settings.PSObject.Properties.Remove('powerline') }
 
 $managedByPackage = $KuhaDir -like '*\git\github.com\*'
 if ($managedByPackage) {
@@ -227,9 +229,6 @@ if (-not $settings.PSObject.Properties['hideThinkingBlock']) {
 }
 if (-not $settings.PSObject.Properties['quietStartup']) {
     $settings | Add-Member -NotePropertyName 'quietStartup' -NotePropertyValue $true
-}
-if (-not $settings.PSObject.Properties['powerline']) {
-    $settings | Add-Member -NotePropertyName 'powerline' -NotePropertyValue ([pscustomobject]@{ preset = 'default'; welcome = $false })
 }
 if (-not $settings.PSObject.Properties['tuiMode']) {
     $settings | Add-Member -NotePropertyName 'tuiMode' -NotePropertyValue 'fullscreen'
