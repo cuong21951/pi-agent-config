@@ -81,12 +81,12 @@ export default function (pi: ExtensionAPI) {
 			return new Text(callLine(args.name, theme), 0, 0);
 		},
 
-		renderResult(result: { content: Array<{ type: string; text?: string }>; isError?: boolean }, { expanded, isPartial }: { expanded: boolean; isPartial: boolean }, theme: Style) {
+		renderResult(result: { content: Array<{ type: string; text?: string }>; isError?: boolean }, { expanded, isPartial }: { expanded: boolean; isPartial: boolean }, theme: Style, context?: { isError?: boolean }) {
 			const text = result.content
 				.filter((block) => block.type === "text")
 				.map((block) => block.text ?? "")
 				.join("\n");
-			return new Text(resultLine({ text, isError: result.isError === true, expanded, isPartial }, theme), 0, 0);
+			return new Text(resultLine({ text, isError: result.isError === true || context?.isError === true, expanded, isPartial }, theme), 0, 0);
 		},
 	});
 }
