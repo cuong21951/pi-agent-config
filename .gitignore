@@ -18,3 +18,9 @@ git/
 __pycache__/
 mcp.json
 extensions/pi-permission-system/logs/
+
+# serena leftover, caches, suffixed backups
+.serena/
+mcp-cache.json.*
+models.json.bak-*
+settings.json.bak-*
