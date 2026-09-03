@@ -26,6 +26,28 @@ Cuong's [pi](https://pi.dev) harness, kept in git so it can be restored on any m
 | `skills/` | Local skills (browser-tools patched for Windows, film-download, research helpers). |
 | `kuha/` | The Kuha pack: 9 skills, 6 slash prompts, Vietnamese AGENTS.md, README and installer. See `kuha/README.md`. |
 
+## Claude parity
+
+What the harness matches today, and what it does not, so the next pass starts from a ledger instead of a guess.
+
+**Matched**
+
+- Row shape everywhere: `● Label(args)` on the call line, `  └ summary` on the result, `ctrl+o` to expand. File tools, bash, skills, MCP and web search all agree.
+- Colours measured, not guessed. Claude's palette was read out of its own binary and the rendered rows were sampled pixel by pixel from a side-by-side capture. The theme targets `dark-daltonized`, which is what a colour-blind-safe Claude install uses.
+- The dot carries meaning: blue for a tool, purple for a skill, red only on failure.
+- No coloured block behind a tool row, because Claude never draws one.
+- Modes on `shift+tab`, with the plan-mode offer when you ask for a plan.
+- Subagent progress: the live widget (spinner per agent, tick or cross when it lands) and the fleet list are both on.
+
+**Not matched yet**
+
+- Markdown inside messages. Link, inline-code and heading colours are still pi's own; Claude's were never measured, so they were left alone rather than guessed.
+- No `accept edits` mode. Claude cycles through one; the permission extension exposes no runtime API for a narrower auto-approve, so the cycle stops at yolo.
+- Yolo is not instant. It writes the permission config and reloads extensions, because that extension reads its config once at load.
+- Plan mode has two owners. `claude-modes` enforces it, while pi's bundled `plan-mode` example still ships its own `/plan` and `/todos` on `ctrl+alt+p`.
+- The collapsed thinking line says `✻ Thought` with no duration; Claude says `Thought for Ns`.
+- The header cat keeps its own orange. The `warning` role was deliberately left on `#d97757` so the cat does not change.
+
 ## Restore on a new machine
 
 ```powershell
