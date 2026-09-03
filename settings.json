@@ -60,6 +60,5 @@
   "quietStartup": true,
   "treeFilterMode": "no-tools",
   "outputPad": 1,
-  "tuiMode": "fullscreen",
-  "fullscreenExitOutput": "resume-hint"
+  "tuiMode": "regular"
 }

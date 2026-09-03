@@ -1,5 +1,6 @@
 import * as os from "node:os";
 import { VERSION, type ExtensionAPI } from "@earendil-works/pi-coding-agent";
+import { truncateToWidth } from "@earendil-works/pi-tui";
 
 type Paint = (role: string, text: string) => string;
 type Bold = (text: string) => string;
@@ -52,7 +53,7 @@ export default function (pi: ExtensionAPI) {
 				tui.requestRender();
 			}, 700);
 			return {
-				render: () =>
+				render: (width: number) =>
 					composeHeader(
 						ctx.model?.name ?? ctx.model?.id ?? "no model",
 						ctx.model?.provider ?? "",
@@ -61,7 +62,7 @@ export default function (pi: ExtensionAPI) {
 						frame,
 						(role, text) => theme.fg(role as never, text),
 						(text) => theme.bold(text),
-					),
+					).map((line) => truncateToWidth(line, width)),
 				invalidate() {},
 			};
 		});
