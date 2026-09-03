@@ -89,7 +89,7 @@ root-cause-over-symptom, and the `ponytail:` marker — not repeated here.
 
 # Model routing
 
-1. GLM 5.3 Flash (`z-ai/glm-5.3-flash` on the commandcode proxy) is the default and handles routine work. `deepseek-v4-pro` at `high` is the escalation for design judgment and final review.
+1. GLM 5.3 Flash (`z-ai/glm-5.3-flash` on the commandcode proxy) is the default and handles routine work. `meta/muse-spark-1.3-contributor` on openrouter at `high` is the escalation for design judgment and final review. No `deepseek-v4-pro`.
 2. Judge the output, not the price. If the cheap rung misses the bar, redo it on the escalation without asking.
 3. A subagent re-establishes context, re-explores, reports back, and you re-read the report. Delegate only when the payoff clearly exceeds that cost. A few file reads, one search, a short edit, a single check — do those inline.
 4. Don't fan out several subagents on one small task, and don't spawn one to double-check work you can verify inline.

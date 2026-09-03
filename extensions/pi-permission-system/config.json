@@ -5,8 +5,7 @@
   "permission": {
     "*": "allow",
     "path": {
-      "*": "allow",
-      "~/.claude/.credentials.json": "deny"
+      "*": "allow"
     },
     "bash": {
       "*": "allow"
