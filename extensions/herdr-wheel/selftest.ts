@@ -8,7 +8,10 @@ const { createJiti } = await import(
 	pathToFileURL(path.join(PI_DIR, "node_modules/jiti/lib/jiti-static.mjs")).href
 );
 const jiti = createJiti(import.meta.url, {
-	alias: { "@earendil-works/pi-coding-agent": path.join(PI_DIR, "dist/index.js") },
+	alias: {
+		"@earendil-works/pi-coding-agent": path.join(PI_DIR, "dist/index.js"),
+		"@earendil-works/pi-tui": path.join(PI_DIR, "node_modules/@earendil-works/pi-tui/dist/index.js"),
+	},
 });
 
 const here = path.dirname(fileURLToPath(import.meta.url));
@@ -109,7 +112,11 @@ function makeEditor(t: unknown, theme: unknown, kb: unknown) {
 {
 	assert.equal(wheelDirection(UP, { getLines: () => [""], isShowingAutocomplete: () => true }), 0, "autocomplete open: Up passes through");
 	assert.equal(wheelDirection(CTRL_P, { getLines: () => [""], isShowingAutocomplete: () => false }), 0, "ctrl+p is not a wheel key");
-	assert.equal(wheelDirection("\x1bOB", { getLines: () => [""], isShowingAutocomplete: () => false }), 1, "application-mode Down counts");
+	const ed = { getLines: () => [""], isShowingAutocomplete: () => false };
+	assert.equal(wheelDirection("\x1bOB", ed), 1, "application-mode Down counts");
+	assert.equal(wheelDirection("\x1b[1;1A", ed), -1, "kitty-style Up with explicit modifier counts");
+	assert.equal(wheelDirection("\x1b[1;5A", ed), 0, "ctrl+Up is not the wheel");
+	assert.equal(wheelDirection("\x1b[1;1:3A", ed), 0, "key release is ignored");
 }
 
 {
