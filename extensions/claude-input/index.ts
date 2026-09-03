@@ -1,17 +1,15 @@
 import { CustomEditor, type ExtensionAPI } from "@earendil-works/pi-coding-agent";
-import { visibleWidth } from "@earendil-works/pi-tui";
 
 const ANSI = /\x1b\[[0-9;]*m/g;
-const FRAME = 6;
+const PROMPT = "> ";
 
 type Paint = (text: string) => string;
 
-// ponytail: pi's editor draws a flat rule above and below the text; Claude Code draws a rounded box with
-// a "> " prompt. The inner editor is rendered FRAME columns narrower and its rule rows become the box's
-// top and bottom (scroll indicators inside a rule survive because the plain text is reused). Rows after
-// the bottom rule are the autocomplete list and stay untouched.
-export function boxLines(lines: string[], width: number, paint: Paint): string[] {
-	const inner = width - FRAME;
+// ponytail: Claude Code (2.1.259) draws a flat rule above and below the text and a "> " prompt,
+// no side borders. pi's editor already draws the rules, so the inner editor is rendered
+// PROMPT.length columns narrower, its rules are stretched back to full width and its text rows
+// get the prompt. Rows after the bottom rule are the autocomplete list and stay untouched.
+export function promptLines(lines: string[], paint: Paint): string[] {
 	const out: string[] = [];
 	let rules = 0;
 	for (const line of lines) {
@@ -19,15 +17,12 @@ export function boxLines(lines: string[], width: number, paint: Paint): string[]
 			out.push(line);
 			continue;
 		}
-		const plain = line.replace(ANSI, "");
-		if (plain.startsWith("─")) {
-			out.push(paint(rules === 0 ? `╭──${plain}──╮` : `╰──${plain}──╯`));
+		if (line.replace(ANSI, "").startsWith("─")) {
+			out.push(line + paint("─".repeat(PROMPT.length)));
 			rules++;
 			continue;
 		}
-		const pad = " ".repeat(Math.max(0, inner - visibleWidth(line)));
-		const prompt = out.length === 1 ? paint(">") + " " : "  ";
-		out.push(`${paint("│")} ${prompt}${line}${pad} ${paint("│")}`);
+		out.push((out.length === 1 ? PROMPT : " ".repeat(PROMPT.length)) + line);
 	}
 	return out;
 }
@@ -40,7 +35,7 @@ export default function (pi: ExtensionAPI) {
 			const editor = previous ? previous(tui, theme, keybindings) : new CustomEditor(tui, theme, keybindings);
 			const paint: Paint = (text) => theme.borderColor(text);
 			const render = editor.render.bind(editor);
-			editor.render = (width: number) => boxLines(render(width - FRAME), width, paint);
+			editor.render = (width: number) => promptLines(render(width - PROMPT.length), paint);
 			return editor;
 		});
 	});
