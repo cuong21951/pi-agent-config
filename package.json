@@ -19,7 +19,8 @@
       "./extensions/claude-footer",
       "./extensions/claude-input",
       "./extensions/claude-images",
-      "./extensions/api-balance"
+      "./extensions/api-balance",
+		"./extensions/claude-bottom-input"
     ]
   }
 }
