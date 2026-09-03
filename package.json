@@ -18,7 +18,8 @@
       "./extensions/cheap-models",
       "./extensions/claude-footer",
       "./extensions/claude-input",
-      "./extensions/claude-images"
+      "./extensions/claude-images",
+      "./extensions/api-balance"
     ]
   }
 }
