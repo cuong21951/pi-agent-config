@@ -46,22 +46,43 @@ export function composeHeader(
 	return ["", ...cat.map((line, i) => ` ${line}   ${right[i]}`), ""];
 }
 
+// ponytail: in regular TUI mode the header lives in scrollback once the transcript is taller than
+// the terminal; pi-tui answers any change above the viewport with a full clear+redraw (the flicker).
+// So the cat only moves while everything still fits (viewportTop 0) and freezes on its last frame
+// after that. The alt-screen TUI has no viewportTop and repaints differentially, so it always animates.
+export function headerFits(viewportTop: number | undefined): boolean {
+	return (viewportTop ?? 0) === 0;
+}
+
+let ticker: ReturnType<typeof setInterval> | undefined;
+
 export default function (pi: ExtensionAPI) {
 	pi.on("session_start", (_event, ctx) => {
 		if (!ctx.hasUI) return;
-		ctx.ui.setHeader((_tui, theme) => ({
-			render: (width: number) =>
-				composeHeader(
-					ctx.model?.name ?? ctx.model?.id ?? "no model",
-					ctx.model?.provider ?? "",
-					ctx.thinkingLevel ?? "off",
-					ctx.cwd,
-					frameNow(),
-					(role, text) => theme.fg(role as never, text),
-					(text) => theme.bold(text),
-				).map((line) => truncateToWidth(line, width)),
-			invalidate() {},
-		}));
+		ctx.ui.setHeader((tui, theme) => {
+			let frame = frameNow();
+			const fits = () => headerFits((tui as { previousViewportTop?: number }).previousViewportTop);
+			clearInterval(ticker);
+			ticker = setInterval(() => {
+				if (fits() && frameNow() !== frame) tui.requestRender();
+			}, FRAME_MS);
+			ticker.unref?.();
+			return {
+				render: (width: number) => {
+					if (fits()) frame = frameNow();
+					return composeHeader(
+						ctx.model?.name ?? ctx.model?.id ?? "no model",
+						ctx.model?.provider ?? "",
+						ctx.thinkingLevel ?? "off",
+						ctx.cwd,
+						frame,
+						(role, text) => theme.fg(role as never, text),
+						(text) => theme.bold(text),
+					).map((line) => truncateToWidth(line, width));
+				},
+				invalidate() {},
+			};
+		});
 	});
 }
 
@@ -76,6 +97,8 @@ if (process.env.CLAUDE_HEADER_SELFTEST) {
 	if (!catFrame(4)[1].includes("-.-")) throw new Error("FAIL: blink frame");
 	if (frameNow(0) !== 0 || frameNow(699) !== 0 || frameNow(700) !== 1) throw new Error("FAIL: frame advances every 700 ms");
 	if (frameNow(2800) !== 4 || frameNow(4200) !== 0) throw new Error("FAIL: frame wraps every 6 frames");
+	if (!headerFits(0) || !headerFits(undefined)) throw new Error("FAIL: animate while everything fits or in alt-screen");
+	if (headerFits(1)) throw new Error("FAIL: freeze once the header scrolled into scrollback");
 	console.log(lines.join("\n"));
 	console.log("ok - claude layout with a cat");
 }
