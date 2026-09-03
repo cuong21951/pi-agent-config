@@ -1,6 +1,6 @@
 {
   "defaultProvider": "openrouter",
-  "defaultModel": "z-ai/glm-5.3-flash",
+  "defaultModel": "meta/muse-spark-1.3-contributor",
   "defaultThinkingLevel": "high",
   "enabledModels": [
     "commandcode/z-ai/glm-5.3-flash",
