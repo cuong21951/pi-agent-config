@@ -1,48 +1,45 @@
-# Prompt cập nhật cho Phương (kèm khóa model rẻ)
+# Prompt cập nhật cho Phương
 
-Dán vào Claude Code trên máy Phương, Enter. Không cần điền gì.
+Mở pi trong thư mục dự án Kuha, dán khối dưới đây vào, Enter. Không cần điền gì.
 
 ```text
-Cập nhật trợ lý pi và bộ Kuha trên máy này lên bản mới nhất, tự làm hết, trả lời tiếng Việt,
-không hỏi trừ khi bắt buộc.
+Cập nhật trợ lý pi và bộ Kuha trên máy này lên bản mới nhất. Tự làm hết các bước,
+trả lời tiếng Việt, không hỏi lại trừ khi một bước lỗi thật sự.
 
-1. Chạy `pi update` (cập nhật pi và mọi package, trong đó có gói cuong21951/pi-agent-config).
-2. Tìm thư mục dự án Kuha: đọc file shortcut trên Desktop (~/Desktop/Kuha.command trên macOS,
-   %USERPROFILE%\Desktop\Kuha.cmd trên Windows) để lấy đường dẫn; nếu chưa có, dùng ~/KuHa nếu
-   tồn tại, không thì hỏi tôi.
-3. Chạy lại script cài với thư mục đó:
-   macOS:   bash ~/.pi/agent/git/github.com/cuong21951/pi-agent-config/kuha/install.sh "<thư mục>"
-   Windows: pwsh -File "%USERPROFILE%\.pi\agent\git\github.com\cuong21951\pi-agent-config\kuha\install.ps1" -Dir "<thư mục>"
-4. Kiểm tra khóa model rẻ (bắt buộc, vì đã từng có request nhầm sang model đắt):
-   a. Mở ~/.pi/agent/settings.json, xác nhận có
-      "defaultProvider": "openrouter", "defaultModel": "z-ai/glm-5.3-flash" và
-      "enabledModels" chỉ gồm "openrouter/z-ai/glm-5.3-flash" và "openrouter/deepseek/deepseek-v4-flash*".
-      Thiếu hoặc khác thì sửa đúng như vậy.
-   b. Xác nhận thư mục ~/.pi/agent/git/github.com/cuong21951/pi-agent-config/extensions/cheap-models
-      tồn tại (extension tự đổi về model rẻ nếu chọn nhầm).
-   c. Xóa mọi giá trị model đắt nếu thấy trong settings.json (chứa "fable", "opus", "sonnet", "gpt-5").
-5. Chạy thử từ trong thư mục dự án:
-   pi -p --no-session "Trả lời đúng một từ: OK"
-   Phải in OK. Sau đó mở file .jsonl mới nhất trong ~/.pi/agent/sessions/ và xác nhận trường
-   "model" của tin nhắn trợ lý là "z-ai/glm-5.3-flash" với "provider": "openrouter".
-   Nếu là model khác, dừng lại và báo tôi ngay.
-6. Kiểm tra giao diện mới đã được nạp: hai thư mục
-   ~/.pi/agent/git/github.com/cuong21951/pi-agent-config/extensions/claude-tools và
-   .../extensions/claude-messages phải tồn tại, và file package.json trong repo đó phải liệt kê
-   "./extensions/claude-tools" và "./extensions/claude-messages". Thiếu thì chạy lại `pi update`
-   rồi kiểm tra lại; vẫn thiếu thì báo tôi.
-7. Đọc https://github.com/cuong21951/pi-agent-config/blob/main/kuha/CHANGELOG.md và tóm tắt cho
-   tôi có gì mới trong 3 dòng.
-8. Cuối cùng nhắc tôi: mở pi trong thư mục dự án, gõ một yêu cầu bất kỳ có đọc file; các thao tác
-   phải hiện dạng "● Read(...)" / "⎿ Read N lines", câu trả lời bắt đầu bằng "●", dòng loading
-   có ngôi sao cam xoay. Nếu vẫn thấy dạng cũ ("read file.ts" nền xám) thì gõ /reload trong pi.
+1. Chạy: pi update --extensions
+   (kéo bản mới của gói github.com/cuong21951/pi-agent-config — toàn bộ skill,
+   extension và giao diện của Kuha).
+2. Chạy lại installer với thư mục dự án hiện tại (thư mục đang mở pi):
+   - macOS / Linux:
+     bash ~/.pi/agent/git/github.com/cuong21951/pi-agent-config/kuha/install.sh "<thư mục hiện tại>"
+   - Windows (PowerShell):
+     pwsh -File "$env:USERPROFILE\.pi\agent\git\github.com\cuong21951\pi-agent-config\kuha\install.ps1" -Dir "<thư mục hiện tại>"
+   Nếu installer báo thiếu công cụ (git, node, python3, ffmpeg) thì cài theo gợi ý
+   của nó (macOS dùng brew) rồi chạy lại.
+3. Kiểm tra khóa model rẻ trong ~/.pi/agent/settings.json (bắt buộc — từng có
+   request nhầm sang model đắt):
+   - "defaultProvider" là "openrouter", "defaultModel" là "z-ai/glm-5.3-flash"
+   - Không có giá trị model nào chứa "fable", "opus", "sonnet", "gpt-5"
+   - Thư mục ~/.pi/agent/git/github.com/cuong21951/pi-agent-config/extensions/cheap-models tồn tại
+   Sai thì sửa settings.json đúng như trên; vẫn sai sau khi sửa thì dừng và báo tôi.
+4. Kiểm tra bản mới đã về trọn vẹn: file package.json trong thư mục
+   pi-agent-config phải liệt kê "./extensions/claude-footer" và
+   "./extensions/api-balance". Thiếu thì chạy lại bước 1 rồi kiểm tra lại;
+   vẫn thiếu thì báo tôi.
+5. Đọc file CHANGELOG.md trong thư mục kuha/ của pack và tóm tắt trong tối đa
+   3 dòng tiếng Việt những gì mới kể từ bản trước.
+6. Cuối cùng nhắc tôi: thoát pi (Ctrl+C hai lần) rồi mở lại trong thư mục dự án
+   để nhận bản mới. Sau khi mở lại, footer dưới cùng phải hiện số dư key
+   "openrouter $..." (xanh/vàng/đỏ theo mức tiền), và thao tác của trợ lý phải
+   hiện dạng Claude: "● Read(tên file)" rồi "⎿ Read N lines".
 ```
 
-Chạy tay (macOS):
+Chạy tay (macOS), ngoài pi:
 
 ```bash
-pi update && bash ~/.pi/agent/git/github.com/cuong21951/pi-agent-config/kuha/install.sh ~/KuHa
+pi update --extensions && bash ~/.pi/agent/git/github.com/cuong21951/pi-agent-config/kuha/install.sh ~/KuHa
 ```
 
-Sau khi cập nhật, trong pi gõ `/model`: danh sách xoay vòng Ctrl+P chỉ còn GLM 5.3 Flash và DeepSeek
-V4 Flash; lỡ chọn model khác, pi tự đổi lại và báo dòng "cheap-models: blocked ...".
+Sau khi cập nhật và mở lại pi: footer có số dư key OpenRouter/DeepSeek (xanh trên
+$5, vàng dưới $5, đỏ dưới $1); lỡ chọn model đắt trong `/model`, extension
+cheap-models tự đổi về model rẻ và báo dòng "cheap-models: blocked ...".
