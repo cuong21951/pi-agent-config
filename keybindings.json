@@ -1,4 +1,5 @@
 {
   "tui.editor.historyPrevious": "ctrl+p",
-  "tui.editor.historyNext": "ctrl+n"
+  "tui.editor.historyNext": "ctrl+n",
+  "app.clipboard.pasteImage": "ctrl+alt+v"
 }

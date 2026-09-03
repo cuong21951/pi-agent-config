@@ -17,7 +17,8 @@
       "./extensions/claude-messages",
       "./extensions/cheap-models",
       "./extensions/claude-footer",
-      "./extensions/claude-input"
+      "./extensions/claude-input",
+      "./extensions/claude-images"
     ]
   }
 }
