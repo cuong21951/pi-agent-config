@@ -20,7 +20,12 @@
       "./extensions/claude-input",
       "./extensions/claude-images",
       "./extensions/api-balance",
-		"./extensions/claude-bottom-input"
+      "./extensions/claude-bottom-input",
+      "./extensions/claude-modes",
+      "./extensions/claude-skills",
+      "./extensions/claude-effort",
+      "./extensions/claude-help",
+      "./extensions/claude-keys"
     ]
   }
 }

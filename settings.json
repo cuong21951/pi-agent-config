@@ -1,11 +1,12 @@
 {
-  "defaultProvider": "openrouter",
-  "defaultModel": "meta/muse-spark-1.3-contributor",
+  "defaultProvider": "deepseek",
+  "defaultModel": "deepseek-v4-flash-vision-exp",
   "defaultThinkingLevel": "high",
   "enabledModels": [
     "commandcode/z-ai/glm-5.3-flash",
     "openrouter/z-ai/glm-5.3-flash",
-    "openrouter/meta/muse-spark-1.3-contributor"
+    "openrouter/meta/muse-spark-1.3-contributor",
+    "deepseek/deepseek-v4-flash-vision-exp"
   ],
   "compaction": {
     "enabled": true,
@@ -29,10 +30,10 @@
     "npm:pi-worktree",
     "npm:@tintinweb/pi-subagents",
     "npm:@gotgenes/pi-permission-system",
-    "npm:pi-auto-fallback"
+    "npm:pi-auto-fallback",
+    "npm:pi-notify"
   ],
   "extensions": [
-    "C:/Users/cuong/AppData/Roaming/npm/node_modules/@earendil-works/pi-coding-agent/examples/extensions/plan-mode",
     "C:/Users/cuong/AppData/Roaming/npm/node_modules/@earendil-works/pi-coding-agent/examples/extensions/todo.ts"
   ],
   "skills": [
