@@ -45,9 +45,20 @@ What the harness matches today, and what it does not, so the next pass starts fr
 - `auto` is enforced by this harness, not by the permission extension, which exposes no runtime API for a narrower auto-approve. If your own permission policy also asks for bash, you will see two prompts.
 - Yolo takes effect from your next message, not mid-turn, because the permission extension re-reads its config at the start of each turn.
 - Plan mode has two owners. `claude-modes` enforces it, while pi's bundled `plan-mode` example still ships its own `/plan` and `/todos` on `ctrl+alt+p`.
-- The collapsed thinking line says `✻ Thought` with no duration; Claude says `Thought for Ns`.
+- `auto` judges a bash command by an allowlist that looks through `rtk`, `rtk proxy`, `command`, `time` and `nice`. Anything outside the allowlist raises a confirm, so an unusual but harmless command will still ask.
 - Assistant body text is the terminal's default foreground, not `#ffffff`. pi's markdown renderer paints headings, links and code from the theme but leaves paragraph text uncoloured, and the theme has no key for it, so matching Claude's pure white would take a patch to pi itself.
 - The header cat keeps its own orange. The `warning` role was deliberately left on `#d97757` so the cat does not change.
+
+## Testing
+
+Renderers and mode logic are pure functions with their own self-checks, so `node scripts/selftest.mjs` covers them without a model.
+
+Anything that only appears in a real terminal is tested by driving pi inside a pseudo-terminal with `pywinpty` and reading the screen back with `pyte`, which reports each run of characters with its colour. Two ways to use it:
+
+- Replay a saved session with `--session <absolute path>` and no model at all. This is how row colours, diff colours, the error row and the thinking placeholder are checked. Session files are trees, so chain each `toolResult` to the previous one; two results sharing a parent are sibling branches and only one renders.
+- Drive a live session by sending keystrokes, for what needs a model to call a tool: plan mode refusing a write, auto mode confirming a command, the plan-mode offer.
+
+Two traps worth knowing. Session paths must be absolute, because pi is spawned with the home folder as its working directory and a relative path silently starts an empty session. And point `CLAUDE_MODES_PERMISSION_CONFIG` at a throwaway file, or the mode cycle will rewrite your real permission config.
 
 ## Restore on a new machine
 
