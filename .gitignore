@@ -24,3 +24,6 @@ extensions/pi-permission-system/logs/
 mcp-cache.json.*
 models.json.bak-*
 settings.json.bak-*
+
+# per-machine voice dictation state (hint session counter)
+voice.json
