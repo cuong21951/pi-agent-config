@@ -60,7 +60,7 @@ export default function (pi: ExtensionAPI) {
 	});
 
 	pi.on("before_agent_start", async (event, ctx) => {
-		if (mode === "plan" || offerDeclined || !ctx.hasUI) return;
+		if (mode !== "auto" || offerDeclined || !ctx.hasUI) return;
 		if (!wantsPlan(String(event.prompt ?? ""))) return;
 		const yes = await ctx.ui.confirm("Plan mode?", "This reads like a planning request. Switch to plan mode (read-only) first?");
 		if (yes) apply("plan", ctx);
