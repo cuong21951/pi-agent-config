@@ -1,5 +1,16 @@
 # Có gì mới (cho Phương)
 
+## 2026-09-05 (footer đứng yên, giao diện đúng Claude Code 2.1.261)
+- Footer luôn nằm sát đáy cửa sổ: trước đây khi một khối nội dung co lại (đóng thẻ
+  phím tắt `?`, kết quả công cụ gọn lại) thanh dưới bị đẩy lên và để lại hàng trống,
+  kéo chuột cũng trôi quá đáy. Đã sửa.
+- Ô nhập là hai đường kẻ phẳng với dấu `❯`, footer hai dòng: dòng model/số dư và dòng
+  chế độ `⏵⏵ bypass permissions on (shift+tab to cycle)` với `? for shortcuts` bên phải.
+  Thao tác đang chạy là chấm xám nhấp nháy `● Reading tên-file`, xong thì gọn một dòng
+  xám `Read tên-file`; Ctrl+O mở lại chi tiết.
+- Đọc chính tả bằng giọng nói (`/voice`) chỉ có trên Windows có ffmpeg, máy Mac
+  không bị ảnh hưởng: gõ `/voice` sẽ in một dòng giải thích, ngoài ra im lặng.
+
 ## 2026-09-04 (sửa giao diện không đổi trên macOS)
 - Gói `pi-powerline-footer` cũ vẫn nằm trong settings và đè lên footer + ô nhập kiểu
   Claude. Installer giờ tự gỡ gói này; chạy lại update là ô nhập bo tròn và footer

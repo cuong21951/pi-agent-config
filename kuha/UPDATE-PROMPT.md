@@ -31,10 +31,13 @@ trả lời tiếng Việt, không hỏi lại trừ khi một bước lỗi th�
 5. Đọc file CHANGELOG.md trong thư mục kuha/ của pack và tóm tắt trong tối đa
    3 dòng tiếng Việt những gì mới kể từ bản trước.
 6. Cuối cùng nhắc tôi: thoát pi (Ctrl+C hai lần) rồi mở lại trong thư mục dự án
-   để nhận bản mới. Sau khi mở lại, ô nhập phải là khung bo tròn ╭─╮ với dấu ">",
-   footer dưới cùng là MỘT dòng mờ "model · think … · ctx … · openrouter $..."
-   (số dư xanh/vàng/đỏ theo mức tiền), và thao tác của trợ lý phải
-   hiện dạng Claude: "● Read(tên file)" rồi "⎿ Read N lines".
+   để nhận bản mới. Sau khi mở lại, ô nhập là hai đường kẻ ngang phẳng với dấu "❯"
+   (không còn khung bo tròn), footer dưới cùng là HAI dòng: dòng mờ
+   "model · think … · ctx … · openrouter $..." (số dư xanh/vàng/đỏ theo mức tiền)
+   và dòng chế độ "⏵⏵ bypass permissions on (shift+tab to cycle)" với
+   "? for shortcuts" bên phải. Thao tác của trợ lý hiện dạng Claude: lúc chạy là
+   chấm xám nhấp nháy "● Reading tên-file", xong thì gọn một dòng xám "Read tên-file".
+   Footer phải luôn nằm sát đáy cửa sổ, không có hàng trống bên dưới.
 ```
 
 Chạy tay (macOS), ngoài pi:
