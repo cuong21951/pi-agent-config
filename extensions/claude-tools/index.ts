@@ -7,11 +7,15 @@ import {
 	createReadToolDefinition,
 	createWriteToolDefinition,
 	type ExtensionAPI,
+	getLanguageFromPath,
+	highlightCode,
 	keyHint,
+	ToolExecutionComponent,
 } from "@earendil-works/pi-coding-agent";
-import { truncateToWidth } from "@earendil-works/pi-tui";
-import { doneLine, resultRows, type Row, runningLine, type Style, WRITE_TOOLS, writeCallLine } from "./format.ts";
-import { blinkOn, dynamic, failed, finished, track } from "./rows.ts";
+import { stripTerminalSequences, truncateToWidth, visibleWidth } from "@earendil-works/pi-tui";
+import { doneLine, paint, resultRows, type Row, runningLine, type Style, WRITE_TOOLS, wrapRow, writeCallLine } from "./format.ts";
+import { patchGenericTools } from "./generic.ts";
+import { blinkOn, dynamic, failed, finished, summaryFor, track, watch } from "./rows.ts";
 
 // ponytail: only the render slots change; execute, schema and prompt metadata are the built-in definition's.
 const DEFINITIONS = {
@@ -26,37 +30,31 @@ const DEFINITIONS = {
 type Theme = { fg: (role: never, text: string) => string; bold: (text: string) => string };
 
 function style(theme: Theme): Style {
-	return { fg: (role, text) => theme.fg(role as never, text), bold: (text) => theme.bold(text), home: os.homedir() };
+	return {
+		fg: (role, text) => theme.fg(role as never, text),
+		bold: (text) => theme.bold(text),
+		home: os.homedir(),
+		cwd: process.cwd(),
+		// ponytail: no language, no colour — Claude bails the same way (`if (!e.lang) return [[plain, line]]`).
+		// pi's highlighter instead paints an unlexed file in its plain-code-block green, which turned a
+		// .txt preview into a wall of green.
+		code: (text, path) => {
+			const lang = getLanguageFromPath(path);
+			return lang ? (highlightCode(text, lang)[0] ?? text) : text;
+		},
+	};
 }
 
-// ponytail: Claude's diff backgrounds, measured: removed 5f0000 with a d75f5f gutter, added 00005f with a
-// 5fafd7 gutter, text ffffff on both, the colour running to the right edge. The theme has no roles for
-// these, so they are painted here.
-const ROW_PAINT: Record<Row["kind"], { fg: string; bg?: string; gutter?: string }> = {
-	plain: { fg: "" },
-	muted: { fg: "\x1b[38;2;148;148;148m" },
-	context: { fg: "\x1b[38;2;255;255;255m" },
-	removed: { fg: "\x1b[38;2;255;255;255m", bg: "\x1b[48;2;95;0;0m", gutter: "\x1b[38;2;215;95;95m" },
-	added: { fg: "\x1b[38;2;255;255;255m", bg: "\x1b[48;2;0;0;95m", gutter: "\x1b[38;2;95;175;215m" },
-};
-const RESET = "\x1b[0m";
-const GUTTER = /^( *\d+ [-+] )(.*)$/;
-
-export function paintRow(row: Row, width: number): string {
-	const p = ROW_PAINT[row.kind];
-	const text = truncateToWidth(row.text, width);
-	if (!p.bg) return p.fg + text + RESET;
-	const m = text.match(GUTTER);
-	const body = m ? p.gutter + m[1] + p.fg + m[2] : p.fg + text;
-	return p.bg + body + " ".repeat(Math.max(0, width - visibleWidth(text))) + RESET;
-}
-
-function visibleWidth(text: string): number {
-	return text.replace(/\x1b\[[0-9;]*m/g, "").length;
+function paintRows(row: Row, width: number): string[] {
+	return wrapRow(row, width).map((piece) => {
+		const text = stripTerminalSequences(truncateToWidth(piece.text, width));
+		return paint(piece, text, Math.max(0, width - visibleWidth(text)));
+	});
 }
 
 export default function (pi: ExtensionAPI) {
 	track(pi);
+	patchGenericTools(ToolExecutionComponent.prototype);
 	for (const [tool, create] of Object.entries(DEFINITIONS)) {
 		const original = create(process.cwd()) as any;
 		pi.registerTool({
@@ -69,7 +67,8 @@ export default function (pi: ExtensionAPI) {
 				if (WRITE_TOOLS.has(tool)) return dynamic((width) => [truncateToWidth(writeCallLine(tool, args, s), width)]);
 				return dynamic((width) => (finished.has(context.toolCallId ?? "") ? [] : [truncateToWidth(runningLine(tool, args, blinkOn(), s), width)]));
 			},
-			renderResult(result: any, { expanded, isPartial }: { expanded: boolean; isPartial: boolean }, theme: Theme, context: { args: Record<string, unknown>; isError?: boolean; toolCallId?: string }) {
+			renderResult(result: any, { expanded, isPartial }: { expanded: boolean; isPartial: boolean }, theme: Theme, context: { args: Record<string, unknown>; isError?: boolean; toolCallId?: string; invalidate?: () => void }) {
+				if (context.toolCallId && context.invalidate) watch(context.toolCallId, context.invalidate);
 				const text = result.content
 					.filter((block: { type: string }) => block.type === "text")
 					.map((block: { text?: string }) => block.text ?? "")
@@ -80,8 +79,15 @@ export default function (pi: ExtensionAPI) {
 				const view = { expanded, isPartial, hint: keyHint("app.tools.expand", "to expand") };
 				const s = style(theme);
 				const rows = resultRows(tool, context.args, outcome, view, s);
-				const head = WRITE_TOOLS.has(tool) || isPartial ? [] : [doneLine(tool, context.args, s)];
-				return dynamic((width) => [...head, ...(rows ? [rows.head, ...rows.rows.map((row) => paintRow(row, width))] : [])].map((line) => truncateToWidth(line, width)));
+				const group = WRITE_TOOLS.has(tool) || isPartial || isError || expanded ? null : summaryFor(context.toolCallId ?? "", s.bold);
+				if (group === "") return dynamic(() => []);
+				const head = WRITE_TOOLS.has(tool) || isPartial ? [] : [group === null ? doneLine(tool, context.args, s) : s.fg("muted", group)];
+				// ponytail: painted rows are already cut or wrapped to the width, so only the plain lines are truncated;
+				// running them through it again would clip the escape that closes the background.
+				return dynamic((width) => [
+					...head.map((line) => truncateToWidth(line, width)),
+					...(rows ? [truncateToWidth(rows.head, width), ...rows.rows.flatMap((row) => paintRows(row, width))] : []),
+				]);
 			},
 		});
 	}
