@@ -23,7 +23,7 @@ export interface ResultView {
 	hint: string;
 }
 
-export type RowKind = "plain" | "muted" | "context" | "added" | "removed";
+export type RowKind = "plain" | "muted" | "context" | "code" | "added" | "removed";
 export type Span = [number, number];
 export type Tint = [number, number, string];
 export type Highlight = (code: string) => string;
@@ -113,7 +113,15 @@ export function summary(tool: string, args: Record<string, unknown>, outcome: To
 			const removed = lines.filter((line) => line.startsWith("-")).length;
 			// ponytail: a missing diff is not a zero-change edit; saying so would misreport the tool.
 			if (added === 0 && removed === 0) return `Updated ${s.bold(shortPath(args.path, s))}`;
-			return `Added ${plural(added, "line", undefined, s.bold)}, removed ${plural(removed, "line", undefined, s.bold)}`;
+			const counts = [
+				[added, "added"],
+				[removed, "removed"],
+			] as const;
+			return counts
+				.filter(([n]) => n > 0)
+				.map(([n, verb]) => `${verb} ${plural(n, "line", undefined, s.bold)}`)
+				.join(", ")
+				.replace(/^./, (first) => first.toUpperCase());
 		}
 		case "grep":
 			return `Found ${plural(lineCount(outcome.text), "line")}`;
@@ -284,15 +292,14 @@ export function diffRows(lines: string[], highlight?: Highlight): Row[] {
 // 004466, but what lands on screen is 3d0100 / 001b29, and the word colours b30000 / 0077b3 land as
 // 5c0200 / 003047. pi emitted the palette values verbatim in that same terminal, so the attenuation is
 // Claude-side, not the terminal. The measured values win — the point is to look identical.
-// Everything on those rows is theme text ffffff, and Claude gives the line number no colour of its own.
-// A context row has no background at all and only its gutter is dim.
-const TEXT = "\x1b[38;2;255;255;255m";
+const CODE = "\x1b[38;2;248;248;242m";
 const DIM = "\x1b[2m";
 const RESET = "\x1b[0m";
-const RESET_FG = "\x1b[39m";
 const LINE_BG: Partial<Record<RowKind, string>> = { removed: "\x1b[48;2;61;1;0m", added: "\x1b[48;2;0;27;41m" };
 const WORD_BG: Partial<Record<RowKind, string>> = { removed: "\x1b[48;2;92;2;0m", added: "\x1b[48;2;0;48;71m" };
-const GUTTER = /^ *\d+ +/;
+const GUTTER_FG: Partial<Record<RowKind, string>> = { removed: "\x1b[38;2;220;90;90m", added: "\x1b[38;2;81;160;200m" };
+const SIGN_GUTTER = /^ *\d* ?[-+ ]/;
+const CODE_GUTTER = /^ *\d+ /;
 
 // ponytail: three layers land on one row — the line background, the brighter background on the words that
 // changed, and the syntax colour per token. Cutting the row at every boundary of all three and emitting
@@ -302,15 +309,16 @@ export function paint(row: Row, text: string, pad: number): string {
 	if (row.kind === "muted") return DIM + text + RESET;
 	const bg = LINE_BG[row.kind] ?? "";
 	const word = WORD_BG[row.kind] ?? "";
-	const dimTo = bg === "" ? (text.match(GUTTER)?.[0].length ?? 0) : 0;
-	const clamp = (n: number) => Math.max(dimTo, Math.min(n, text.length));
-	const cuts = new Set<number>([dimTo, text.length]);
+	const gutterEnd = Math.min(text.length, text.match(row.kind === "code" ? CODE_GUTTER : SIGN_GUTTER)?.[0].length ?? 0);
+	const clamp = (n: number) => Math.max(0, Math.min(n, text.length));
+	const cuts = new Set<number>([0, gutterEnd, text.length]);
 	for (const [start, end] of row.hi ?? []) cuts.add(clamp(start)), cuts.add(clamp(end));
 	for (const [start, end] of row.fg ?? []) cuts.add(clamp(start)), cuts.add(clamp(end));
 	const marks = [...cuts].sort((a, b) => a - b);
 	const changed = (at: number) => (row.hi ?? []).some(([start, end]) => at >= start && at < end);
-	const tint = (at: number) => row.fg?.find(([start, end]) => at >= start && at < end)?.[2] ?? "";
-	let out = dimTo > 0 ? DIM + text.slice(0, dimTo) + RESET : "";
+	const tint = (at: number) =>
+		at < gutterEnd ? (GUTTER_FG[row.kind] ?? CODE) : (row.fg?.find(([start, end]) => at >= start && at < end)?.[2] ?? CODE);
+	let out = "";
 	let shownBg = "";
 	let shownFg = "";
 	for (let i = 0; i < marks.length - 1; i++) {
@@ -318,13 +326,13 @@ export function paint(row: Row, text: string, pad: number): string {
 		const to = marks[i + 1];
 		if (from >= to) continue;
 		const nextBg = bg === "" ? "" : changed(from) ? word : bg;
-		const nextFg = tint(from) || (bg === "" ? "" : TEXT);
-		if (nextBg !== shownBg) out += ((shownBg = nextBg));
-		if (nextFg !== shownFg) out += (shownFg = nextFg) || RESET_FG;
+		const nextFg = tint(from);
+		if (nextBg !== shownBg) out += (shownBg = nextBg);
+		if (nextFg !== shownFg) out += (shownFg = nextFg);
 		out += text.slice(from, to);
 	}
 	if (bg !== "") out += (shownBg === bg ? "" : bg) + " ".repeat(pad);
-	return out + (bg !== "" || shownFg !== "" ? RESET : "");
+	return out + RESET;
 }
 
 const ROW_GUTTER = /^( *\d+ [-+ ])/;
@@ -340,7 +348,7 @@ function wrapPoints(code: string, room: number): Span[] {
 			pieces.push([at, code.length]);
 			break;
 		}
-		const gap = code.slice(at, at + room + 1).lastIndexOf(" ");
+		const gap = code.slice(at, at + room).lastIndexOf(" ");
 		const end = gap > 0 ? at + gap + 1 : at + room;
 		pieces.push([at, end]);
 		at = end;
@@ -353,9 +361,9 @@ function wrapPoints(code: string, room: number): Span[] {
 // the right edge. Measuring in characters rather than display width is the shortcut here — a row of
 // double-width text would overhang by a column.
 export function wrapRow(row: Row, width: number): Row[] {
-	const m = LINE_BG[row.kind] || row.kind === "context" ? row.text.match(ROW_GUTTER) : null;
+	const m = row.kind === "code" ? row.text.match(CODE_GUTTER) : LINE_BG[row.kind] || row.kind === "context" ? row.text.match(ROW_GUTTER) : null;
 	if (!m) return [row];
-	const gutter = m[1];
+	const gutter = m[0];
 	const code = row.text.slice(gutter.length);
 	const room = width - gutter.length;
 	if (room < 1 || code.length <= room) return [row];
@@ -381,14 +389,14 @@ export function contentRows(content: string, highlight?: Highlight): Row[] {
 	const lines = content.replace(/\n$/, "").split("\n");
 	const width = String(lines.length).length;
 	return lines.map((text, i) => ({
-		kind: "context",
-		text: ` ${String(i + 1).padStart(width)} ${text}`,
-		fg: tintsFor(text, width + 2, highlight),
+		kind: "code",
+		text: `${String(i + 1).padStart(width)} ${text}`,
+		fg: tintsFor(text, width + 1, highlight),
 	}));
 }
 
-function more(hidden: number, hint: string): Row[] {
-	return hidden > 0 ? [{ kind: "muted", text: `… +${hidden} ${hidden === 1 ? "line" : "lines"} (${hint})` }] : [];
+function more(hidden: number, hint?: string): Row[] {
+	return hidden > 0 ? [{ kind: "muted", text: `… +${hidden} ${hidden === 1 ? "line" : "lines"}${hint ? ` (${hint})` : ""}` }] : [];
 }
 
 function writeBody(tool: string, args: Record<string, unknown>, outcome: ToolOutcome, view: ResultView, s: Style): Row[] {
@@ -401,7 +409,7 @@ function writeBody(tool: string, args: Record<string, unknown>, outcome: ToolOut
 	if (tool === "edit") return diffRows(diffLines(outcome.details), highlight);
 	const all = contentRows(String(args.content ?? ""), highlight);
 	const shown = view.expanded ? all : all.slice(0, WRITE_PREVIEW_LINES);
-	return [...shown, ...more(all.length - shown.length, view.hint)];
+	return [...shown, ...more(all.length - shown.length)];
 }
 
 function outputRows(text: string, hint: string): Row[] {
@@ -413,6 +421,7 @@ function outputRows(text: string, hint: string): Row[] {
 export interface Result {
 	head: string;
 	rows: Row[];
+	indent: number;
 }
 
 // ponytail: null means the row draws nothing. A finished read-only tool is only its grey call line, like
@@ -420,18 +429,18 @@ export interface Result {
 export function resultRows(tool: string, args: Record<string, unknown>, outcome: ToolOutcome, view: ResultView, s: Style): Result | null {
 	const elbow = s.fg("muted", ELBOW);
 	const write = WRITE_TOOLS.has(tool);
-	if (view.isPartial) return { head: elbow + s.fg("muted", write ? "…" : target(tool, args, s)), rows: [] };
+	if (view.isPartial) return { head: elbow + s.fg("muted", write ? "…" : target(tool, args, s)), rows: [], indent: 0 };
 	if (outcome.isError && isAbort(outcome.text)) return null;
+	if (!write && !view.expanded) return null;
 	if (outcome.isError) {
 		const [first, ...rest] = outcome.text.split("\n");
 		const rows = view.expanded ? rest.map((line) => ({ kind: "muted" as RowKind, text: `    ${s.fg("error", line)}` })) : [];
 		// ponytail: no ✗. Claude puts the error text straight under the elbow in the error colour — the only
 		// ✗ in the 2.1.261 bundle belongs to the session picker's one-line preview, not to a tool row.
-		return { head: elbow + s.fg("error", first), rows };
+		return { head: elbow + s.fg("error", first), rows, indent: 0 };
 	}
-	if (write) return { head: elbow + summary(tool, args, outcome, s), rows: writeBody(tool, args, outcome, view, s) };
-	if (!view.expanded) return null;
-	return { head: elbow + summary(tool, args, outcome, s), rows: outputRows(outcome.text, view.hint) };
+	if (write) return { head: elbow + summary(tool, args, outcome, s), rows: writeBody(tool, args, outcome, view, s), indent: ELBOW.length };
+	return { head: elbow + summary(tool, args, outcome, s), rows: outputRows(outcome.text, view.hint), indent: 0 };
 }
 
 if (process.env.CLAUDE_TOOLS_SELFTEST) {
@@ -462,19 +471,24 @@ if (process.env.CLAUDE_TOOLS_SELFTEST) {
 	const expanded = resultRows("read", { path: "a" }, ok("l1\nl2"), view(true), plain)!;
 	check(expanded.head === "  ⎿  Read 2 lines" && expanded.rows.map((r) => r.text).join("|") === "    l1|    l2", "expanded read shows elbow, summary and output");
 	check(resultRows("read", { path: "a" }, ok(""), { ...view(), isPartial: true }, tagged)!.head === "<muted>  ⎿  </muted><muted>a</muted>", "partial read shows the target under the elbow");
-	check(resultRows("read", {}, { text: "ENOENT\nmore", isError: true, details: undefined }, view(), tagged)!.head === "<muted>  ⎿  </muted><error>ENOENT</error>", "an error is red under the elbow, with no glyph of its own");
+	check(resultRows("read", {}, { text: "ENOENT\nmore", isError: true, details: undefined }, view(), tagged) === null, "a failed read folds into the group like any other call; its row draws nothing");
+	check(resultRows("read", {}, { text: "ENOENT\nmore", isError: true, details: undefined }, view(true), tagged)!.head === "<muted>  ⎿  </muted><error>ENOENT</error>", "ctrl+o shows the error red under the elbow, with no glyph of its own");
+	check(resultRows("edit", { path: "x.ts" }, { text: "String not found", isError: true, details: undefined }, view(), plain)!.head === "  ⎿  String not found", "a failed edit keeps its own error row");
 
 	const wrote = resultRows("write", { path: "/home/me/n.ts", content: "a\nb" }, ok("Successfully wrote"), view(), tagged)!;
 	check(wrote.head === "<muted>  ⎿  </muted>Wrote <b>2</b> lines to <b>~/n.ts</b>", "write summary bolds the count and the path");
-	check(wrote.rows.map((r) => `${r.kind}:${r.text}`).join("|") === "context: 1 a|context: 2 b", "write preview numbers the content");
+	check(wrote.rows.map((r) => `${r.kind}:${r.text}`).join("|") === "code:1 a|code:2 b" && wrote.indent === 5, "write preview numbers the content, the block sits under the elbow's text");
 	const long = Array.from({ length: 14 }, (_, i) => `l${i + 1}`).join("\n");
 	const preview = resultRows("write", { path: "n.ts", content: long }, ok(""), view(), plain)!.rows;
-	check(preview.length === 11 && preview[10].text === "… +4 lines (ctrl+o to expand)" && preview[9].text === " 10 l10", "write shows ten lines then the rest as a count");
+	check(preview.length === 11 && preview[10].text === "… +4 lines" && preview[9].text === "10 l10" && preview[0].text === " 1 l1", "write shows ten lines, numbers right-aligned, then a bare count");
 	check(resultRows("write", { path: "n.ts", content: long }, ok(""), view(true), plain)!.rows.length === 14, "expanded write shows everything");
 
 	const diff = " 1 one\n-2 two\n+2 2\n 3 three";
 	const updated = resultRows("edit", { path: "x.ts" }, ok("done", { diff }), view(), tagged)!;
 	check(updated.head === "<muted>  ⎿  </muted>Added <b>1</b> line, removed <b>1</b> line", "update summary matches Claude's wording");
+	check(resultRows("edit", { path: "x.ts" }, ok("done", { diff: " 1 one\n+2 two\n+3 three" }), view(), plain)!.head === "  ⎿  Added 2 lines", "a pure addition names no removed count");
+	check(resultRows("edit", { path: "x.ts" }, ok("done", { diff: "-2 two" }), view(), plain)!.head === "  ⎿  Removed 1 line", "a pure removal names no added count");
+	check(updated.indent === 5, "the diff sits under the elbow's text");
 	check(
 		updated.rows.map((r) => `${r.kind}:${r.text}`).join("|") === "context: 1  one|removed: 2 -two|added: 2 +2|context: 3  three",
 		"diff rows: number first, sign column, Claude's spacing",
@@ -494,9 +508,20 @@ if (process.env.CLAUDE_TOOLS_SELFTEST) {
 	check(diffRows(["-1 one two", "+1 six ten"]).every((row) => row.hi === undefined), "a pair past the 40% guard keeps no spans at all");
 	check(resultRows("edit", { path: "x.ts" }, ok("done", {}), view(), plain)!.head === "  ⎿  Updated x.ts", "edit without diff details omits counts");
 	const shown = (row: Row, width: number) => paint(row, row.text, width - row.text.length).replace(/\x1b\[/g, "^");
-	check(shown(swap[0], 27) === "^48;2;61;1;0m^38;2;255;255;255m 1 -const total = a ^48;2;92;2;0m+^48;2;61;1;0m b;   ^0m", "a removed row: line colour to the edge, the changed word brighter");
-	check(shown(swap[1], 26) === "^48;2;0;27;41m^38;2;255;255;255m 1 +const total = a ^48;2;0;48;71m-^48;2;0;27;41m b;  ^0m", "an added row uses the added pair of colours");
-	check(shown({ kind: "context", text: " 1  one" }, 7) === "^2m 1  ^0mone", "a context row has no background and a dim gutter");
+	check(
+		shown(swap[0], 27) === "^48;2;61;1;0m^38;2;220;90;90m 1 -^38;2;248;248;242mconst total = a ^48;2;92;2;0m+^48;2;61;1;0m b;   ^0m",
+		"a removed row: red number and sign, line colour to the edge, the changed word brighter (Claude 2.1.280)",
+	);
+	check(
+		shown(swap[1], 26) === "^48;2;0;27;41m^38;2;81;160;200m 1 +^38;2;248;248;242mconst total = a ^48;2;0;48;71m-^48;2;0;27;41m b;  ^0m",
+		"an added row: blue number and sign on the added pair of colours",
+	);
+	check(shown({ kind: "context", text: " 1  one" }, 7) === "^38;2;248;248;242m 1  one^0m", "a context row has no background; number and code share the code colour");
+	check(
+		JSON.stringify(wrapRow({ kind: "code", text: " 4 aaaa bbbb cccc" }, 10).map((row) => row.text)) === JSON.stringify([" 4 aaaa ", "   bbbb ", "   cccc"]),
+		"a written line wraps under its code, like Claude's Write preview",
+	);
+	check(shown(wrapRow({ kind: "removed", text: " 7 -aaaabbbbcccc" }, 12)[1], 12) === "^48;2;61;1;0m^38;2;220;90;90m   -^38;2;248;248;242mcccc    ^0m", "a wrapped row repeats the sign in the gutter colour");
 
 	const YELLOW = "\x1b[38;2;230;219;116m";
 	const paintCode: Highlight = (code) => code.replace(/"[^"]*"/g, (text) => `${YELLOW}${text}\x1b[39m`);
@@ -546,6 +571,7 @@ if (process.env.CLAUDE_TOOLS_SELFTEST) {
 		"a long line wraps: the number column blanks out but the sign repeats",
 	);
 	check(wrapRow({ kind: "added", text: " 7 +short" }, 40).length === 1, "a line that fits is not split");
+	check(wrapRow({ kind: "code", text: "3 aaaa bbbb cc" }, 11).every((row) => row.text.length <= 11), "a space right at the edge stays inside the width, so no piece gets cut with an ellipsis");
 	check(wrapRow({ kind: "muted", text: "     ..." }, 4).length === 1, "the gap row is never wrapped");
 	check(
 		wrapRow({ kind: "context", text: " 7  const total = a + b;" }, 16).map((row) => row.text).join("|") === " 7  const total |    = a + b;",

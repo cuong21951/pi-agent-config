@@ -9,6 +9,8 @@ type Bold = (text: string) => string;
 const FRAMES = 6;
 const FRAME_MS = 700;
 
+const claudeLogo = (text: string) => `\x1b[38;2;215;119;87m${text}\x1b[39m`;
+
 // ponytail: the frame comes from the wall clock, not a timer. The cat advances on
 // repaints driven by anything else (spinner ticks while working) and never
 // schedules its own, so an idle screen stays still instead of flickering.
@@ -37,7 +39,7 @@ export function composeHeader(
 	fg: Paint,
 	bold: Bold,
 ): string[] {
-	const cat = catFrame(frame).map((line) => fg("warning", line));
+	const cat = catFrame(frame).map(claudeLogo);
 	const effort = thinking && thinking !== "off" ? ` with ${thinking} effort` : "";
 	const right = [
 		`${bold("pi")} ${fg("muted", `v${VERSION}`)}`,

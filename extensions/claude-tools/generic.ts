@@ -13,9 +13,10 @@ export function fallbackCall(toolName: string, done: boolean, blink: boolean, pa
 }
 
 export function fallbackResult(toolName: string, group: string | null, error: string, paint: Paint): string[] {
-	if (error !== "") return [paint("muted", ELBOW) + paint("error", error)];
 	if (group === "") return [];
-	return [paint("muted", group ?? `Ran ${toolName}`)];
+	if (group !== null) return [paint("muted", group)];
+	if (error !== "") return [paint("muted", ELBOW) + paint("error", error)];
+	return [paint("muted", `Ran ${toolName}`)];
 }
 
 export function textOf(result: { content?: Array<{ type: string; text?: string }> } | undefined): string {
@@ -44,21 +45,22 @@ export function patchGenericTools(prototype: object): void {
 
 	type Slot = { toolName: string; toolCallId?: string };
 	const paintWith = (theme: Theme): Paint => (role, text) => theme.fg(role as never, text);
+	const rendersItself = (slot: Slot) => hasOwnRenderer.call(slot) && (callOf.call(slot) !== undefined || resultOf.call(slot) !== undefined);
 
 	proto.hasRendererDefinition = function () {
 		return true;
 	};
 	proto.getRenderShell = function (this: Slot) {
-		return hasOwnRenderer.call(this) ? shellOf.call(this) : "self";
+		return rendersItself(this) ? shellOf.call(this) : "self";
 	};
 	proto.getCallRenderer = function (this: Slot) {
-		if (hasOwnRenderer.call(this)) return callOf.call(this);
+		if (rendersItself(this)) return callOf.call(this);
 		const name = this.toolName;
 		return (_args: unknown, theme: Theme, context: { toolCallId?: string }) =>
 			dynamic(() => fallbackCall(name, finished.has(context.toolCallId ?? ""), blinkOn(), paintWith(theme)));
 	};
 	proto.getResultRenderer = function (this: Slot) {
-		if (hasOwnRenderer.call(this)) return resultOf.call(this);
+		if (rendersItself(this)) return resultOf.call(this);
 		const name = this.toolName;
 		return (
 			result: { content?: Array<{ type: string; text?: string }>; isError?: boolean },
@@ -91,7 +93,9 @@ if (process.env.CLAUDE_FALLBACK_SELFTEST) {
 	check(fallbackResult("mcp", "", "", plain).length === 0, "a hidden group member draws nothing");
 	check(fallbackResult("mcp", "Read 1 file, called 1 tool", "", tagged)[0] === "<muted>Read 1 file, called 1 tool</muted>", "the last member draws the sentence");
 	check(fallbackResult("mcp", null, "", plain)[0] === "Ran mcp", "outside a group it falls back to naming the tool");
-	check(fallbackResult("mcp", null, "boom", tagged)[0] === "<muted>  ⎿  </muted><error>boom</error>", "an error stays visible under the elbow, with no ✗");
+	check(fallbackResult("mcp", null, "boom", tagged)[0] === "<muted>  ⎿  </muted><error>boom</error>", "an error outside a group stays visible under the elbow, with no ✗");
+	check(fallbackResult("mcp", "  Called 1 tool", "boom", plain).join("|") === "  Called 1 tool", "a failed call inside a group folds into the sentence like Claude 2.1.280");
+	check(fallbackResult("mcp", "", "boom", plain).length === 0, "a failed hidden member draws nothing");
 	const fake = () => ({
 		hasRendererDefinition(this: { toolDefinition?: unknown }) {
 			return this.toolDefinition !== undefined;
@@ -115,6 +119,11 @@ if (process.env.CLAUDE_FALLBACK_SELFTEST) {
 	check(proto.getRenderShell.call(owned) === "default" && proto.getCallRenderer.call(owned) === "MINE", "a tool that renders itself is left completely alone");
 	check(proto.getRenderShell.call(orphan) === "self" && typeof proto.getCallRenderer.call(orphan) === "function", "an unrendered tool is taken over with its own shell");
 	check(proto.hasRendererDefinition.call(orphan) === true, "the component is told a renderer exists so it uses the render path, not the raw dump");
+	const unrendered = { toolDefinition: { name: "get_subagent_result" }, toolName: "get_subagent_result" };
+	check(
+		proto.getRenderShell.call(unrendered) === "self" && typeof proto.getCallRenderer.call(unrendered) === "function" && typeof proto.getResultRenderer.call(unrendered) === "function",
+		"a registered tool with no renderers of its own (pi 0.85.1 counts it as having a definition) is taken over too",
+	);
 	const theme = { fg: (_role: never, text: string) => text, bold: (text: string) => text };
 	check(JSON.stringify(proto.getCallRenderer.call(orphan)({}, theme, { toolCallId: "zz" }).render(80)).includes("Running mcp"), "the taken-over call row names the tool");
 	const bare = fake();

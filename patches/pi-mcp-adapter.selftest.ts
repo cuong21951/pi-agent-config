@@ -197,4 +197,44 @@ function runResult(resultRenderer, result, options, context, theme = plainTheme)
   console.log("PASS: boxed mode unchanged ->", JSON.stringify(row));
 }
 
+{
+  const renderResult = createMcpToolResultRenderer(compactOptions);
+  const noDetails = { content: [], details: undefined };
+  const running = runResult(renderResult, noDetails, { isPartial: true, expanded: false }, { isError: false, state: { compactTitle: "mcpScript" } });
+  assert.match(running, /Calling mcpScript…$/);
+  const done = runResult(renderResult, noDetails, { isPartial: false, expanded: false }, { isError: false, state: { compactTitle: "mcpScript" } });
+  assert.equal(done, "mcpScript");
+  console.log("PASS: a result with no details (running mcpScript) renders instead of crashing pi ->", JSON.stringify(running));
+}
+
+// --- Grouping through claude-tools: two calls to one server collapse into Claude's "Called dse 2 times" ---
+{
+  const rows = await jiti.import(path.join(here, "../extensions/claude-tools/rows.ts"));
+  const calls = {};
+  rows.track({ on: (name, handler) => (calls[name] = handler) });
+  calls.agent_start({}, {});
+  const renderResult = createMcpToolResultRenderer(compactOptions);
+  const context = (id) => ({ isError: false, state: {}, toolCallId: id, invalidate() {} });
+  const first = context("mcp-1");
+  const second = context("mcp-2");
+  calls.tool_execution_start({ toolCallId: "mcp-1", toolName: "dse_list", args: {} }, {});
+  calls.tool_execution_end({ toolCallId: "mcp-1" }, {});
+  assert.equal(runResult(renderResult, makeResult("a", { mode: "call", server: "dse", tool: "list" }), { isPartial: false, expanded: false }, first), "  Called dse");
+  calls.tool_execution_start({ toolCallId: "mcp-2", toolName: "dse_get", args: {} }, {});
+  calls.tool_execution_end({ toolCallId: "mcp-2" }, {});
+  const merged = runResult(renderResult, makeResult("b", { mode: "call", server: "dse", tool: "get" }), { isPartial: false, expanded: false }, second);
+  assert.equal(merged, "  Called dse 2 times");
+  const hidden = renderResult(makeResult("a", { mode: "call", server: "dse", tool: "list" }), { isPartial: false, expanded: false }, plainTheme, first).render(200);
+  assert.deepEqual(hidden, []);
+  const own = runResult(renderResult, makeResult("a", { mode: "call", server: "dse", tool: "list" }), { isPartial: false, expanded: true }, first);
+  assert.match(own, /^● /);
+  calls.tool_execution_start({ toolCallId: "mcp-3", toolName: "dse_write", args: {} }, {});
+  calls.tool_execution_end({ toolCallId: "mcp-3", isError: true }, {});
+  const failed = { ...context("mcp-3"), isError: true };
+  assert.equal(runResult(renderResult, makeResult("Error: boom", { mode: "call", server: "dse", tool: "write", error: "boom" }), { isPartial: false, expanded: false }, failed), "  Called dse 3 times");
+  assert.match(runResult(renderResult, makeResult("Error: boom", { mode: "call", server: "dse", tool: "write", error: "boom" }), { isPartial: false, expanded: true }, failed), /Error: boom/);
+  console.log("PASS: a failed call inside the group folds into it like Claude 2.1.280; ctrl+o still shows the error");
+  console.log("PASS: grouped MCP calls ->", JSON.stringify(merged), "(first row hidden, ctrl+o restores it)");
+}
+
 console.log("\nAll selftest assertions passed.");

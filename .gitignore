@@ -27,3 +27,9 @@ settings.json.bak-*
 
 # per-machine voice dictation state (hint session counter)
 voice.json
+
+# patches/apply.mjs fingerprint of the last clean apply (per machine)
+patches/.applied-stamp
+# backups of gitignored or generated files
+mcp.json.bak*
+*.bak-*

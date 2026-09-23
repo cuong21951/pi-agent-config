@@ -1,0 +1,106 @@
+--- a/src/index.ts
++++ b/src/index.ts
+@@ -16,7 +16,7 @@
+ import { Container, Key, matchesKey, type SettingItem, SettingsList, Spacer, Text } from "@earendil-works/pi-tui";
+ import { Type } from "@sinclair/typebox";
+ import { abortable } from "./abortable.js";
+-import { hasAgentBadge, renderAgentName } from "./agent-color.js";
++import { renderAgentName } from "./agent-color.js";
+ import { buildNewAgentFile, disableInContent, enableInContent, isEmptyStub, locateAgentFile, personalAgentsDir, projectAgentsDir, serializeAgentFile } from "./agent-file-toggle.js";
+ import { AgentManager, isTopLevelAgent } from "./agent-manager.js";
+ import { getAgentConversation, getDefaultMaxTurns, getGraceTurns, getRememberAgents, normalizeMaxTurns, resolveEffectiveMaxTurns, SUBAGENT_TOOL_NAMES, setDefaultMaxTurns, setGraceTurns, setRememberAgents, steerAgent } from "./agent-runner.js";
+@@ -305,6 +305,13 @@
+   if (inChildSessionContext()) return;
+ 
+   // ---- Register custom notification renderer ----
++  // Claude Code 2.1.280, measured: a finished background agent is one line, "● Agent "desc" finished · 50s".
++  const claudeDuration = (ms: number) => {
++    const seconds = Math.round(ms / 1000);
++    return seconds < 60 ? `${seconds}s` : `${Math.floor(seconds / 60)}m ${seconds % 60}s`;
++  };
++  // Claude names an agent's model on its call row only when it differs from the main one ("Sonnet 5" under Opus).
++  const agentCallModel = new Map<string, string>();
+   pi.registerMessageRenderer<NotificationDetails>(
+     "subagent-notification",
+     (message, { expanded }, theme) => {
+@@ -317,6 +324,9 @@
+         const statusText = isError ? d.status
+           : d.status === "steered" ? "completed (steered)"
+           : "completed";
++        if (!expanded && !isError) {
++          return theme.fg("borderAccent", "● ") + `Agent "${d.description}" finished` + theme.fg("muted", ` · ${claudeDuration(d.durationMs)}`);
++        }
+ 
+         // Line 1: icon + agent description + status
+         let line = `${icon} ${theme.bold(d.description)} ${theme.fg("dim", statusText)}`;
+@@ -358,7 +368,7 @@
+       // from it is what the batch cost — not four figures to add up by hand.
+       // Derived from the per-agent details rather than carried alongside them:
+       // one source, so the total can never disagree with the rows above it.
+-      if (showCost && all.length > 1) {
++      if (expanded && showCost && all.length > 1) {
+         const total = formatCost(all.reduce((sum, a) => sum + (a.totalCost ?? 0), 0));
+         if (total) {
+           const tokens = all.reduce((sum, a) => sum + a.totalTokens, 0);
+@@ -1648,25 +1658,20 @@
+ 
+     // ---- Custom rendering: Claude Code style ----
+ 
++    // Claude Code 2.1.280, measured: "● Agent(desc) model" with the blue tool dot and no box
++    // around the row; pi's default box put blank padding rows between consecutive agents.
++    renderShell: "self",
++
+     renderCall(args, theme, context) {
+-      // A badge closes its own background, which would clear the tool block's row tint
+-      // for the rest of the line, so the badge restores it. The tint is opened here too:
+-      // the TUI's Box paints it, but HTML export takes it from CSS, and restoring a
+-      // background the line never opened is what banded the export before. The line is
+-      // deliberately left open — Box.applyBackgroundToLine pads to width and *then*
+-      // wraps, so closing here would leave that padding untinted, and HTML export closes
+-      // any open span per line anyway. No badge means no tint, so an uncolored agent
+-      // renders exactly the line it always did.
+-      const rowBackground = hasAgentBadge(args.subagent_type)
+-        ? theme.getBgAnsi(context.isPartial ? "toolPendingBg" : context.isError ? "toolErrorBg" : "toolSuccessBg")
+-        : "";
+       const desc = args.description ?? "";
+       const name = renderAgentName(args.subagent_type, theme, {
+         fallbackColor: "toolTitle",
+-        restoreBackground: rowBackground,
++        restoreBackground: "",
+         bold: true,
+       });
+-      return new Text(rowBackground + "▸ " + name + (desc ? "  " + theme.fg("muted", desc) : ""), 0, 0);
++      const shownModel = agentCallModel.get(context.toolCallId) ?? (typeof args.model === "string" && args.model !== "" ? args.model : "");
++      const model = shownModel ? theme.fg("muted", ` ${shownModel}`) : "";
++      return new Text(theme.fg("borderAccent", "● ") + name + (desc ? `(${desc})` : "") + model, 0, 0);
+     },
+ 
+     renderResult(result, { expanded, isPartial }, theme, renderContext) {
+@@ -1705,7 +1710,7 @@
+ 
+       // ---- Background agent launched ----
+       if (details.status === "background") {
+-        return new Text(theme.fg("dim", `  ⎿  Running in background (ID: ${details.agentId})`), 0, 0);
++        return new Text(theme.fg("muted", "  ⎿  ") + "Backgrounded agent" + theme.fg("muted", " (↓ to manage · ctrl+o to expand)"), 0, 0);
+       }
+ 
+       // ---- Completed / Steered ----
+@@ -1832,6 +1837,9 @@
+       });
+       if (scopeVerdict.kind === "error") return textResult(scopeVerdict.message);
+       if (scopeVerdict.kind === "warn") ctx.ui.notify(scopeVerdict.message, "warning");
++      if (model && (model.provider !== ctx.model?.provider || model.id !== ctx.model?.id)) {
++        agentCallModel.set(toolCallId, (model.name ?? model.id).replace(/^Claude\s+/i, ""));
++      }
+ 
+       const thinking = resolvedConfig.thinking;
+       const inheritContext = resolvedConfig.inheritContext;
+@@ -2458,6 +2466,8 @@
+       ),
+     }),
+ 
++    renderShell: "self",
++
+     renderCall(args, theme) {
+       return new Text(
+         `${theme.fg("toolTitle", "▸ ")}${theme.bold(theme.fg("toolTitle", "SubagentWorkflow"))}  ${theme.fg("muted", workflowCallName(args))}`,

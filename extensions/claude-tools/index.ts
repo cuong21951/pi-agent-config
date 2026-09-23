@@ -52,6 +52,11 @@ function paintRows(row: Row, width: number): string[] {
 	});
 }
 
+function indented(row: Row, width: number, indent: number): string[] {
+	const margin = " ".repeat(Math.min(indent, Math.max(0, width - 1)));
+	return paintRows(row, width - margin.length).map((line) => margin + line);
+}
+
 export default function (pi: ExtensionAPI) {
 	track(pi);
 	patchGenericTools(ToolExecutionComponent.prototype);
@@ -79,14 +84,14 @@ export default function (pi: ExtensionAPI) {
 				const view = { expanded, isPartial, hint: keyHint("app.tools.expand", "to expand") };
 				const s = style(theme);
 				const rows = resultRows(tool, context.args, outcome, view, s);
-				const group = WRITE_TOOLS.has(tool) || isPartial || isError || expanded ? null : summaryFor(context.toolCallId ?? "", s.bold);
+				const group = WRITE_TOOLS.has(tool) || isPartial || expanded ? null : summaryFor(context.toolCallId ?? "", s.bold);
 				if (group === "") return dynamic(() => []);
 				const head = WRITE_TOOLS.has(tool) || isPartial ? [] : [group === null ? doneLine(tool, context.args, s) : s.fg("muted", group)];
 				// ponytail: painted rows are already cut or wrapped to the width, so only the plain lines are truncated;
 				// running them through it again would clip the escape that closes the background.
 				return dynamic((width) => [
 					...head.map((line) => truncateToWidth(line, width)),
-					...(rows ? [truncateToWidth(rows.head, width), ...rows.rows.flatMap((row) => paintRows(row, width))] : []),
+					...(rows ? [truncateToWidth(rows.head, width), ...rows.rows.flatMap((row) => indented(row, width, rows.indent))] : []),
 				]);
 			},
 		});

@@ -1,14 +1,32 @@
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
-import { dynamic } from "../claude-tools/rows.ts";
+import { dynamic, isAbort } from "../claude-tools/rows.ts";
 
+// ponytail: the 186 verbs of Claude Code 2.1.261, lifted from its bundle (Clauding included).
 const VERBS = [
-	"Accomplishing", "Actualizing", "Baking", "Brewing", "Calculating", "Cerebrating", "Churning", "Coalescing",
-	"Cogitating", "Computing", "Conjuring", "Considering", "Cooking", "Crafting", "Crunching", "Deliberating",
-	"Determining", "Finagling", "Forging", "Generating", "Hatching", "Herding", "Honking", "Hustling", "Ideating",
-	"Inferring", "Manifesting", "Marinating", "Moseying", "Mulling", "Mustering", "Musing", "Noodling",
-	"Percolating", "Pondering", "Processing", "Puttering", "Reticulating", "Ruminating", "Schlepping", "Shimmying",
-	"Simmering", "Smooshing", "Spinning", "Stewing", "Swirling", "Synthesizing", "Thinking", "Tinkering",
-	"Transmuting", "Vibing", "Wibbling", "Working", "Wrangling",
+	"Accomplishing", "Actioning", "Actualizing", "Architecting", "Baking", "Beaming", "Beboppin'", "Befuddling",
+	"Billowing", "Blanching", "Bloviating", "Boogieing", "Boondoggling", "Booping", "Bootstrapping", "Brewing",
+	"Bunning", "Burrowing", "Calculating", "Canoodling", "Caramelizing", "Cascading", "Catapulting", "Cerebrating",
+	"Channeling", "Channelling", "Choreographing", "Churning", "Clauding", "Coalescing", "Cogitating", "Combobulating",
+	"Composing", "Computing", "Concocting", "Considering", "Contemplating", "Cooking", "Crafting", "Creating",
+	"Crunching", "Crystallizing", "Cultivating", "Deciphering", "Deliberating", "Determining", "Dilly-dallying",
+	"Discombobulating", "Doing", "Doodling", "Drizzling", "Ebbing", "Effecting", "Elucidating", "Embellishing",
+	"Enchanting", "Envisioning", "Fermenting", "Fiddle-faddling", "Finagling", "Flambéing", "Flibbertigibbeting",
+	"Flowing", "Flummoxing", "Fluttering", "Forging", "Forming", "Frolicking", "Frosting", "Gallivanting", "Galloping",
+	"Garnishing", "Generating", "Gesticulating", "Germinating", "Gitifying", "Grooving", "Gusting", "Harmonizing",
+	"Hashing", "Hatching", "Herding", "Honking", "Hullaballooing", "Hyperspacing", "Ideating", "Imagining",
+	"Improvising", "Incubating", "Inferring", "Infusing", "Ionizing", "Jitterbugging", "Julienning", "Kneading",
+	"Leavening", "Levitating", "Lollygagging", "Manifesting", "Marinating", "Meandering", "Metamorphosing", "Misting",
+	"Moonwalking", "Moseying", "Mulling", "Mustering", "Musing", "Nebulizing", "Nesting", "Newspapering", "Noodling",
+	"Nucleating", "Orbiting", "Orchestrating", "Osmosing", "Perambulating", "Percolating", "Perusing", "Philosophising",
+	"Photosynthesizing", "Pollinating", "Pondering", "Pontificating", "Pouncing", "Precipitating", "Prestidigitating",
+	"Processing", "Proofing", "Propagating", "Puttering", "Puzzling", "Quantumizing", "Razzle-dazzling",
+	"Razzmatazzing", "Recombobulating", "Reticulating", "Roosting", "Ruminating", "Sautéing", "Scampering",
+	"Schlepping", "Scurrying", "Seasoning", "Shenaniganing", "Shimmying", "Simmering", "Skedaddling", "Sketching",
+	"Slithering", "Smooshing", "Sock-hopping", "Spelunking", "Spinning", "Sprouting", "Stewing", "Sublimating",
+	"Swirling", "Swooping", "Symbioting", "Synthesizing", "Tempering", "Thinking", "Thundering", "Tinkering",
+	"Tomfoolering", "Topsy-turvying", "Transfiguring", "Transmuting", "Twisting", "Undulating", "Unfurling",
+	"Unravelling", "Vibing", "Waddling", "Wandering", "Warping", "Whatchamacalliting", "Whirlpooling", "Whirring",
+	"Whisking", "Wibbling", "Working", "Wrangling", "Zesting", "Zigzagging",
 ];
 
 // ponytail: constants below are lifted from Claude Code's spinner (dark theme). Claude itself uses "*"
@@ -25,14 +43,15 @@ const TIMER_ALWAYS_AFTER_MS = 16_000;
 const THOUGHT_FOR_MS = 2000;
 
 type Rgb = { r: number; g: number; b: number };
-// ponytail: dark-daltonized values, measured on screen: glyph and verb ffaf5f, shimmer ffd787.
-const CLAUDE: Rgb = { r: 255, g: 175, b: 95 };
-const CLAUDE_SHIMMER: Rgb = { r: 255, g: 215, b: 135 };
-const WARNING: Rgb = { r: 255, g: 193, b: 7 };
-const STALL_RED: Rgb = { r: 171, g: 43, b: 63 };
+// ponytail: dark-daltonized values read out of the 2.1.261 bundle (an on-screen capture had quantised
+// these to the 256-colour cube): claude ff9933, claudeShimmer ffb765, warning ffcc00, error ff6666.
+const CLAUDE: Rgb = { r: 255, g: 153, b: 51 };
+const CLAUDE_SHIMMER: Rgb = { r: 255, g: 183, b: 101 };
+const WARNING: Rgb = { r: 255, g: 204, b: 0 };
+const STALL_RED: Rgb = { r: 255, g: 102, b: 102 };
 const GREY: Rgb = { r: 158, g: 158, b: 158 };
 const GREY_BRIGHT: Rgb = { r: 178, g: 178, b: 178 };
-const STATUS_GREY: Rgb = { r: 148, g: 148, b: 148 };
+const STATUS_GREY: Rgb = { r: 153, g: 153, b: 153 };
 
 export type Mode = "requesting" | "thinking" | "text" | "tool-use";
 
@@ -146,11 +165,11 @@ export function statusText(s: SpinnerState): string {
 	return `${fg(STATUS_GREY)}(${parts.join(" · ")})${RESET_FG}`;
 }
 
-const PAST: Record<string, string> = { Thinking: "Thought", Spinning: "Spun", Shimmying: "Shimmied" };
+const PAST: Record<string, string> = { Thinking: "Thought", Spinning: "Spun", Doing: "Did" };
 
 // ponytail: Claude ends a turn with "✻ Churned for 13s · done 12:58 AM" in grey; the verb is the spinner's.
 export function pastTense(verb: string): string {
-	return PAST[verb] ?? verb.replace(/ing$/, "ed");
+	return PAST[verb] ?? verb.replace(/ying$/, "ied").replace(/ing$/, "ed");
 }
 
 export function doneLine(verb: string, ms: number, at: Date): string {
@@ -168,7 +187,14 @@ function pickVerb(previous: string): string {
 	return verb;
 }
 
-export default function (pi: ExtensionAPI) {
+type Message = { role?: string; stopReason?: string; errorMessage?: string; content?: Array<{ type: string; text?: string }> };
+
+// ponytail: Claude prints no "✻ … · done" line after an interrupt (measured 2026-09-05).
+export function interrupted(messages: Message[] = []): boolean {
+	return messages.some((m) => m.stopReason === "aborted" || isAbort(m.errorMessage) || (m.role === "toolResult" && (m.content ?? []).some((c) => c.type === "text" && isAbort(c.text))));
+}
+
+export default function claudeWorking(pi: ExtensionAPI) {
 	let verb = "";
 	let started = 0;
 	let lastTokenAt = 0;
@@ -181,6 +207,8 @@ export default function (pi: ExtensionAPI) {
 	let streamedChars = 0;
 	let activeTools = 0;
 	let timer: ReturnType<typeof setInterval> | undefined;
+	let settled = true;
+	let lastRun: Message[] = [];
 
 	const state = (now: number): SpinnerState => ({
 		elapsedMs: now - started,
@@ -193,20 +221,34 @@ export default function (pi: ExtensionAPI) {
 		effort: "",
 	});
 
+	// ponytail: Claude keeps the working line pinned directly above the prompt; pi's own working message
+	// lands in the status container, which sits ABOVE claude-bottom-input's pad, so it floated with the
+	// transcript and left a hole between it and the prompt. Rendering it as a widget puts it after the
+	// pad instead, on the row above the editor. pi's own message is blanked rather than left to draw.
+	let current = "";
 	pi.on("session_start", (_event, ctx) => {
-		if (ctx.hasUI) ctx.ui.setWorkingIndicator({ frames: [""], intervalMs: 1000 });
+		if (!ctx.hasUI) return;
+		ctx.ui.setWorkingIndicator({ frames: [""], intervalMs: TICK_MS });
+		ctx.ui.setWorkingMessage("");
+		ctx.ui.setWidget("claude-working", () => ({
+			render: () => (current === "" ? [] : [current]),
+			invalidate() {},
+		}));
 	});
 
 	pi.on("agent_start", (_event, ctx) => {
 		if (!ctx.hasUI) return;
-		verb = pickVerb(verb);
-		started = Date.now();
-		lastTokenAt = started;
+		if (settled) {
+			verb = pickVerb(verb);
+			started = Date.now();
+			finishedTokens = 0;
+		}
+		settled = false;
+		lastTokenAt = Date.now();
 		mode = "requesting";
 		thinkingStart = null;
 		thoughtForUntil = 0;
 		thinkingIntensity = 0;
-		finishedTokens = 0;
 		streamedChars = 0;
 		activeTools = 0;
 		clearInterval(timer);
@@ -215,7 +257,7 @@ export default function (pi: ExtensionAPI) {
 			const target = mode === "thinking" && activeTools === 0 ? 1 : 0;
 			thinkingIntensity += (target - thinkingIntensity) * 0.2;
 			if (Math.abs(target - thinkingIntensity) < 0.02) thinkingIntensity = target;
-			ctx.ui.setWorkingMessage(line(verb, { ...state(now), effort: ctx.thinkingLevel ?? "" }));
+			current = line(verb, { ...state(now), effort: ctx.thinkingLevel ?? "" });
 		};
 		paint();
 		timer = setInterval(paint, TICK_MS);
@@ -263,11 +305,19 @@ export default function (pi: ExtensionAPI) {
 		return dynamic(() => [doneLine(data.verb, data.ms, new Date(data.at))]);
 	});
 
-	pi.on("agent_end", (_event, ctx) => {
+	pi.on("agent_end", (event, ctx) => {
 		clearInterval(timer);
 		timer = undefined;
+		lastRun = (event as { messages?: Message[] }).messages ?? [];
 		if (!ctx.hasUI) return;
-		ctx.ui.setWorkingMessage();
+		current = "";
+		ctx.ui.setWorkingMessage("");
+	});
+
+	pi.on("agent_settled", (_event, ctx) => {
+		if (settled) return;
+		settled = true;
+		if (!ctx.hasUI || interrupted(lastRun)) return;
 		pi.appendEntry("claude-working-done", { verb, ms: Date.now() - started, at: Date.now() });
 	});
 }
@@ -298,6 +348,27 @@ if (process.env.CLAUDE_WORKING_SELFTEST) {
 	check(elapsed(65000) === "1m 5s" && tokens(14500) === "14.5k", "formatting");
 	check(pastTense("Churning") === "Churned" && pastTense("Baking") === "Baked" && pastTense("Thinking") === "Thought" && pastTense("Shimmying") === "Shimmied", "past tense of the spinner verb");
 	check(visible(doneLine("Churning", 13_400, new Date(2026, 8, 5, 0, 58))) === "✻ Churned for 13s · done 12:58 AM", "end-of-turn line matches Claude");
+	check(pastTense("Shimmying") === "Shimmied" && pastTense("Sautéing") === "Sautéed" && pastTense("Dilly-dallying") === "Dilly-dallied" && pastTense("Thinking") === "Thought", "past tense: measured Shimmied and Sautéed, -ying to -ied");
+	check(interrupted([{ role: "assistant", stopReason: "aborted" }]) && interrupted([{ role: "assistant", stopReason: "error", errorMessage: "This operation was aborted" }]) && interrupted([{ role: "toolResult", content: [{ type: "text", text: "Command aborted" }] }]) && !interrupted([{ role: "assistant", stopReason: "error", errorMessage: "boom" }]) && !interrupted(), "interrupt detected from an aborted reply, an abort error or an aborted tool");
 	check(pickVerb("Swirling") !== "Swirling", "verb changes between turns");
+	const handlers: Record<string, (event: unknown, ctx: unknown) => void> = {};
+	const done: unknown[] = [];
+	const labels: Array<string | undefined> = [];
+	claudeWorking({
+		on: (name: string, handler: (event: unknown, ctx: unknown) => void) => (handlers[name] = handler),
+		appendEntry: (_type: string, data: unknown) => done.push(data),
+		registerEntryRenderer: () => {},
+	} as unknown as ExtensionAPI);
+	const ctx = { hasUI: true, thinkingLevel: "high", ui: { setWorkingIndicator() {}, setWidget() {}, setWorkingMessage: (label?: string) => labels.push(label) } };
+	handlers.session_start({}, ctx);
+	handlers.agent_start({}, ctx);
+	handlers.agent_end({ messages: [{ role: "assistant", stopReason: "error", errorMessage: "Request timed out." }] }, ctx);
+	handlers.agent_start({}, ctx);
+	handlers.agent_end({ messages: [{ role: "assistant", stopReason: "stop" }] }, ctx);
+	check(done.length === 0, "no done line while pi may still retry the run");
+	handlers.agent_settled({}, ctx);
+	handlers.agent_settled({}, ctx);
+	check(done.length === 1, "a timeout pi retries by itself ends the turn with one done line, not one per attempt");
+	check(labels.length > 0 && labels.every((label) => label === ""), "pi's default 'Working' label is never restored");
 	console.log(line("Vibing", { ...base, elapsedMs: 225_000, tokens: 5600 }));
 }
