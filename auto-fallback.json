@@ -4,8 +4,8 @@
     {
       "name": "copilot-opus-first",
       "models": [
+        "github-copilot/claude-opus-5.5",
         "github-copilot/claude-opus-5",
-        "github-copilot/claude-sonnet-5",
         "openrouter/meta/muse-spark-1.3-contributor"
       ]
     },
