@@ -223,6 +223,11 @@ sẵn các thư mục này trong thư mục dự án và đặt shortcut trên D
 Việt), trợ lý sẽ hỏi một lần thư mục nào tương ứng với từng loại và ghi nhớ
 trong `.pi/kuha-folders.json`.
 
+## Kết nối Outlook (tuỳ chọn)
+
+Trợ lý có thể đọc mail và lịch Outlook để tóm tắt, tìm mail cũ, xem lịch họp — làm
+theo `HUONG-DAN-OUTLOOK.md`. Mặc định là **chỉ đọc**, không gửi và không xoá được mail.
+
 ## Cập nhật
 
 Nhanh nhất: dán prompt trong `UPDATE-PROMPT.md` vào Claude Code, hoặc:

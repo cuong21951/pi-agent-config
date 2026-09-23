@@ -67,40 +67,40 @@ const view = (expanded = false, isPartial = false) => ({ expanded, isPartial });
 
 {
   const row = render(tool.renderResult(result(answer, { sources: [1, 2], durationMs: 3400 }), view(), plainTheme));
-  assert.equal(row, "  └ Did 1 search in 3s (2 sources) (ctrl+o to expand)");
+  assert.equal(row, "  ⎿  Did 1 search in 3s (2 sources) (ctrl+o to expand)");
   console.log("PASS: collapsed ->", JSON.stringify(row));
 }
 {
   const row = render(tool.renderResult(result(answer, { sources: [1], durationMs: 900 }), view(), plainTheme));
-  assert.equal(row, "  └ Did 1 search in 1s (1 source) (ctrl+o to expand)");
+  assert.equal(row, "  ⎿  Did 1 search in 1s (1 source) (ctrl+o to expand)");
   console.log("PASS: singular and sub-second ->", JSON.stringify(row));
 }
 {
   const row = render(tool.renderResult(result("body", undefined), view(), plainTheme));
-  assert.equal(row, "  └ Did 1 search (ctrl+o to expand)");
+  assert.equal(row, "  ⎿  Did 1 search (ctrl+o to expand)");
   console.log("PASS: no details ->", JSON.stringify(row));
 }
 {
   const row = render(tool.renderResult(result(answer, { sources: [], durationMs: 2000 }), view(true), plainTheme));
   assert.equal(
     row,
-    "  └ Did 1 search in 2s\n    Line one\n    Line two\n\n    Links:\n    1. [t](u)",
+    "  ⎿  Did 1 search in 2s\n    Line one\n    Line two\n\n    Links:\n    1. [t](u)",
   );
   console.log("PASS: expanded body indented ->", JSON.stringify(row));
 }
 {
   const row = render(tool.renderResult(result("Search failed: DeepSeek API 401\nmore", undefined, true), view(), plainTheme));
-  assert.equal(row, "  └ ✗ Search failed: DeepSeek API 401");
+  assert.equal(row, "  ⎿  Search failed: DeepSeek API 401");
   console.log("PASS: error first line ->", JSON.stringify(row));
 }
 {
   const row = render(tool.renderResult(result("Found 10 results…", undefined), view(false, true), plainTheme));
-  assert.equal(row, "  └ Found 10 results…");
+  assert.equal(row, "  ⎿  Found 10 results…");
   console.log("PASS: partial progress ->", JSON.stringify(row));
 }
 {
   const row = render(tool.renderResult(result("", undefined), view(false, true), plainTheme));
-  assert.equal(row, "  └ …");
+  assert.equal(row, "  ⎿  …");
   console.log("PASS: empty partial ->", JSON.stringify(row));
 }
 

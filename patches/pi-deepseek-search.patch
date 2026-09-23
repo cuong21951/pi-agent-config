@@ -4,10 +4,10 @@
    "\n\nREMINDER: You MUST include the sources above in your response to the user using markdown hyperlinks.";
  
  // ---------------------------------------------------------------------------
-+// Claude Code look: "● Web Search(\"query\")" + "  └ Did 1 search in 12s"
++// Claude Code look: "● Web Search(\"query\")" + "  ⎿  Did 1 search in 12s"
 +// ---------------------------------------------------------------------------
 +
-+const ELBOW = "  └ ";
++const ELBOW = "  ⎿  ";
 +const INDENT = "    ";
 +const XML_TAG = /<[^>]*(?:tool_calls|invoke|parameter)[^>]*>/g;
 +
@@ -35,7 +35,7 @@
      renderCall(args, theme) {
        const p = args as { query: string; allowed_domains?: string[]; blocked_domains?: string[] };
 -      let text = theme.fg("toolTitle", theme.bold("web_search ")) + theme.fg("accent", `"${p.query || "..."}"`);
-+      let text = theme.fg("success", theme.bold("● ")) + theme.fg("toolTitle", theme.bold("Web Search")) + theme.fg("toolTitle", `("${p.query || "..."}")`);
++      let text = theme.fg("borderAccent", theme.bold("● ")) + theme.fg("toolTitle", theme.bold("Web Search")) + theme.fg("toolTitle", `("${p.query || "..."}")`);
        const tags: string[] = [];
        if (p.allowed_domains?.length) tags.push(`+${p.allowed_domains.length}d`);
        if (p.blocked_domains?.length) tags.push(`-${p.blocked_domains.length}d`);
@@ -61,7 +61,7 @@
 +      const first = result.content[0];
 +      const body = first?.type === "text" ? first.text : "";
 +      if (isPartial) return new Text(elbow + theme.fg("dim", body.split("\n")[0] || "…"), 0, 0);
-+      if (result.isError || (context as { isError?: boolean } | undefined)?.isError) return new Text(elbow + theme.fg("error", `✗ ${body.split("\n")[0]}`), 0, 0);
++      if (result.isError || (context as { isError?: boolean } | undefined)?.isError) return new Text(elbow + theme.fg("error", `${body.split("\n")[0]}`), 0, 0);
 +      const sources = (result.details as { sources?: unknown[] } | undefined)?.sources;
 +      const head = elbow + theme.fg("toolTitle", searchSummary(result.details, Array.isArray(sources) ? sources.length : 0));
 +      const clean = cleanAnswer(body);

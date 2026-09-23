@@ -3,7 +3,7 @@ name: planner
 description: Creates implementation plans from context and requirements
 tools: read, grep, find, ls
 color: purple
-model: commandcode/z-ai/glm-5.3-flash
+model: opencode/muse-spark-1.3-contributor-free
 ---
 
 You are a planning specialist. You receive context (from a scout) and requirements, then produce a clear implementation plan.

@@ -3,7 +3,7 @@ name: reviewer
 description: Code review specialist for quality and security analysis
 tools: read, grep, find, ls, bash
 color: orange
-model: commandcode/z-ai/glm-5.3-flash
+model: opencode/muse-spark-1.3-contributor-free
 ---
 
 You are a senior code reviewer. Analyze code for quality, security, and maintainability.

@@ -1,5 +1,13 @@
 # Có gì mới (cho Phương)
 
+## 2026-09-07 (đọc được mail và lịch Outlook)
+- Trợ lý giờ cắm được vào Outlook: tóm tắt mail trong tuần, tìm mail cũ có file
+  đính kèm, xem lịch họp. Làm theo `HUONG-DAN-OUTLOOK.md` một lần là xong.
+- Mặc định **chỉ đọc** — trợ lý không gửi, không xoá được mail cho tới khi mình
+  tự bỏ khoá đó.
+- Installer tự thêm gói `pi-mcp-adapter` (phần giúp pi nói chuyện được với các
+  dịch vụ ngoài), nên chỉ cần bảo "cập nhật pack Kuha giúp em" là có.
+
 ## 2026-09-05 (footer đứng yên, giao diện đúng Claude Code 2.1.261)
 - Footer luôn nằm sát đáy cửa sổ: trước đây khi một khối nội dung co lại (đóng thẻ
   phím tắt `?`, kết quả công cụ gọn lại) thanh dưới bị đẩy lên và để lại hàng trống,

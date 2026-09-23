@@ -1,7 +1,7 @@
 import { readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { getAgentDir, type ExtensionAPI } from "@earendil-works/pi-coding-agent";
-import { CYCLE_HINT, gate, MODE_LINE, type Mode, NOTICE, nextMode, PROCEED_CHOICES, proceedMode, wantsPlan } from "./modes.ts";
+import { CYCLE_HINT, gate, MODE_LINE, RESET, type Mode, NOTICE, nextMode, PROCEED_CHOICES, proceedMode, wantsPlan } from "./modes.ts";
 
 const PERMISSION_CONFIG =
 	process.env.CLAUDE_MODES_PERMISSION_CONFIG ?? join(getAgentDir(), "extensions", "pi-permission-system", "config.json");
@@ -27,7 +27,7 @@ function writeYolo(on: boolean): void {
 // ponytail: the status text is already painted here so claude-footer can print it as-is on its own row.
 function modeRow(mode: Mode, ctx: any): string {
 	const line = MODE_LINE[mode];
-	return ctx.ui.theme.fg(line.role, line.text) + ctx.ui.theme.fg("muted", CYCLE_HINT);
+	return line.ansi + line.text + RESET + ctx.ui.theme.fg("muted", CYCLE_HINT);
 }
 
 export default function (pi: ExtensionAPI) {

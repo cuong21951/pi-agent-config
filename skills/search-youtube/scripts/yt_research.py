@@ -121,6 +121,9 @@ def run_ytdlp(
             cmd,
             capture_output=not verbose,
             text=True,
+            encoding="utf-8",
+            errors="replace",
+            env={**os.environ, "PYTHONIOENCODING": "utf-8"},
             timeout=timeout,
         )
     except subprocess.TimeoutExpired:

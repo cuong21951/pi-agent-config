@@ -222,6 +222,7 @@ required_packages = [
     "npm:pi-web-access",
     "npm:@juicesharp/rpiv-ask-user-question",
     "npm:pi-notify",
+    "npm:pi-mcp-adapter",
 ]
 for pkg in required_packages:
     add_unique("packages", pkg)

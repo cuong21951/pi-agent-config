@@ -194,7 +194,8 @@ function Add-UniqueArrayItem {
 $requiredPackages = @(
     'npm:pi-web-access',
     'npm:@juicesharp/rpiv-ask-user-question',
-    'npm:pi-notify'
+    'npm:pi-notify',
+    'npm:pi-mcp-adapter'
 )
 foreach ($pkg in $requiredPackages) {
     Add-UniqueArrayItem -Object $settings -PropertyName 'packages' -Value $pkg

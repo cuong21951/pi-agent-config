@@ -2,13 +2,16 @@ export const MODES = ["plan", "auto", "yolo"] as const;
 export type Mode = (typeof MODES)[number];
 
 // ponytail: Claude Code's mode row, verbatim: "⏵⏵ accept edits on", "⏸ plan mode on",
-// "⏵⏵ bypass permissions on", each followed by a dim "(shift+tab to cycle)". Only the bypass colour
-// (256-colour 210) was measured; plan and accept edits use the nearest theme roles.
-export const MODE_LINE: Record<Mode, { text: string; role: string }> = {
-	plan: { text: "⏸ plan mode on", role: "success" },
-	auto: { text: "⏵⏵ accept edits on", role: "accent" },
-	yolo: { text: "⏵⏵ bypass permissions on", role: "error" },
+// "⏵⏵ bypass permissions on", each followed by a dim "(shift+tab to cycle)". The colours come from the
+// 2.1.261 mode table — plan takes planMode, accept edits takes autoAccept, bypass takes error — and are
+// written as ANSI here because pi's theme has no role for the first two and its schema forbids new ones.
+export const MODE_LINE: Record<Mode, { text: string; ansi: string }> = {
+	plan: { text: "⏸ plan mode on", ansi: "\x1b[38;2;102;153;153m" },
+	auto: { text: "⏵⏵ accept edits on", ansi: "\x1b[38;2;175;135;255m" },
+	yolo: { text: "⏵⏵ bypass permissions on", ansi: "\x1b[38;2;255;102;102m" },
 };
+
+export const RESET = "\x1b[0m";
 
 export const CYCLE_HINT = " (shift+tab to cycle)";
 
@@ -119,6 +122,10 @@ if (process.env.CLAUDE_MODES_SELFTEST) {
 	check(gate("yolo", "bash", "rm -rf x").action === "allow", "yolo allows anything");
 
 	check(MODE_LINE.yolo.text === "⏵⏵ bypass permissions on" && MODE_LINE.plan.text === "⏸ plan mode on" && MODE_LINE.auto.text === "⏵⏵ accept edits on", "mode rows are Claude's");
+	check(
+		MODE_LINE.plan.ansi.endsWith("102;153;153m") && MODE_LINE.auto.ansi.endsWith("175;135;255m") && MODE_LINE.yolo.ansi.endsWith("255;102;102m"),
+		"mode row colours are Claude's planMode, autoAccept and error",
+	);
 	check(NOTICE.auto.includes("bash asks"), "auto notice explains itself");
 	check(proceedMode(PROCEED_CHOICES[0]) === "auto" && proceedMode(PROCEED_CHOICES[1]) === "yolo", "accepting a plan picks the mode");
 	check(proceedMode(PROCEED_CHOICES[2]) === undefined && proceedMode(undefined) === undefined, "keep planning or escape stays in plan");
