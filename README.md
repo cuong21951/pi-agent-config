@@ -69,6 +69,8 @@ Anything that only appears in a real terminal is tested by driving pi inside a p
 - Replay a saved session with `--session <absolute path>` and no model at all. This is how row colours, diff colours, the error row and the thinking placeholder are checked. Session files are trees, so chain each `toolResult` to the previous one; two results sharing a parent are sibling branches and only one renders.
 - Drive a live session by sending keystrokes, for what needs a model to call a tool: plan mode refusing a write, auto mode confirming a command, the plan-mode offer.
 
+`scripts/parity/` turns that into a side-by-side check: `run.py` plays the fixture scenario in `scripts/parity/fixture/TASK.md` in Claude Code (Haiku, bypass) and in pi (Copilot Haiku 4.5, bypass) from the same freshly copied folder, `diff.py` normalises the spinner verb, durations and clock and reports every text and colour difference in the transcript and the footer (`report.md`, exit 0 when there are none). `scripts/parity/GOAL.md` is the brief for a fresh Claude session that loops on it until pi and Claude are identical.
+
 Traps worth knowing. Session paths must be absolute, because pi is spawned with the home folder as its working directory and a relative path silently starts an empty session. Point `CLAUDE_MODES_PERMISSION_CONFIG` at a throwaway file, or the mode cycle will rewrite your real permission config (the script does). ConPTY asks the terminal for its device attributes (`ESC[c`) and stalls with a blank screen until something answers; the script answers. Launch `dist/bundle/cli.js`, which is what the `pi` shim runs: `dist/cli.js` is the unbundled build, so the pi-coding-agent patch never reaches it and the screen looks unpatched.
 
 ## Updating pi without losing the patches

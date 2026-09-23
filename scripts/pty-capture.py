@@ -13,6 +13,11 @@ ap.add_argument("--wait", type=float, default=12)
 ap.add_argument("--keys", default="", help="python-literal list of (delay, text)")
 ap.add_argument("--out", required=True)
 ap.add_argument("--raw", default=None)
+ap.add_argument("--until", default=None, help="regex; stop waiting once the visible screen matches it")
+ap.add_argument("--settle", type=float, default=3, help="seconds to keep reading after --until matched")
+ap.add_argument("--json", default=None, help="also write every line with its colour runs as JSON")
+ap.add_argument("--env", action="append", default=[], help="NAME=VALUE added to the child environment")
+ap.add_argument("--drop-env-prefix", action="append", default=[], help="drop inherited variables starting with this prefix")
 a = ap.parse_args()
 
 env = dict(os.environ)
@@ -22,6 +27,12 @@ env.pop("TMUX", None)
 env.pop("HERDR_ENV", None)
 env.pop("CLAUDECODE", None)
 env.pop("CLAUDE_CODE_ENTRYPOINT", None)
+for prefix in a.drop_env_prefix:
+    for name in [n for n in env if n.startswith(prefix)]:
+        env.pop(name)
+for pair in a.env:
+    name, _, value = pair.partition("=")
+    env[name] = value
 
 cmd = shlex.split(a.cmd) if a.cmd else [shutil.which("node"), PI] + shlex.split(a.args)
 p = winpty.PtyProcess.spawn(cmd, cwd=a.cwd, env=env, dimensions=(a.rows, a.cols))
@@ -58,8 +69,16 @@ for delay, text in keys:
     while time.time() - start < delay:
         time.sleep(0.1)
     p.write(text)
+import re
+until = re.compile(a.until) if a.until else None
 while time.time() - start < a.wait:
-    time.sleep(0.2)
+    if until:
+        with lock:
+            visible = "\n".join(screen.display)
+        if until.search(visible):
+            time.sleep(a.settle)
+            break
+    time.sleep(0.5)
 
 def hexcolor(c):
     if c == "default":
@@ -89,6 +108,11 @@ with lock:
     lines = [render_line(l, a.cols) for l in hist] + [render_line(screen.buffer[y], a.cols) for y in range(a.rows)]
     if a.raw:
         open(a.raw, "w", encoding="utf-8").write("".join(raw))
+
+if a.json:
+    import json
+    with open(a.json, "w", encoding="utf-8") as f:
+        json.dump([{"text": txt, "runs": [[fg, bg, bold, s] for (fg, bg, bold), s in runs]} for txt, runs in lines], f, ensure_ascii=False)
 
 with open(a.out, "w", encoding="utf-8") as f:
     f.write("=== TEXT ===\n")
