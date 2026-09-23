@@ -1,5 +1,7 @@
 # Goal: pi looks and behaves exactly like Claude Code
 
+Run this session with `C:\Users\cuong\.pi\agent` as the working directory, not `C:\TimeBlock`: the TimeBlock project hooks (push gate, ticket folders) do not belong here. Cuong has approved committing and pushing to `origin main` for this goal.
+
 You are working in `C:\Users\cuong\.pi\agent` (git `github.com/cuong21951/pi-agent-config`, branch `main`). It is Cuong's pi harness: extensions, package patches and a theme whose only purpose is to make pi indistinguishable from Claude Code in the terminal. Every element matters — layout, columns, blank lines, glyphs, wording, colours, animation, timing lines, footer, prompt box, notices, errors. Do not stop at "close enough".
 
 ## Read first

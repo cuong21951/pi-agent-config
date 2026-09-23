@@ -1,1 +1,2 @@
 *.patch text eol=lf
+scripts/parity/fixture/** text eol=lf
