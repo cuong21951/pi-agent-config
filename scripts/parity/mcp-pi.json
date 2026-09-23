@@ -1,0 +1,6 @@
+{
+  "mcpServers": {
+    "parity": { "command": "py", "args": ["-3.12", "C:/Users/cuong/.pi/agent/scripts/parity/parity_mcp.py"], "directTools": true }
+  },
+  "settings": { "hostConfigDiscovery": "off", "toolResultRendering": "compact", "collapsedResultLines": 2, "mcpFooterStatus": "compact" }
+}

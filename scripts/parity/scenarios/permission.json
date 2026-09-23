@@ -1,0 +1,12 @@
+{
+  "bypass": false,
+  "prompt": "Run exactly one shell command, with the description \"Write a marker file\": echo parity > marker.txt. Then reply with exactly: written. No other text.",
+  "steps": [
+    {"until": "(?m)^(?!❯ ).*(proceed|Allow|allow|Yes)", "timeout": 90},
+    {"sleep": 1.5},
+    {"until": "(?m)^● Writing a marker file *$", "timeout": 5},
+    {"snap": "asking"},
+    {"keys": "\r"},
+    {"until": "✻ \\S+ for [^\\n]*· done", "timeout": 60}, {"sleep": 1}
+  ]
+}

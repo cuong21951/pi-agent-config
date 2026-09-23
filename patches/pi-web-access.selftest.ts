@@ -16,7 +16,7 @@ const jiti = createJiti(import.meta.url, {
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const mod = await jiti.import(path.join(here, "../npm/node_modules/pi-web-access/index.ts"));
-const { claudeDot, default: extension } = mod;
+const { claudeDot, formatBytes, default: extension } = mod;
 
 const tagged = { fg: (role, text) => `<${role}>${text}</${role}>`, bold: (text) => `<b>${text}</b>` };
 const plain = { fg: (_role, text) => text, bold: (text) => text };
@@ -36,7 +36,7 @@ const rows = (globalThis.__claudeRows ??= { finished: new Set(), failed: new Set
 
 {
   const row = render(tool.renderCall({ url: "https://example.com" }, tagged, { toolCallId: "run" }));
-  assert.ok(row === "<muted>● </muted><toolTitle><b>Fetch</b></toolTitle><toolTitle>(https://example.com)</toolTitle>" || row === "  <toolTitle><b>Fetch</b></toolTitle><toolTitle>(https://example.com)</toolTitle>", row);
+  assert.ok(row === "<muted>● </muted><b>Fetch</b>(https://example.com)" || row === "  <b>Fetch</b>(https://example.com)", row);
   console.log("PASS: running call blinks a grey dot ->", JSON.stringify(row));
 }
 {
@@ -53,27 +53,49 @@ const rows = (globalThis.__claudeRows ??= { finished: new Set(), failed: new Set
 }
 {
   const row = render(tool.renderResult({ content: [], details: {} }, { expanded: false, isPartial: true }, tagged, {}));
-  assert.equal(row, "<muted>  ⎿  </muted><muted>Fetching…</muted>");
+  assert.equal(row, "<muted>  ⎿ \u00a0</muted><muted>Fetching…</muted>");
   console.log("PASS: partial ->", JSON.stringify(row));
 }
 {
-  const result = { content: [{ type: "text", text: "# Example Domain\nbody" }], details: { urlCount: 1, successful: 1, totalChars: 559 } };
+  const result = { content: [{ type: "text", text: "# Example Domain\nbody" }], details: { urlCount: 1, successful: 1, bytes: 559, status: 200, statusText: "OK" } };
   const row = render(tool.renderResult(result, { expanded: false, isPartial: false }, tagged, {}));
-  assert.equal(row, "<muted>  ⎿  </muted><toolTitle>Received </toolTitle><toolTitle><b>559 chars</b></toolTitle><toolTitle></toolTitle>");
+  assert.equal(row, "<muted>  ⎿ \u00a0</muted>Received <b>559 bytes</b> (200 OK)");
   const expanded = render(tool.renderResult(result, { expanded: true, isPartial: false }, plain, {}));
-  assert.equal(expanded, "  ⎿  Received 559 chars\n     # Example Domain\n     body");
+  assert.equal(expanded, "  ⎿ \u00a0Received 559 bytes (200 OK)\n     # Example Domain\n     body");
   console.log("PASS: finished ->", JSON.stringify(row));
+}
+{
+  const result = { content: [{ type: "text", text: "x".repeat(1300) }], details: { urlCount: 1, successful: 1, bytes: 1300, status: 200, statusText: "OK" } };
+  const row = render(tool.renderResult(result, { expanded: false, isPartial: false }, plain, {}));
+  assert.equal(row, "  ⎿ \u00a0Received 1.3KB (200 OK)");
+  console.log("PASS: KB size ->", JSON.stringify(row));
+}
+{
+  const result = { content: [{ type: "text", text: "hi" }], details: { urlCount: 1, successful: 1 } };
+  const row = render(tool.renderResult(result, { expanded: false, isPartial: false }, plain, {}));
+  assert.equal(row, "  ⎿ \u00a0Received 2 bytes");
+  console.log("PASS: no status falls back to text length, no bytes suffix ->", JSON.stringify(row));
 }
 {
   const result = { content: [{ type: "text", text: "Error: boom" }], details: { error: "boom" } };
   const row = render(tool.renderResult(result, { expanded: false, isPartial: false }, tagged, { isError: true }));
-  assert.equal(row, "<muted>  ⎿  </muted><error>Error: boom</error>");
+  assert.equal(row, "<muted>  ⎿ \u00a0</muted><error>Error: boom</error>");
   console.log("PASS: error ->", JSON.stringify(row));
 }
 {
-  const result = { content: [{ type: "text", text: "a\nb" }], details: { urlCount: 3, successful: 2, totalChars: 1200 } };
+  const result = { content: [{ type: "text", text: "a\nb" }], details: { urlCount: 3, successful: 2, bytes: 1200, status: 200, statusText: "OK" } };
   const row = render(tool.renderResult(result, { expanded: false, isPartial: false }, plain, {}));
-  assert.equal(row, "  ⎿  Received 1200 chars from 2/3 URLs");
+  assert.equal(row, "  ⎿ \u00a0Received 1.2KB (200 OK) from 2/3 URLs");
   console.log("PASS: several urls result ->", JSON.stringify(row));
+}
+{
+  assert.equal(formatBytes(0), "0 bytes");
+  assert.equal(formatBytes(559), "559 bytes");
+  assert.equal(formatBytes(1023), "1023 bytes");
+  assert.equal(formatBytes(1024), "1KB");
+  assert.equal(formatBytes(1331), "1.3KB");
+  assert.equal(formatBytes(1024 * 1024), "1MB");
+  assert.equal(formatBytes(1024 * 1024 * 1024), "1GB");
+  console.log("PASS: formatBytes matches Claude's Dt()");
 }
 console.log("ok - pi-web-access fetch rows");

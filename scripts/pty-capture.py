@@ -1,4 +1,4 @@
-import argparse, os, shlex, shutil, time, threading
+import argparse, json, os, re, shlex, shutil, time, threading
 import pyte, winpty
 
 PI = os.path.join(os.environ["LOCALAPPDATA"], "Volta/tools/image/packages/@earendil-works/pi-coding-agent/node_modules/@earendil-works/pi-coding-agent/dist/bundle/cli.js")
@@ -18,6 +18,7 @@ ap.add_argument("--settle", type=float, default=3, help="seconds to keep reading
 ap.add_argument("--json", default=None, help="also write every line with its colour runs as JSON")
 ap.add_argument("--env", action="append", default=[], help="NAME=VALUE added to the child environment")
 ap.add_argument("--drop-env-prefix", action="append", default=[], help="drop inherited variables starting with this prefix")
+ap.add_argument("--steps", default=None, help='JSON list run after --keys: {"until": regex, "timeout": s}, {"sleep": s}, {"keys": text}, {"snap": name}; a snap writes <out>-<name>.txt/.json')
 a = ap.parse_args()
 
 env = dict(os.environ)
@@ -42,6 +43,25 @@ stream = pyte.Stream(screen)
 raw = []
 lock = threading.Lock()
 
+
+SGR = re.compile(r"\x1b\[([0-9;]*)m")
+KEYBOARD_PROTOCOL = re.compile(r"\x1b\[[<>=?][0-9;]*u")
+
+
+def faint_as_strikethrough(match):
+    params, out = match.group(1).split(";"), []
+    i = 0
+    while i < len(params):
+        if params[i] in ("38", "48") and i + 1 < len(params):
+            span = 3 if params[i + 1] == "5" else 5
+            out += params[i:i + span]
+            i += span
+            continue
+        out += {"2": ["9"], "22": ["22", "29"]}.get(params[i], [params[i]])
+        i += 1
+    return f"\x1b[{';'.join(out)}m"
+
+
 def reader():
     while True:
         try:
@@ -54,36 +74,18 @@ def reader():
             continue
         with lock:
             raw.append(data)
-            stream.feed(data)
+            stream.feed(SGR.sub(faint_as_strikethrough, KEYBOARD_PROTOCOL.sub("", data)))
             if "\x1b[c" in data or "\x1b[0c" in data:
                 p.write("\x1b[?62;22c")
             if "\x1b[6n" in data:
                 p.write(f"\x1b[{screen.cursor.y + 1};{screen.cursor.x + 1}R")
 
-t = threading.Thread(target=reader, daemon=True)
-t.start()
-
-start = time.time()
-keys = eval(a.keys) if a.keys else []
-for delay, text in keys:
-    while time.time() - start < delay:
-        time.sleep(0.1)
-    p.write(text)
-import re
-until = re.compile(a.until) if a.until else None
-while time.time() - start < a.wait:
-    if until:
-        with lock:
-            visible = "\n".join(screen.display)
-        if until.search(visible):
-            time.sleep(a.settle)
-            break
-    time.sleep(0.5)
 
 def hexcolor(c):
     if c == "default":
         return "-"
     return c
+
 
 def render_line(chars, width):
     text, runs, cur, buf = [], [], None, ""
@@ -91,7 +93,7 @@ def render_line(chars, width):
         ch = chars[x] if isinstance(chars, dict) and x in chars else (chars[x] if not isinstance(chars, dict) else None)
         if ch is None:
             ch = screen.default_char
-        key = (hexcolor(ch.fg), hexcolor(ch.bg), ch.bold)
+        key = (hexcolor(ch.fg), hexcolor(ch.bg), ch.bold, ch.italics, ch.strikethrough)
         text.append(ch.data)
         if key != cur:
             if buf:
@@ -103,38 +105,101 @@ def render_line(chars, width):
         runs.append((cur, buf))
     return "".join(text).rstrip(), runs
 
-with lock:
-    hist = list(screen.history.top)
-    lines = [render_line(l, a.cols) for l in hist] + [render_line(screen.buffer[y], a.cols) for y in range(a.rows)]
-    if a.raw:
-        open(a.raw, "w", encoding="utf-8").write("".join(raw))
 
-if a.json:
-    import json
-    with open(a.json, "w", encoding="utf-8") as f:
-        json.dump([{"text": txt, "runs": [[fg, bg, bold, s] for (fg, bg, bold), s in runs]} for txt, runs in lines], f, ensure_ascii=False)
+def visible():
+    with lock:
+        return "\n".join(screen.display)
 
-with open(a.out, "w", encoding="utf-8") as f:
-    f.write("=== TEXT ===\n")
-    for i, (txt, _) in enumerate(lines):
-        f.write(f"{i:4d}|{txt}\n")
-    f.write("\n=== COLORS (non-blank lines) ===\n")
-    for i, (txt, runs) in enumerate(lines):
-        if not txt.strip():
-            bgs = {bg for (fg, bg, bold), s in runs if bg != "-"}
-            if bgs:
-                f.write(f"{i:4d}| (blank row, bg={','.join(sorted(bgs))})\n")
-            continue
-        lead = len(txt) - len(txt.lstrip(" "))
-        if lead:
-            f.write(f"{i:4d}| (indent {lead})\n")
-        parts = []
-        for (fg, bg, bold), s in runs:
-            if not s.strip() and bg == "-":
+
+def wait_for(pattern, timeout):
+    deadline = time.time() + timeout
+    while time.time() < deadline:
+        if re.search(pattern, visible()):
+            return True
+        time.sleep(0.1)
+    return False
+
+
+def snapshot():
+    with lock:
+        hist = list(screen.history.top)
+        return [render_line(l, a.cols) for l in hist] + [render_line(screen.buffer[y], a.cols) for y in range(a.rows)]
+
+
+def write(lines, out, json_path):
+    if json_path:
+        with open(json_path, "w", encoding="utf-8") as f:
+            json.dump([{"text": txt, "runs": [[fg, bg, bold, s, italic, dim] for (fg, bg, bold, italic, dim), s in runs]} for txt, runs in lines], f, ensure_ascii=False)
+    with open(out, "w", encoding="utf-8") as f:
+        f.write("=== TEXT ===\n")
+        for i, (txt, _) in enumerate(lines):
+            f.write(f"{i:4d}|{txt}\n")
+        f.write("\n=== COLORS (non-blank lines) ===\n")
+        for i, (txt, runs) in enumerate(lines):
+            if not txt.strip():
+                bgs = {bg for (fg, bg, *_), s in runs if bg != "-"}
+                if bgs:
+                    f.write(f"{i:4d}| (blank row, bg={','.join(sorted(bgs))})\n")
                 continue
-            tag = f"fg={fg}" + (f",bg={bg}" if bg != "-" else "") + (",b" if bold else "")
-            parts.append(f"[{tag}]{s.rstrip() if bg == '-' else s}")
-        f.write(f"{i:4d}| " + " ".join(parts) + "\n")
+            lead = len(txt) - len(txt.lstrip(" "))
+            if lead:
+                f.write(f"{i:4d}| (indent {lead})\n")
+            parts = []
+            for (fg, bg, bold, italic, dim), s in runs:
+                if not s.strip() and bg == "-":
+                    continue
+                tag = f"fg={fg}" + (f",bg={bg}" if bg != "-" else "") + (",b" if bold else "") + (",i" if italic else "") + (",dim" if dim else "")
+                parts.append(f"[{tag}]{s.rstrip() if bg == '-' else s}")
+            f.write(f"{i:4d}| " + " ".join(parts) + "\n")
+
+
+threading.Thread(target=reader, daemon=True).start()
+
+def send(text):
+    try:
+        p.write(text)
+        return True
+    except EOFError:
+        missed.append("process exited before keys " + repr(text[:20]))
+        return False
+
+
+missed = []
+start = time.time()
+for delay, text in eval(a.keys) if a.keys else []:
+    while time.time() - start < delay:
+        time.sleep(0.1)
+    send(text)
+
+for step in json.loads(a.steps) if a.steps else []:
+    if "until" in step:
+        attempts = 1 + step.get("retries", 0)
+        while attempts and not wait_for(step["until"], step.get("timeout", 60)):
+            attempts -= 1
+            if attempts and "retry_keys" in step:
+                send(step["retry_keys"])
+        if not attempts:
+            missed.append(step["until"])
+    if "sleep" in step:
+        time.sleep(step["sleep"])
+    if "keys" in step and not send(step["keys"]):
+        break
+    if "snap" in step:
+        stem = os.path.splitext(a.out)[0]
+        write(snapshot(), f"{stem}-{step['snap']}.txt", f"{stem}-{step['snap']}.json")
+
+until = re.compile(a.until) if a.until else None
+while time.time() - start < a.wait:
+    if until and until.search(visible()):
+        time.sleep(a.settle)
+        break
+    time.sleep(0.5)
+
+lines = snapshot()
+if a.raw:
+    with lock:
+        open(a.raw, "w", encoding="utf-8").write("".join(raw))
+write(lines, a.out, a.json)
 
 try:
     p.write("\x03")
@@ -144,4 +209,4 @@ try:
     p.terminate(force=True)
 except Exception:
     pass
-print("wrote", a.out, len(lines), "lines")
+print("wrote", a.out, len(lines), "lines" + (f"; missed {missed}" if missed else ""))

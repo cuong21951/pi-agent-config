@@ -1,0 +1,26 @@
+{
+ "prompt": "Run exactly one shell command, with the description \"Wait for the timer\": sleep 20 && echo finished. Do not write any text before the tool call.",
+ "steps": [
+  {
+   "until": "(?m)^● Waiting for the timer · \\d+s *\\n +⎿ +\\$ sleep 20 && echo finished \\((?:[3-9])s\\)",
+   "timeout": 90
+  },
+  {
+   "snap": "running"
+  },
+  {
+   "keys": "\u001b"
+  },
+  {
+   "until": "Interrupted",
+   "timeout": 20
+  },
+  {
+   "sleep": 1.5
+  },
+  {
+   "snap": "interrupted"
+  }
+ ],
+ "end": "Interrupted"
+}

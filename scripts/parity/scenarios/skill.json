@@ -1,0 +1,4 @@
+{
+  "prompt": "Load the skill named show-me using your skill tool. Do not follow its instructions. Then reply with exactly: loaded. No other text.",
+  "steps": []
+}

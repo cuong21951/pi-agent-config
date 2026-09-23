@@ -1,0 +1,63 @@
+{
+ "prompt": "Use your ask_user_question tool to ask me exactly two questions, in this order: (1) question \"Which colour do you prefer?\", header \"Colour\", single-select, options \"Red\" (description \"Warm\") and \"Blue\" (description \"Cool\"). (2) question \"Which fruits do you like?\", header \"Fruits\", multiSelect true, options \"Apple\", \"Banana\", \"Cherry\" (no descriptions). After I answer both, reply with exactly: noted. No other text.",
+ "steps": [
+  {
+   "until": "Type something",
+   "timeout": 90
+  },
+  {
+   "until": "Thought for",
+   "timeout": 10
+  },
+  {
+   "snap": "q1"
+  },
+  {
+   "keys": "\r"
+  },
+  {
+   "until": "Apple",
+   "timeout": 15
+  },
+  {
+   "snap": "q2"
+  },
+  {
+   "keys": " "
+  },
+  {
+   "until": "\\[✔\\] Apple",
+   "timeout": 5
+  },
+  {
+   "snap": "q2-checked"
+  },
+  {
+   "keys": "\t"
+  },
+  {
+   "until": "Review your answers",
+   "timeout": 10
+  },
+  {
+   "snap": "review"
+  },
+  {
+   "keys": "\r"
+  },
+  {
+   "until": "(?s)User answered Claude's questions.*ctx \\d+%",
+   "timeout": 15
+  },
+  {
+   "snap": "submitted"
+  },
+  {
+   "until": "✻ \\S+ for [^\\n]*· done|noted",
+   "timeout": 20
+  },
+  {
+   "sleep": 1
+  }
+ ]
+}

@@ -1,8 +1,8 @@
-import { isAbort } from "../claude-tools/rows.ts";
+import { clip, isAbort } from "../claude-tools/rows.ts";
 
 export type Style = { fg: (role: string, text: string) => string; bold: (text: string) => string };
 
-const ELBOW = "  ⎿  ";
+const RESULT_ELBOW = "  ⎿  ";
 const INDENT = "    ";
 const EXPANDED_MAX = 20;
 
@@ -20,16 +20,13 @@ export function commandBody(raw: string): string {
 	return inner.split("\n").map((line) => line.trim()).find((line) => line !== "") ?? raw.trim();
 }
 
-export function runningLine(intent: string, blink: boolean, s: Style): string {
-	return (blink ? s.fg("muted", "● ") : "  ") + intent;
+export function describeBash(args: Record<string, unknown>): { activity: string; hint: string } {
+	const command = String(args.command ?? "");
+	return { activity: `Running ${clip(command)}`, hint: `$ ${commandBody(command)}` };
 }
 
 export function doneLine(intent: string, s: Style): string {
 	return s.fg("muted", `Ran ${intent}`);
-}
-
-export function commandLine(command: string, s: Style): string {
-	return s.fg("muted", `${ELBOW}$ ${commandBody(command)}`);
 }
 
 // ponytail: null draws nothing; ctrl+o brings the output back with the first line and "… +N lines".
@@ -39,7 +36,7 @@ export function resultLines(output: string, exitCode: number | null, expanded: b
 	const failedStatus = exitCode === 0 || exitCode === null ? "" : `✗ exit ${exitCode} `;
 	const shown = lines.slice(0, EXPANDED_MAX).map((line) => s.fg("muted", INDENT + line));
 	const more = lines.length > EXPANDED_MAX ? [s.fg("muted", `${INDENT}… +${lines.length - EXPANDED_MAX} lines`)] : [];
-	return [s.fg("muted", ELBOW) + s.fg(failedStatus ? "error" : "muted", failedStatus + (truncated ? "[truncated] " : "")), ...shown, ...more];
+	return [s.fg("muted", RESULT_ELBOW) + s.fg(failedStatus ? "error" : "muted", failedStatus + (truncated ? "[truncated] " : "")), ...shown, ...more];
 }
 
 if (process.env.INTENT_TOOLS_SELFTEST) {
@@ -49,22 +46,21 @@ if (process.env.INTENT_TOOLS_SELFTEST) {
 	};
 	const plain: Style = { fg: (_r, t) => t, bold: (t) => t };
 	const tagged: Style = { fg: (r, t) => `<${r}>${t}</${r}>`, bold: (t) => t };
-	check(runningLine("Check git status", true, tagged) === "<muted>● </muted>Check git status", "running: grey dot, plain intent");
 	check(commandBody('powershell -NoProfile -Command "\n  $q = Get-MsmqQueue -QueueType Private\n  $q | Select Name\n"') === "$q = Get-MsmqQueue -QueueType Private", "a multi-line powershell -Command names its first real line, not the wrapper");
 	check(commandBody('pwsh -NoProfile -c "Get-Date"') === "Get-Date", "a one-line pwsh -c loses its wrapper and quotes");
 	check(commandBody("bash -lc 'ls -la /tmp'") === "ls -la /tmp", "bash -lc is unwrapped too");
 	check(commandBody("git status") === "git status" && commandBody('echo "a"') === 'echo "a"', "a plain command is left alone, quotes and all");
+	check(describeBash({ command: "git status\nmore" }).hint === "$ git status", "the active group's hint is the command under a $, like Claude's bash display hint");
+	check(describeBash({ command: "sleep 3 && echo ok" }).activity === "Running sleep 3 && echo ok" && describeBash({ command: "y".repeat(60) }).activity === `Running ${"y".repeat(49)}…`, "a call with no description is summarised as Claude's \"Running <command>\", cut at 50 columns");
 	check(withDefaultTimeout({ command: "grep -r x ." }).timeout === 120, "a command without a timeout gets Claude Code's two minutes instead of running forever");
 	check(withDefaultTimeout({ command: "dotnet test", timeout: 900 }).timeout === 900, "an explicit timeout is kept");
-	check(runningLine("Check git status", false, plain) === "  Check git status", "blink off keeps the column");
 	check(doneLine("Check git status", tagged) === "<muted>Ran Check git status</muted>", "finished command is one grey line");
-	check(commandLine("git status\nmore", tagged) === "<muted>  ⎿  $ git status</muted>", "command shown under the elbow while running");
 	check(resultLines("only\n", 0, false, false, plain) === null, "successful collapsed result draws nothing");
 	check(resultLines("boom", 1, false, false, plain) === null, "a failed command draws no red row; it folds into the grey group line");
 	check(resultLines("Command aborted", 1, true, false, plain) === null, "an aborted command draws no error row (pi core prints Interrupted)");
-	check(resultLines("a\nb\nc", 2, true, false, tagged)!.join("|") === "<muted>  ⎿  </muted><error>✗ exit 2 </error>|<muted>    a</muted>|<muted>    b</muted>|<muted>    c</muted>", "ctrl+o shows the exit status and the output");
-	check(resultLines("a\nb", 0, true, false, plain)!.join("|") === "  ⎿  |    a|    b", "expanded lists lines");
-	check(resultLines("a\nb", 0, true, true, plain)![0] === "  ⎿  [truncated] ", "truncation flag when expanded");
+	check(resultLines("a\nb\nc", 2, true, false, tagged)!.join("|") === "<muted>  ⎿  </muted><error>✗ exit 2 </error>|<muted>    a</muted>|<muted>    b</muted>|<muted>    c</muted>", "ctrl+o shows the exit status and the output");
+	check(resultLines("a\nb", 0, true, false, plain)!.join("|") === "  ⎿  |    a|    b", "expanded lists lines");
+	check(resultLines("a\nb", 0, true, true, plain)![0] === "  ⎿  [truncated] ", "truncation flag when expanded");
 	const many = Array.from({ length: 25 }, (_, i) => `l${i}`).join("\n");
 	check(resultLines(many, 0, true, false, plain)!.at(-1) === "    … +5 lines", "expanded caps at 20");
 }

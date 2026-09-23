@@ -1,0 +1,18 @@
+{
+ "prompt": "Reply with exactly: recovered. No other text.",
+ "pi_env": [
+  "NODE_OPTIONS=--import=file:///C:/Users/cuong/.pi/agent/scripts/parity/fail-once.mjs"
+ ],
+ "steps": [
+  {
+   "until": "Retrying in",
+   "timeout": 60
+  },
+  {
+   "sleep": 0.2
+  },
+  {
+   "snap": "retrying"
+  }
+ ]
+}

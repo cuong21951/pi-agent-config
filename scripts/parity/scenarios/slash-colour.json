@@ -1,0 +1,85 @@
+{
+ "prompt": "Reply with exactly: first. No other text.",
+ "steps": [
+  {
+   "until": "✻ \\S+ for [^\\n]*· done",
+   "timeout": 90
+  },
+  {
+   "sleep": 1.5
+  },
+  {
+   "keys": "/clear"
+  },
+  {
+   "sleep": 1
+  },
+  {
+   "snap": "known"
+  },
+  {
+   "keys": "\u007f\u007f\u007f\u007f\u007f\u007f"
+  },
+  {
+   "sleep": 0.5
+  },
+  {
+   "keys": "/notarealcommand"
+  },
+  {
+   "sleep": 1
+  },
+  {
+   "snap": "unknown"
+  },
+  {
+   "keys": "\u007f\u007f\u007f\u007f\u007f\u007f\u007f\u007f\u007f\u007f\u007f\u007f\u007f\u007f\u007f\u007f"
+  },
+  {
+   "sleep": 0.5
+  },
+  {
+   "keys": "/clear now please"
+  },
+  {
+   "sleep": 1
+  },
+  {
+   "snap": "args"
+  },
+  {
+   "keys": "\u007f\u007f\u007f\u007f\u007f\u007f\u007f\u007f\u007f\u007f\u007f\u007f\u007f\u007f\u007f\u007f\u007f"
+  },
+  {
+   "sleep": 0.5
+  },
+  {
+   "keys": "hello world"
+  },
+  {
+   "sleep": 1
+  },
+  {
+   "snap": "plain"
+  },
+  {
+   "keys": "\u007f\u007f\u007f\u007f\u007f\u007f\u007f\u007f\u007f\u007f\u007f"
+  },
+  {
+   "sleep": 0.5
+  },
+  {
+   "keys": "@README.md check this"
+  },
+  {
+   "sleep": 1
+  },
+  {
+   "snap": "mention"
+  },
+  {
+   "keys": "\u007f\u007f\u007f\u007f\u007f\u007f\u007f\u007f\u007f\u007f\u007f\u007f\u007f\u007f\u007f\u007f\u007f\u007f\u007f\u007f\u007f\u007f"
+  }
+ ],
+ "end": "."
+}

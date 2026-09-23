@@ -144,9 +144,9 @@ function runResult(resultRenderer, result, options, context, theme = plainTheme)
   assert.deepEqual(callComponent.render(200), [], "compact call block never prints, even on error");
   const result = makeResult("Error: boom\nstack trace line 2", { mode: "call", server: "srv", tool: "tool", error: true });
   const row = runResult(renderResult, result, { isPartial: false, expanded: false }, context);
-  assert.equal(row, "● srv - tool (MCP)(q: 1)\n  ⎿  Error: boom");
+  assert.equal(row, "● srv - tool (MCP)(q: 1)\n  ⎿ \u00a0Error: boom");
   const painted = runResult(renderResult, result, { isPartial: false, expanded: false }, context, taggedTheme);
-  assert.ok(painted.endsWith("<error>  ⎿  Error: boom</error>"), "error row painted error");
+  assert.ok(painted.endsWith("<error>  ⎿ \u00a0Error: boom</error>"), "error row painted error");
   console.log("PASS: error result ->", JSON.stringify(row));
 }
 
@@ -213,28 +213,52 @@ function runResult(resultRenderer, result, options, context, theme = plainTheme)
   const calls = {};
   rows.track({ on: (name, handler) => (calls[name] = handler) });
   calls.agent_start({}, {});
+  const renderCall = createMcpDirectToolCallRenderer("dse_list", "dse", "list", compactOptions);
   const renderResult = createMcpToolResultRenderer(compactOptions);
   const context = (id) => ({ isError: false, state: {}, toolCallId: id, invalidate() {} });
+  const callRow = (id, ctx = context(id)) => renderCall({}, plainTheme, ctx).render(200).map((line) => line.trimEnd()).join("\n");
   const first = context("mcp-1");
   const second = context("mcp-2");
   calls.tool_execution_start({ toolCallId: "mcp-1", toolName: "dse_list", args: {} }, {});
+  assert.equal(callRow("mcp-1"), "", "a call that has not started executing draws nothing");
+  calls.tool_call({ toolCallId: "mcp-1", toolName: "dse_list", input: {} }, {});
+  assert.match(callRow("mcp-1", first), /^(● |  )Calling dse…$/, "a running MCP call is Claude's active group, \"Calling dse…\" behind the blinking dot");
+  assert.equal(runResult(renderResult, makeResult(undefined), { isPartial: true, expanded: false }, first), "", "the partial result draws nothing; the call row carries the group");
   calls.tool_execution_end({ toolCallId: "mcp-1" }, {});
-  assert.equal(runResult(renderResult, makeResult("a", { mode: "call", server: "dse", tool: "list" }), { isPartial: false, expanded: false }, first), "  Called dse");
+  calls.agent_end({}, {});
+  assert.equal(callRow("mcp-1", first), "  Called dse");
+  assert.equal(runResult(renderResult, makeResult("a", { mode: "call", server: "dse", tool: "list" }), { isPartial: false, expanded: false }, first), "");
+  calls.agent_start({}, {});
   calls.tool_execution_start({ toolCallId: "mcp-2", toolName: "dse_get", args: {} }, {});
+  calls.tool_call({ toolCallId: "mcp-2", toolName: "dse_get", input: {} }, {});
   calls.tool_execution_end({ toolCallId: "mcp-2" }, {});
-  const merged = runResult(renderResult, makeResult("b", { mode: "call", server: "dse", tool: "get" }), { isPartial: false, expanded: false }, second);
+  runResult(renderResult, makeResult("b", { mode: "call", server: "dse", tool: "get" }), { isPartial: false, expanded: false }, second);
+  calls.agent_end({}, {});
+  assert.equal(callRow("mcp-2", second), "  Called dse", "a new prompt starts a new group");
+  calls.agent_start({}, {});
+  calls.tool_execution_start({ toolCallId: "mcp-3", toolName: "dse_get", args: {} }, {});
+  calls.tool_call({ toolCallId: "mcp-3", toolName: "dse_get", input: {} }, {});
+  calls.tool_execution_end({ toolCallId: "mcp-3" }, {});
+  calls.tool_execution_start({ toolCallId: "mcp-4", toolName: "dse_write", args: {} }, {});
+  calls.tool_call({ toolCallId: "mcp-4", toolName: "dse_write", input: {} }, {});
+  calls.tool_execution_end({ toolCallId: "mcp-4", isError: true }, {});
+  calls.agent_end({}, {});
+  const failed = { ...context("mcp-4"), isError: true };
+  assert.equal(callRow("mcp-3"), "", "an earlier member of a group draws nothing");
+  const merged = callRow("mcp-4", failed);
   assert.equal(merged, "  Called dse 2 times");
-  const hidden = renderResult(makeResult("a", { mode: "call", server: "dse", tool: "list" }), { isPartial: false, expanded: false }, plainTheme, first).render(200);
-  assert.deepEqual(hidden, []);
-  const own = runResult(renderResult, makeResult("a", { mode: "call", server: "dse", tool: "list" }), { isPartial: false, expanded: true }, first);
-  assert.match(own, /^● /);
-  calls.tool_execution_start({ toolCallId: "mcp-3", toolName: "dse_write", args: {} }, {});
-  calls.tool_execution_end({ toolCallId: "mcp-3", isError: true }, {});
-  const failed = { ...context("mcp-3"), isError: true };
-  assert.equal(runResult(renderResult, makeResult("Error: boom", { mode: "call", server: "dse", tool: "write", error: "boom" }), { isPartial: false, expanded: false }, failed), "  Called dse 3 times");
+  assert.equal(renderCall({}, plainTheme, { ...failed, expanded: true }).render(200).length, 0, "ctrl+o hides the group row");
   assert.match(runResult(renderResult, makeResult("Error: boom", { mode: "call", server: "dse", tool: "write", error: "boom" }), { isPartial: false, expanded: true }, failed), /Error: boom/);
   console.log("PASS: a failed call inside the group folds into it like Claude 2.1.280; ctrl+o still shows the error");
   console.log("PASS: grouped MCP calls ->", JSON.stringify(merged), "(first row hidden, ctrl+o restores it)");
+}
+
+{
+  const { readFileSync } = await import("node:fs");
+  const packageFile = (name: string) => readFileSync(path.join(here, "../npm/node_modules/pi-mcp-adapter", name), "utf8");
+  assert.match(packageFile("init.ts"), /connectedCount > 0 && config\.settings\?\.notifyOnStartupConnect === true\)/);
+  assert.match(packageFile("index.ts"), /changed > 0 && ctx\?\.hasUI && config\.settings\?\.notifyOnStartupConnect === true\)/);
+  console.log("PASS: connecting and refreshing MCP servers is silent by default, like Claude 2.1.280 (only failures notify)");
 }
 
 console.log("\nAll selftest assertions passed.");

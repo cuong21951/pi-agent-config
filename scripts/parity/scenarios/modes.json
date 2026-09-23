@@ -1,0 +1,56 @@
+{
+ "prompt": "",
+ "steps": [
+  {
+   "snap": "mode0"
+  },
+  {
+   "keys": "\u001b[Z"
+  },
+  {
+   "sleep": 1.2
+  },
+  {
+   "snap": "mode1"
+  },
+  {
+   "keys": "\u001b[Z"
+  },
+  {
+   "sleep": 1.2
+  },
+  {
+   "snap": "mode2"
+  },
+  {
+   "keys": "\u001b[Z"
+  },
+  {
+   "sleep": 1.2
+  },
+  {
+   "snap": "mode3"
+  },
+  {
+   "keys": "\u001b[Z"
+  },
+  {
+   "sleep": 1.2
+  },
+  {
+   "snap": "mode4"
+  },
+  {
+   "keys": "\u001b[Z"
+  },
+  {
+   "sleep": 1.2
+  },
+  {
+   "snap": "mode5"
+  }
+ ],
+ "end": ".",
+ "pi_model": "github-copilot/claude-sonnet-5",
+ "claude_model": "sonnet"
+}

@@ -19,6 +19,7 @@ const mod = await jiti.import(path.join(here, "../npm/node_modules/pi-deepseek-s
 const { cleanAnswer, searchSummary, default: extension } = mod;
 
 const plainTheme = { fg: (_r, t) => t, bold: (t) => t };
+const taggedTheme = { fg: (role, t) => `<${role}>${t}</${role}>`, bold: (t) => `<b>${t}</b>` };
 
 async function captureTool() {
   let handler;
@@ -59,6 +60,11 @@ assert.equal(tool.renderShell, "self");
   assert.equal(row, '● Web Search("...")');
   console.log("PASS: missing query ->", JSON.stringify(row));
 }
+{
+  const row = render(tool.renderCall({ query: "x" }, taggedTheme));
+  assert.equal(row, '<borderAccent>● </borderAccent><b>Web Search</b>("x")');
+  console.log("PASS: call line colours ->", JSON.stringify(row));
+}
 
 // --- result rows ---
 const answer = "Line one\nLine two\n\nLinks:\n1. [t](u)\n\nREMINDER: cite them";
@@ -67,47 +73,59 @@ const view = (expanded = false, isPartial = false) => ({ expanded, isPartial });
 
 {
   const row = render(tool.renderResult(result(answer, { sources: [1, 2], durationMs: 3400 }), view(), plainTheme));
-  assert.equal(row, "  ⎿  Did 1 search in 3s (2 sources) (ctrl+o to expand)");
+  assert.equal(row, "  ⎿ \u00a0Did 1 search in 3s");
   console.log("PASS: collapsed ->", JSON.stringify(row));
 }
 {
   const row = render(tool.renderResult(result(answer, { sources: [1], durationMs: 900 }), view(), plainTheme));
-  assert.equal(row, "  ⎿  Did 1 search in 1s (1 source) (ctrl+o to expand)");
-  console.log("PASS: singular and sub-second ->", JSON.stringify(row));
+  assert.equal(row, "  ⎿ \u00a0Did 1 search in 900ms");
+  console.log("PASS: sub-second uses ms ->", JSON.stringify(row));
 }
 {
   const row = render(tool.renderResult(result("body", undefined), view(), plainTheme));
-  assert.equal(row, "  ⎿  Did 1 search (ctrl+o to expand)");
+  assert.equal(row, "  ⎿ \u00a0Did 1 search");
   console.log("PASS: no details ->", JSON.stringify(row));
+}
+{
+  const row = render(tool.renderResult(result(answer, { durationMs: 3400 }), view(), taggedTheme));
+  assert.equal(row, "<muted>  ⎿ \u00a0</muted>Did 1 search in 3s");
+  console.log("PASS: finished row colours ->", JSON.stringify(row));
 }
 {
   const row = render(tool.renderResult(result(answer, { sources: [], durationMs: 2000 }), view(true), plainTheme));
   assert.equal(
     row,
-    "  ⎿  Did 1 search in 2s\n    Line one\n    Line two\n\n    Links:\n    1. [t](u)",
+    "  ⎿ \u00a0Did 1 search in 2s\n    Line one\n    Line two\n\n    Links:\n    1. [t](u)",
   );
   console.log("PASS: expanded body indented ->", JSON.stringify(row));
 }
 {
   const row = render(tool.renderResult(result("Search failed: DeepSeek API 401\nmore", undefined, true), view(), plainTheme));
-  assert.equal(row, "  ⎿  Search failed: DeepSeek API 401");
+  assert.equal(row, "  ⎿ \u00a0Search failed: DeepSeek API 401");
   console.log("PASS: error first line ->", JSON.stringify(row));
 }
 {
   const row = render(tool.renderResult(result("Found 10 results…", undefined), view(false, true), plainTheme));
-  assert.equal(row, "  ⎿  Found 10 results…");
+  assert.equal(row, "  ⎿ \u00a0Found 10 results…");
   console.log("PASS: partial progress ->", JSON.stringify(row));
 }
 {
   const row = render(tool.renderResult(result("", undefined), view(false, true), plainTheme));
-  assert.equal(row, "  ⎿  …");
+  assert.equal(row, "  ⎿ \u00a0…");
   console.log("PASS: empty partial ->", JSON.stringify(row));
+}
+{
+  const row = render(tool.renderResult(result("Searching…", undefined), view(false, true), taggedTheme));
+  assert.equal(row, "<muted>  ⎿ \u00a0</muted><muted>Searching…</muted>");
+  console.log("PASS: running row colours ->", JSON.stringify(row));
 }
 
 // --- pure helpers ---
 assert.equal(cleanAnswer("a\n\nREMINDER: x"), "a");
 assert.equal(cleanAnswer('a<invoke name="x">b'), "ab");
-assert.equal(searchSummary({ durationMs: 12_000 }, 0), "Did 1 search in 12s");
+assert.equal(searchSummary(12), "Did 1 search in 12s");
+assert.equal(searchSummary(0.5), "Did 1 search in 500ms");
+assert.equal(searchSummary(undefined), "Did 1 search");
 console.log("PASS: helpers");
 
 console.log("\nAll pi-deepseek-search render checks passed.");

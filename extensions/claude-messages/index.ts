@@ -1,8 +1,13 @@
 import { AssistantMessageComponent, type ExtensionAPI, UserMessageComponent } from "@earendil-works/pi-coding-agent";
-import { patchGutters, setPaint } from "./gutter.ts";
+import { patchGutters, setAwaiting, setPaint } from "./gutter.ts";
 
 export default function (pi: ExtensionAPI) {
 	patchGutters(UserMessageComponent.prototype, AssistantMessageComponent.prototype);
+	pi.on("message_start", (event) => {
+		if (event.message.role === "user") setAwaiting(true);
+	});
+	pi.on("message_update", () => setAwaiting(false));
+	pi.on("agent_settled", () => setAwaiting(false));
 	pi.on("session_start", (_event, ctx) => {
 		if (!ctx.hasUI) return;
 		// ponytail: Claude shows nothing where a hidden thinking block was; an empty label drops the line.

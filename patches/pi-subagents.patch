@@ -42,7 +42,63 @@
          const total = formatCost(all.reduce((sum, a) => sum + (a.totalCost ?? 0), 0));
          if (total) {
            const tokens = all.reduce((sum, a) => sum + a.totalTokens, 0);
-@@ -1648,25 +1658,20 @@
+@@ -564,6 +574,26 @@
+     };
+   }
+ 
++  const TASKS_HINT_STATUS = "tasks-hint";
++  const TASKS_HINT_LINGER_MS = 30000;
++  const tasksHintHolders = new Set<string>();
++  function updateTasksHintStatus() {
++    const ctx = currentCtx;
++    if (!ctx?.hasUI) return;
++    let theme;
++    try { theme = ctx.ui.theme; } catch { return; }
++    if (!theme?.fg) return;
++    ctx.ui.setStatus(TASKS_HINT_STATUS, tasksHintHolders.size > 0 ? theme.fg("muted", "/tasks to see subagents") : undefined);
++  }
++  function markTasksHint(id: string) {
++    tasksHintHolders.add(id);
++    updateTasksHintStatus();
++    setTimeout(() => {
++      tasksHintHolders.delete(id);
++      updateTasksHintStatus();
++    }, TASKS_HINT_LINGER_MS);
++  }
++
+   // Background completion: route through group join or send individual nudge
+   const manager = new AgentManager((record) => {
+     // Owned children — nested, or a workflow's — report only through their
+@@ -574,6 +604,7 @@
+ 
+     // Emit lifecycle event based on terminal status
+     const isError = record.status === "error" || record.status === "stopped" || record.status === "aborted";
++    if (!isError && record.isBackground) markTasksHint(record.id);
+     const eventData = buildEventData(record);
+     if (isError) {
+       pi.events.emit("subagents:failed", eventData);
+@@ -735,6 +766,10 @@
+     return resolved?.kind === "live" ? resolved.record : undefined;
+   };
+ 
++  function backgroundRunningCount(): number {
++    return manager.listAgents().filter(r => isTopLevelAgent(r) && r.isBackground === true && (r.status === "running" || r.status === "queued")).length;
++  }
++
+   const registryEntry = {
+     waitForAll: () => manager.waitForAll(),
+     hasRunning: () => manager.hasRunning(),
+@@ -743,6 +778,9 @@
+       const record = manager.getRecord(id);
+       return record !== undefined && isTopLevelAgent(record) ? record : undefined;
+     },
++    backgroundRunningCount,
++    fleetLines: (width: number, theme: Theme) => fleet.lines(width, theme),
++    fleetHint: (theme: Theme) => fleet.hint(theme),
+   };
+   const ownsManagerRegistry = (globalThis as any)[MANAGER_KEY] === undefined;
+   if (ownsManagerRegistry) {
+@@ -1648,25 +1686,19 @@
  
      // ---- Custom rendering: Claude Code style ----
  
@@ -64,7 +120,7 @@
 -        : "";
        const desc = args.description ?? "";
        const name = renderAgentName(args.subagent_type, theme, {
-         fallbackColor: "toolTitle",
+-        fallbackColor: "toolTitle",
 -        restoreBackground: rowBackground,
 +        restoreBackground: "",
          bold: true,
@@ -76,16 +132,16 @@
      },
  
      renderResult(result, { expanded, isPartial }, theme, renderContext) {
-@@ -1705,7 +1710,7 @@
+@@ -1705,7 +1737,7 @@
  
        // ---- Background agent launched ----
        if (details.status === "background") {
 -        return new Text(theme.fg("dim", `  ⎿  Running in background (ID: ${details.agentId})`), 0, 0);
-+        return new Text(theme.fg("muted", "  ⎿  ") + "Backgrounded agent" + theme.fg("muted", " (↓ to manage · ctrl+o to expand)"), 0, 0);
++        return new Text(theme.fg("muted", "  ⎿ \u00a0") + "Backgrounded agent" + theme.fg("muted", " (↓ to manage · ctrl+o to expand)"), 0, 0);
        }
  
        // ---- Completed / Steered ----
-@@ -1832,6 +1837,9 @@
+@@ -1832,6 +1864,9 @@
        });
        if (scopeVerdict.kind === "error") return textResult(scopeVerdict.message);
        if (scopeVerdict.kind === "warn") ctx.ui.notify(scopeVerdict.message, "warning");
@@ -95,7 +151,7 @@
  
        const thinking = resolvedConfig.thinking;
        const inheritContext = resolvedConfig.inheritContext;
-@@ -2458,6 +2466,8 @@
+@@ -2458,6 +2493,8 @@
        ),
      }),
  
@@ -104,3 +160,373 @@
      renderCall(args, theme) {
        return new Text(
          `${theme.fg("toolTitle", "▸ ")}${theme.bold(theme.fg("toolTitle", "SubagentWorkflow"))}  ${theme.fg("muted", workflowCallName(args))}`,
+--- a/src/ui/fleet-list.ts
++++ b/src/ui/fleet-list.ts
+@@ -12,11 +12,9 @@
+  */
+ 
+ import { Editor, isKeyRelease, Key, matchesKey, truncateToWidth, visibleWidth } from "@earendil-works/pi-tui";
+-import { hasAgentBadge, renderAgentName } from "../agent-color.js";
+ import { type AgentManager, isTopLevelAgent } from "../agent-manager.js";
+ import type { AgentRecord, ViewerMarkdownMode } from "../types.js";
+-import { getLifetimeCost, getLifetimeTotal } from "../usage.js";
+-import { type AgentActivity, formatCost, type Theme } from "./agent-widget.js";
++import type { AgentActivity, Theme } from "./agent-widget.js";
+ import { ConversationViewer, VIEWPORT_HEIGHT_PCT } from "./conversation-viewer.js";
+ 
+ /** Widget key for the below-editor fleet list. */
+@@ -24,9 +22,15 @@
+ /** Max agent rows shown at once; extras collapse into a "↓ N more" indicator. */
+ const MAX_AGENT_ROWS = 5;
+ /** Re-render cadence so elapsed/token stats tick while agents run. */
+-const TICK_MS = 200;
+-/** How long a finished agent lingers in the list before it drops out. */
+-const FINISHED_LINGER_MS = 4000;
++const TICK_MS = 1000;
++const WORKFLOW_LINGER_MS = 4000;
++const FAILED_LINGER_MS = 30000;
++const FAILED_STATUSES = new Set<AgentRecord["status"]>(["error", "aborted", "stopped"]);
++const LABEL_MIN = 4;
++const LABEL_MAX = 28;
++const BULLET_COLUMNS = 4;
++const RIGHT_PADDING = 2;
++const COMPACT = new Intl.NumberFormat("en-US", { notation: "compact", maximumFractionDigits: 1, minimumFractionDigits: 1 });
+ 
+ /** Minimal UI surface the FleetView needs from `ctx.ui` (structural subset). */
+ export type FleetUICtx = {
+@@ -69,31 +73,87 @@
+ type WorkflowEntry = { kind: "workflow"; workflow: FleetWorkflow };
+ type FleetEntry = MainEntry | WorkflowEntry | AgentEntry;
+ 
+-/** `11s` — integer seconds, no decimal/suffix (matches Claude Code, unlike formatMs). */
+ export function formatFleetElapsed(ms: number): string {
+-  return `${Math.max(0, Math.round(ms / 1000))}s`;
++  if (ms < 60000) return `${Math.floor(ms / 1000)}s`;
++  const total = Math.round(ms / 1000);
++  const [days, hours, minutes, seconds] = [Math.floor(total / 86400), Math.floor((total % 86400) / 3600), Math.floor((total % 3600) / 60), total % 60];
++  if (days > 0) return `${days}d ${hours}h ${minutes}m`;
++  if (hours > 0) return `${hours}h ${minutes}m ${seconds}s`;
++  return `${minutes}m ${seconds}s`;
+ }
+ 
+ /** `↓ 13.1k tokens` — down-arrow prefix, compact magnitude, plural "tokens". */
+-export function formatFleetTokens(count: number): string {
+-  let compact: string;
+-  if (count >= 1_000_000) compact = `${(count / 1_000_000).toFixed(1)}M`;
+-  else if (count >= 1_000) compact = `${(count / 1_000).toFixed(1)}k`;
+-  else compact = `${count}`;
+-  return `↓ ${compact} tokens`;
++export function formatFleetTokens(count: number, arrow = "↓"): string {
++  return `${arrow} ${count >= 1000 ? COMPACT.format(count).toLowerCase() : count} tokens`;
+ }
+ 
+-/**
+- * Place `right` flush to `width`, truncating `left` first so the stats survive.
+- * The final clamp guarantees the line never exceeds `width` (which would wrap and
+- * desync pi's line-diff → flicker) even on a terminal too narrow for the stats.
+- */
+-function rightAlign(left: string, right: string, width: number): string {
+-  const rightW = visibleWidth(right);
+-  const maxLeft = Math.max(0, width - rightW - 1);
+-  const leftClamped = truncateToWidth(left, maxLeft);
+-  const gap = Math.max(1, width - visibleWidth(leftClamped) - rightW);
+-  return truncateToWidth(leftClamped + " ".repeat(gap) + right, width);
++export function cleanFleetText(text: string): string {
++  return text.replace(/[\x00-\x08\x0E-\x1F\x7F-\x9F]/g, "").replace(/\s+/g, " ").trim();
++}
++
++export type FleetRow = {
++  selected: boolean;
++  viewed: boolean;
++  bulletRole?: string;
++  name: string;
++  named: boolean;
++  description: string;
++  status: string;
++};
++
++export function fleetRowLine(row: FleetRow, labelWidth: number, statusWidth: number, width: number, theme: Theme): string {
++  const plain = !row.selected && !row.viewed;
++  const tone = (text: string, dim: boolean) => (row.viewed ? theme.bold(text) : dim ? theme.fg("muted", text) : text);
++  const bullet = `${row.viewed ? "●" : "◯"} `;
++  const name = truncateToWidth(row.name, labelWidth, "…");
++  const descriptionBox = Math.max(0, width - RIGHT_PADDING - BULLET_COLUMNS - labelWidth - 1 - statusWidth);
++  const description = truncateToWidth(row.description, Math.max(0, descriptionBox - 2), "…");
++  return [
++    tone(row.selected ? "❯ " : "  ", plain),
++    row.bulletRole ? tone(theme.fg(row.bulletRole, bullet), false) : tone(bullet, plain),
++    tone(name, plain && !row.named),
++    " ".repeat(labelWidth - visibleWidth(name) + Math.min(2, descriptionBox)),
++    tone(description, plain),
++    " ".repeat(Math.max(0, descriptionBox - 2 - visibleWidth(description)) + 1 + statusWidth - visibleWidth(row.status)),
++    tone(row.status, plain),
++  ].join("");
++}
++
++export function fleetMainLine(selected: boolean, viewed: boolean, moreAbove: number, width: number, theme: Theme): string {
++  const text = `${selected ? "❯ " : "  "}${viewed ? "●" : "◯"} main`;
++  const left = viewed ? theme.bold(text) : selected ? text : theme.fg("muted", text);
++  if (moreAbove === 0) return left;
++  const more = `↑ ${moreAbove} more`;
++  return left + " ".repeat(Math.max(1, width - RIGHT_PADDING - visibleWidth(text) - visibleWidth(more))) + theme.fg("muted", more);
++}
++
++export function fleetWindow(focus: number, count: number, size = MAX_AGENT_ROWS): { start: number; end: number } {
++  const start = Math.min(Math.max(0, focus - size + 1), Math.max(0, count - size));
++  return { start, end: Math.min(start + size, count) };
++}
++
++function isLive(record: AgentRecord): boolean {
++  return record.status === "running" || record.status === "queued";
++}
++
++function contextTokens(record: AgentRecord): number {
++  const last = record.session?.messages.findLast(message => message.role === "assistant");
++  const usage = last?.role === "assistant" ? last.usage : undefined;
++  return usage ? usage.input + usage.cacheRead + usage.cacheWrite : 0;
++}
++
++function workflowRow(run: FleetWorkflow, selected: boolean, now: number): FleetRow {
++  const status = [`${run.doneCount}/${run.totalCount} agents done`, formatFleetElapsed(Math.max(0, (run.completedAt ?? now) - run.startedAt))];
++  if (run.tokens > 0) status.push(formatFleetTokens(run.tokens));
++  return {
++    selected,
++    viewed: false,
++    bulletRole: run.status === "completed" ? "borderAccent" : run.status === "failed" || run.status === "killed" ? "error" : run.status === "paused" ? "warning" : undefined,
++    name: cleanFleetText(run.name),
++    named: false,
++    description: "",
++    status: status.join(" · "),
++  };
+ }
+ 
+ export class FleetList {
+@@ -122,6 +182,7 @@
+    * minus the close handle, because that overlay belongs to the extension.
+    */
+   private viewingWorkflowId: string | undefined;
++  private dismissed = new Set<string>();
+ 
+   constructor(
+     private manager: AgentManager,
+@@ -206,6 +267,7 @@
+ 
+     if (!hasRows) {
+       if (this.widgetRegistered) {
++        this.tui?.requestRender();
+         this.ui.setWidget(FLEET_KEY, undefined);
+         this.widgetRegistered = false;
+         this.tui = undefined;
+@@ -220,10 +282,10 @@
+     this.ensureTimer(); // keep stats ticking whenever the list is shown (e.g. after a re-enable)
+ 
+     if (!this.widgetRegistered) {
+-      this.ui.setWidget(FLEET_KEY, (tui, theme) => {
++      this.ui.setWidget(FLEET_KEY, (tui) => {
+         this.tui = tui;
+         return {
+-          render: (w: number) => this.renderBar(w, theme),
++          render: () => [],
+           invalidate: () => { this.widgetRegistered = false; this.tui = undefined; },
+         };
+       }, { placement: "belowEditor" });
+@@ -235,21 +297,13 @@
+ 
+   // ---- Roster ----
+ 
+-  /**
+-   * Agents shown in the list, ordered earliest-launched first so the ones you
+-   * started sooner sit at the top. Every row is openable (has a session), so Enter
+-   * never dead-ends. Included: running/queued, plus the agent currently being
+-   * viewed, plus recently-finished ones (they linger briefly before dropping out).
+-   * Pending agents with no session yet are hidden until they start.
+-   * (`listAgents()` is newest-first, so we re-sort.)
+-   */
+   private agentRecords(): AgentRecord[] {
+     const now = Date.now();
+     return this.manager.listAgents()
+-      .filter(a => isTopLevelAgent(a) && a.session && (
+-        a.status === "running" || a.status === "queued"
++      .filter(a => isTopLevelAgent(a) && !this.dismissed.has(a.id) && (
++        isLive(a)
+         || a.id === this.viewingAgentId
+-        || (a.completedAt != null && now - a.completedAt < FINISHED_LINGER_MS)
++        || (a.isBackground !== false && FAILED_STATUSES.has(a.status) && a.completedAt != null && now - a.completedAt < FAILED_LINGER_MS)
+       ))
+       .sort((a, b) => a.startedAt - b.startedAt);
+   }
+@@ -278,21 +332,16 @@
+       .filter(run =>
+         run.status === "running"
+         || run.status === "paused"
+-        || (run.completedAt != null && now - run.completedAt < FINISHED_LINGER_MS)
++        || (run.completedAt != null && now - run.completedAt < WORKFLOW_LINGER_MS)
+       )
+       .sort((a, b) => a.startedAt - b.startedAt);
+   }
+ 
+-  /**
+-   * Runs sit above the agents rather than interleaved by start time: a run owns
+-   * most of the agents under it, so listing the container first is what makes
+-   * the list read as a hierarchy rather than a shuffle.
+-   */
+   private roster(): FleetEntry[] {
+     return [
+       { kind: "main" },
+-      ...this.workflows().map(workflow => ({ kind: "workflow" as const, workflow })),
+       ...this.agentRecords().map(record => ({ kind: "agent" as const, record })),
++      ...this.workflows().map(workflow => ({ kind: "workflow" as const, workflow })),
+     ];
+   }
+ 
+@@ -354,6 +403,7 @@
+     }
+     if (matchesKey(data, "escape")) { this.deactivate(); return { consume: true }; }
+     if (matchesKey(data, Key.enter)) { this.openSelected(); return { consume: true }; }
++    if (matchesKey(data, "x")) { this.closeSelected(); return { consume: true }; }
+ 
+     // Any other key cancels navigation and flows to the editor.
+     this.deactivate();
+@@ -457,87 +507,65 @@
+ 
+   // ---- Rendering ----
+ 
+-  private renderBar(width: number, theme: Theme): string[] {
+-    const rows = this.roster().slice(1) as (WorkflowEntry | AgentEntry)[];
+-    if (rows.length === 0) return [];
+-    // Clamp locally so a render between a roster shrink and the next update()
+-    // (e.g. on terminal resize) never loses the selection marker.
+-    const sel = Math.min(this.selectedIndex, rows.length);
+-
+-    const hint = this.active
+-      ? "↑↓ select · enter view · esc back"
+-      : "esc to interrupt · ← for agents · ↓ to manage";
+-    const lines: string[] = [];
+-    lines.push(truncateToWidth("  " + theme.fg("dim", hint), width));
+-    lines.push("");
+-    lines.push(truncateToWidth(`  ${this.bullet(0, sel, theme)} main`, width));
+-
+-    // Window the rows so the selected one stays visible.
+-    const visible = Math.min(MAX_AGENT_ROWS, rows.length);
+-    const selRow = Math.max(0, sel - 1);
+-    const start = selRow < visible ? 0 : selRow - visible + 1;
+-    const hiddenBelow = rows.length - (start + visible);
+-
+-    if (start > 0) lines.push(rightAlign("", theme.fg("dim", `↑ ${start} more`), width));
+-    for (let a = start; a < start + visible; a++) {
+-      const row = rows[a];
+-      lines.push(
+-        row.kind === "workflow" ?
+-          this.renderWorkflowRow(a + 1, sel, row.workflow, width, theme)
+-        : this.renderAgentRow(a + 1, sel, row.record, width, theme),
+-      );
+-    }
+-    if (hiddenBelow > 0) lines.push(rightAlign("", theme.fg("dim", `↓ ${hiddenBelow} more`), width));
++  lines(width: number, theme: Theme): string[] {
++    if (!this.enabled) return [];
++    const roster = this.roster();
++    if (roster.length === 1) return [];
++    const now = Date.now();
++    const selected = this.active ? this.selectedIndex : -1;
++    const agents = roster.flatMap(entry => (entry.kind === "agent" ? [entry.record] : []));
++    const workflowRows = roster
++      .flatMap(entry => (entry.kind === "workflow" ? [entry.workflow] : []))
++      .map((run, i) => workflowRow(run, selected === agents.length + 1 + i, now));
++    const agentRows = agents.map((record, i) => this.agentRow(record, selected === i + 1, now));
++    const rows = [...agentRows, ...workflowRows];
++    const labelWidth = Math.min(LABEL_MAX, Math.max(LABEL_MIN, ...rows.map(row => visibleWidth(row.name))));
++    const statusWidth = Math.max(0, ...rows.map(row => visibleWidth(row.status)));
++    const focus = selected >= 1 && selected <= agents.length ? selected - 1 : agents.findIndex(record => record.id === this.viewingAgentId);
++    const { start, end } = fleetWindow(Math.max(0, focus), agents.length);
++    const below = agents.length > MAX_AGENT_ROWS ? [end < agents.length ? theme.fg("muted", `  ↓ ${agents.length - end} more`) : ""] : [];
++    return [
++      "",
++      fleetMainLine(selected === 0, this.viewingAgentId === undefined, start, width, theme),
++      ...agentRows.slice(start, end).map(row => fleetRowLine(row, labelWidth, statusWidth, width, theme)),
++      ...below,
++      ...workflowRows.map(row => fleetRowLine(row, labelWidth, statusWidth, width, theme)),
++    ].map(line => truncateToWidth(line, width));
++  }
+ 
+-    return lines;
++  hint(theme: Theme): string | undefined {
++    if (!this.enabled || !this.active) return undefined;
++    const entry = this.roster()[this.selectedIndex];
++    if (entry?.kind === "agent") return theme.fg("muted", `Enter to view · x to ${isLive(entry.record) ? "stop" : "clear"}`);
++    if (entry?.kind === "workflow") return theme.fg("muted", "Enter to view");
++    return theme.fg("muted", "↑/↓ to select · Enter to view");
+   }
+ 
+-  private bullet(rosterIndex: number, sel: number, theme: Theme): string {
+-    return rosterIndex === sel ? theme.fg("accent", "●") : theme.fg("dim", "○");
++  private closeSelected(): void {
++    const entry = this.roster()[this.selectedIndex];
++    if (entry?.kind !== "agent") return;
++    if (isLive(entry.record)) {
++      this.manager.abort(entry.record.id);
++    } else {
++      this.dismissed.add(entry.record.id);
++      this.selectedIndex = Math.max(0, this.selectedIndex - 1);
++    }
++    this.update();
+   }
+ 
+-  /**
+-   * A run's row. Shaped like an agent's — bullet, kind, name, stats flush right
+-   * — so the two read as one list, with the agent count where an agent has its
+-   * description and the same elapsed/token tail.
+-   */
+-  private renderWorkflowRow(
+-    rosterIndex: number,
+-    sel: number,
+-    workflow: FleetWorkflow,
+-    width: number,
+-    theme: Theme,
+-  ): string {
+-    const selected = rosterIndex === sel;
+-    const kind = theme.fg(selected ? "text" : "muted", "workflow");
+-    const name = selected ? theme.fg("text", workflow.name) : workflow.name;
+-    const left = `  ${this.bullet(rosterIndex, sel, theme)} ${kind}  ${name}`;
+-    // Frozen once the run settles, exactly as an agent's clock is.
+-    const elapsed = (workflow.completedAt ?? Date.now()) - workflow.startedAt;
+-    const agents = `${workflow.doneCount}/${workflow.totalCount} agent${workflow.totalCount === 1 ? "" : "s"}`;
+-    const stats = `${agents} · ${formatFleetElapsed(elapsed)} · ${formatFleetTokens(workflow.tokens)}`;
+-    return rightAlign(left, selected ? theme.fg("text", stats) : theme.fg("dim", stats), width);
+-  }
+-
+-  private renderAgentRow(rosterIndex: number, sel: number, record: AgentRecord, width: number, theme: Theme): string {
+-    // The selected row renders in the theme's primary text color so it reads as
+-    // one selection (#230). A configured badge survives — Claude Code's FleetView
+-    // keeps the agent color on the selected row too and only bolds it — which also
+-    // keeps the row's width fixed as the selection moves.
+-    const selected = rosterIndex === sel;
+-    const name = renderAgentName(record.type, theme, selected
+-      ? { fallbackColor: "text", bold: hasAgentBadge(record.type) }
+-      : { fallbackColor: "muted" });
+-    const description = selected ? theme.fg("text", record.description) : record.description;
+-    const left = `  ${this.bullet(rosterIndex, sel, theme)} ${name}  ${description}`;
+-    // The record, not the activity tracker — see the note in AgentWidget's
+-    // running line: only the record carries a nested child's spend, and only it
+-    // outlives the agent.
+-    const tokens = getLifetimeTotal(record.lifetimeUsage);
+-    const elapsedMs = (record.completedAt ?? Date.now()) - record.startedAt; // freezes once finished
+-    const cost = this.showCost() ? formatCost(getLifetimeCost(record.lifetimeUsage)) : "";
+-    const stats = `${formatFleetElapsed(elapsedMs)} · ${formatFleetTokens(tokens)}${cost ? ` · ${cost}` : ""}`;
+-    const right = selected ? theme.fg("text", stats) : theme.fg("dim", stats);
+-    return rightAlign(left, right, width);
++  private agentRow(record: AgentRecord, selected: boolean, now: number): FleetRow {
++    const live = isLive(record);
++    const elapsed = formatFleetElapsed(Math.max(0, (live ? now : record.completedAt ?? record.startedAt) - record.startedAt));
++    const tokens = contextTokens(record) + record.lifetimeUsage.output;
++    const acting = record.toolUses > 0 || (this.agentActivity.get(record.id)?.activeTools.size ?? 0) > 0;
++    return {
++      selected,
++      viewed: record.id === this.viewingAgentId,
++      bulletRole: live ? undefined : FAILED_STATUSES.has(record.status) ? "error" : "borderAccent",
++      name: cleanFleetText(record.alias ?? record.type),
++      named: record.alias !== undefined,
++      description: cleanFleetText(record.description),
++      status: tokens > 0 ? `${elapsed} · ${formatFleetTokens(tokens, acting ? "↓" : "↑")}` : elapsed,
++    };
+   }
+ }

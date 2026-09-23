@@ -1,0 +1,12 @@
+{
+ "prompt": "Do not use any tool. Write exactly three paragraphs about lighthouses, separated by blank lines. Each paragraph has four long sentences.",
+ "steps": [
+  {"until": "· thinking\\)", "timeout": 90},
+  {"snap": "thinking"},
+  {"until": "(?m)^● Thinking for \\d+s…", "timeout": 90},
+  {"snap": "thought"},
+  {"until": "(?ms)^● (?!Ponytail|agents-md|Thinking|Thought)[A-Z].*^✻ \\S+ for [^\\n]*· done", "timeout": 90},
+  {"snap": "first-text"}
+ ],
+ "end": "✻ \\S+ for [^\\n]*· done"
+}

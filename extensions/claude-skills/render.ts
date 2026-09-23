@@ -18,7 +18,7 @@ export interface ResultState {
 }
 
 export function resultLine(state: ResultState, s: Style): string {
-	const elbow = s.fg("muted", "  ⎿  ");
+	const elbow = s.fg("muted", "  ⎿ \u00a0");
 	if (state.isPartial) return elbow + s.fg("dim", "…");
 	if (state.isError) {
 		const [first] = state.text.split("\n");
@@ -47,10 +47,10 @@ if (process.env.CLAUDE_SKILLS_SELFTEST) {
 	check(callLine("ticket-resolve", plain) === "● Skill(ticket-resolve)", "call line");
 	check(callLine("pr", tagged) === "<borderAccent>● </borderAccent><b>Skill</b>(pr)", "blue tool dot, bold label, plain name — Claude 2.1.280");
 	check(callLine(undefined, plain) === "● Skill(?)", "missing name");
-	check(resultLine({ text: "x", isError: false, expanded: false, isPartial: false }, tagged) === "<muted>  ⎿  </muted>Successfully loaded skill", "collapsed result: grey elbow, plain text");
-	check(resultLine({ text: "x", isError: false, expanded: false, isPartial: true }, plain) === "  ⎿  …", "partial result");
-	check(resultLine({ text: "nope\nrest", isError: true, expanded: false, isPartial: false }, plain) === "  ⎿  nope", "error first line under the elbow, no glyph");
-	check(resultLine({ text: "a\nb\n", isError: false, expanded: true, isPartial: false }, plain) === "  ⎿  Successfully loaded skill\n    a\n    b", "expanded shows content");
+	check(resultLine({ text: "x", isError: false, expanded: false, isPartial: false }, tagged) === "<muted>  ⎿ \u00a0</muted>Successfully loaded skill", "collapsed result: grey elbow, plain text");
+	check(resultLine({ text: "x", isError: false, expanded: false, isPartial: true }, plain) === "  ⎿ \u00a0…", "partial result");
+	check(resultLine({ text: "nope\nrest", isError: true, expanded: false, isPartial: false }, plain) === "  ⎿ \u00a0nope", "error first line under the elbow, no glyph");
+	check(resultLine({ text: "a\nb\n", isError: false, expanded: true, isPartial: false }, plain) === "  ⎿ \u00a0Successfully loaded skill\n    a\n    b", "expanded shows content");
 	check(unknownSkillMessage("x", ["a", "b"]) === "Unknown skill: x. Available skills: a, b", "unknown skill message");
 	check(unknownSkillMessage("x", []) === "Unknown skill: x. Available skills: none available", "no skills available");
 }

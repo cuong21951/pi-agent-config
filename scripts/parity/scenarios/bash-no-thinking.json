@@ -1,0 +1,29 @@
+{
+ "prompt": "Run exactly one shell command, with the description \"Run the build\": sleep 15 && echo built. Do not think before calling it and do not write any text before the tool call.",
+ "steps": [
+  {
+   "until": "(?m)^● Running the build · \\d+s *\\n +⎿ +\\$ sleep 15 && echo built \\([3-9]s\\)",
+   "timeout": 90
+  },
+  {
+   "snap": "running"
+  },
+  {
+   "until": "(?m)^● Running the build · \\d+s *\\n +⎿ +\\$ sleep 15 && echo built \\((?:[7-9]|1[0-2])s\\)",
+   "timeout": 20
+  },
+  {
+   "snap": "running-b"
+  },
+  {
+   "until": "✻ \\S+ for [^\\n]*· done",
+   "timeout": 30
+  },
+  {
+   "sleep": 1
+  },
+  {
+   "snap": "finished"
+  }
+ ]
+}

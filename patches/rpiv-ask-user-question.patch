@@ -10,7 +10,50 @@
  import {
  	MAX_OPTIONS,
  	MAX_QUESTIONS,
-@@ -300,6 +301,17 @@
+@@ -184,16 +185,33 @@
+  * `sessionRef`) and exposes its component. `editInput` keeps its two dynamic imports —
+  * they must stay lazy per-invocation.
+  */
++async function resolveExternalEditorLabel(ctx: ExtensionContext): Promise<string | undefined> {
++	try {
++		const [{ SettingsManager }, { resolveEditorDisplayName }] = await Promise.all([
++			import("@earendil-works/pi-coding-agent"),
++			import("./state/external-editor.js"),
++		]);
++		const editorCommand = SettingsManager.create(ctx.cwd, undefined, {
++			projectTrusted: ctx.isProjectTrusted(),
++		}).getExternalEditorCommand();
++		return editorCommand ? resolveEditorDisplayName(editorCommand) : undefined;
++	} catch {
++		return undefined;
++	}
++}
++
+ function makeSessionFactory(config: {
+ 	ctx: ExtensionContext;
+ 	typed: QuestionParams;
+ 	itemsByTab: WrappingSelectItem[][];
+ 	collapseKey: string;
++	externalEditorLabel: string | undefined;
+ 	canReopenWhileHidden: boolean;
+ 	sessionRef: SessionRef;
+ 	Session: SessionModule["QuestionnaireSession"];
+ }) {
+-	const { ctx, typed, itemsByTab, collapseKey, canReopenWhileHidden, sessionRef, Session } = config;
++	const { ctx, typed, itemsByTab, collapseKey, externalEditorLabel, canReopenWhileHidden, sessionRef, Session } =
++		config;
+ 	return (
+ 		tui: TUI,
+ 		theme: Theme,
+@@ -225,6 +243,7 @@
+ 				}
+ 			},
+ 			collapseKey,
++			externalEditorLabel,
+ 			canReopenWhileHidden,
+ 		});
+ 		sessionRef.current = session;
+@@ -300,6 +319,46 @@
  
  Preview content is rendered as markdown in a monospace box. Multi-line text with newlines is supported. When any option has a preview, the UI switches to a side-by-side layout with a vertical option list on the left and preview on the right. Do not use previews for simple preference questions where labels and descriptions suffice. Note: previews are only supported for single-select questions (not multiSelect).`;
  
@@ -18,17 +61,46 @@
 +	return { render, invalidate() {} };
 +}
 +
-+export function answeredRows(details: QuestionnaireResult | undefined, theme: Pick<Theme, "fg">): string[] {
-+	const answers = details?.answers ?? [];
-+	if (!details || details.cancelled || answers.length === 0) return [theme.fg("muted", "● ") + theme.fg("toolTitle", DECLINE_MESSAGE)];
-+	const rows = answers.map((a, i) => theme.fg("muted", (i === 0 ? "  ⎿  " : "     ") + `· ${a.question} → ${formatAnswerScalar(a, "summary")}`));
-+	return [theme.fg("muted", "● ") + theme.fg("toolTitle", "User answered Claude's questions:"), ...rows];
++function formatAnsweredRows(answers: QuestionnaireResult["answers"], theme: Pick<Theme, "fg">): string[] {
++	return answers.map((a, i) =>
++		theme.fg("muted", (i === 0 ? "  ⎿  " : "     ") + `· ${a.question} → ${formatAnswerScalar(a, "summary")}`),
++	);
 +}
++
++function formatDeclinedRows(questions: readonly QuestionData[], theme: Pick<Theme, "fg">): string[] {
++	return questions
++		.filter((q) => typeof q?.question === "string" && Array.isArray(q.options))
++		.map((q, i) =>
++		theme.fg(
++			"muted",
++			(i === 0 ? "  ⎿  " : "     ") + `· ${q.question} (${q.options.map((o) => o.label).join(" / ")})`,
++		),
++	);
++}
++
++export function answeredRows(
++	details: QuestionnaireResult | undefined,
++	theme: Pick<Theme, "fg">,
++	questions?: readonly QuestionData[],
++): string[] {
++	const answers = details?.answers ?? [];
++	if (!details || details.cancelled || answers.length === 0) {
++		return [
++			theme.fg("muted", "● ") + DECLINE_MESSAGE,
++			...(questions && questions.length > 0 ? formatDeclinedRows(questions, theme) : []),
++		];
++	}
++	return [
++		theme.fg("muted", "● ") + "User answered Claude's questions:",
++		...formatAnsweredRows(answers, theme),
++	];
++}
++
 +
  export function registerAskUserQuestionTool(pi: ExtensionAPI): void {
  	const guidance = validateGuidanceFields(loadConfig().guidance);
  	pi.registerTool({
-@@ -310,6 +322,19 @@
+@@ -310,6 +369,21 @@
  		promptGuidelines: guidance.promptGuidelines ?? DEFAULT_PROMPT_GUIDELINES,
  		parameters: QuestionParamsSchema,
  
@@ -40,11 +112,955 @@
 +			return claudeRow(() => []);
 +		},
 +
-+		renderResult(result, { isPartial }, theme) {
++		renderResult(result, { isPartial }, theme, context) {
 +			if (isPartial) return claudeRow(() => []);
-+			return claudeRow(() => answeredRows(result.details as QuestionnaireResult | undefined, theme));
++			return claudeRow(() =>
++				answeredRows(result.details as QuestionnaireResult | undefined, theme, context.args?.questions),
++			);
 +		},
 +
  		async execute(_toolCallId, params, _signal, _onUpdate, ctx) {
  			// Line-terminator normalization runs once here, ahead of validation, so
  			// every downstream consumer — validator, TUI, RPC walker, envelope, prompt
+@@ -348,22 +422,12 @@
+ 				return buildToolResult(sessionLoad.message, { answers: [], cancelled: true, error: sessionLoad.error });
+ 			}
+ 			const { QuestionnaireSession } = sessionLoad.module;
+-			// Resolve the collapse/expand key spec from config. Default is `ctrl+]`; users
+-			// with non-US layouts (e.g. Latin American, where `]` is shifted) can override
+-			// via the `collapseKey` config field. `resolveCollapseKey` also accepts the
+-			// sentinel value `"off"` to disable the shortcut entirely.
+-			const collapseKey = resolveCollapseKey(loadConfig());
+-
+-			// Capture the overlay handle so the session can call `setHidden()` when the
+-			// user toggles collapse, and register a raw terminal input listener for the
+-			// same key so the toggle still works while the overlay is hidden (pi-tui does
+-			// not route input to a hidden overlay's `component.handleInput`).
++			const collapseKey = COLLAPSE_KEY_OFF;
++			const externalEditorLabel = await resolveExternalEditorLabel(ctx);
++
+ 			const sessionRef: SessionRef = { current: null };
+ 			const overlayHandleRef: OverlayHandleRef = { current: undefined };
+ 			const removeOverlayInputListener = registerCollapseKeyListener(ctx, collapseKey, sessionRef, overlayHandleRef);
+-			// Hiding the overlay is only reversible through the raw listener above, so
+-			// the session may emit `setHidden` only when it was actually registered;
+-			// otherwise collapse falls back to the visible one-line row.
+ 			const canReopenWhileHidden = removeOverlayInputListener !== undefined;
+ 
+ 			emitAskUserBlockedEvent(pi, true);
+@@ -375,23 +439,11 @@
+ 						typed,
+ 						itemsByTab,
+ 						collapseKey,
++						externalEditorLabel,
+ 						canReopenWhileHidden,
+ 						sessionRef,
+ 						Session: QuestionnaireSession,
+ 					}),
+-					{
+-						overlay: true,
+-						overlayOptions: {
+-							anchor: "bottom-center",
+-							width: "100%",
+-							maxHeight: "100%",
+-							margin: { left: 0, right: 0, bottom: 0 },
+-						},
+-						onHandle: (handle) => {
+-							overlayHandleRef.current = handle;
+-							sessionRef.current?.setOverlayHandle(handle);
+-						},
+-					},
+ 				);
+ 
+ 				if (result === undefined) {
+--- a/locales/en.json
++++ b/locales/en.json
+@@ -1,6 +1,8 @@
+ {
+   "sentinel.other": "Type something.",
++  "sentinel.other_multi": "Type something",
+   "sentinel.next": "Next",
++  "sentinel.chat": "Chat about this",
+ 
+   "submit.label": "Submit answers",
+   "submit.cancel": "Cancel",
+--- a/state/build-questionnaire.ts
++++ b/state/build-questionnaire.ts
+@@ -32,6 +32,9 @@
+ } from "./selectors/projections.js";
+ import type { QuestionnaireState } from "./state.js";
+ 
++const QUESTION_ACCENT = "[38;2;153;204;255m";
++const QUESTION_RESET = "[0m";
++
+ export interface QuestionnaireBuildConfig {
+ 	tui: TUI;
+ 	theme: Theme;
+@@ -47,6 +50,8 @@
+ 	 * of runtime context.
+ 	 */
+ 	collapseKey: string;
++	/** Display name of Pi's configured external editor, or undefined when none is configured. */
++	externalEditorLabel: string | undefined;
+ }
+ 
+ export interface QuestionnaireBuilt {
+@@ -117,6 +122,7 @@
+ 	private readonly initialState: QuestionnaireState;
+ 	private readonly getCurrentTab: () => number;
+ 	private readonly collapseKey: string;
++	private readonly externalEditorLabel: string | undefined;
+ 
+ 	private readonly selectTheme: WrappingSelectTheme;
+ 	private readonly markdownTheme = getMarkdownTheme();
+@@ -134,6 +140,7 @@
+ 		this.initialState = config.initialState;
+ 		this.getCurrentTab = config.getCurrentTab;
+ 		this.collapseKey = config.collapseKey;
++		this.externalEditorLabel = config.externalEditorLabel;
+ 
+ 		this.selectTheme = this.makeSelectTheme();
+ 		const textEditorTheme = editorTheme(this.theme);
+@@ -164,7 +171,9 @@
+ 	private makeSelectTheme(): WrappingSelectTheme {
+ 		const t = this.theme;
+ 		return {
+-			selectedText: (s) => t.fg("accent", t.bold(s)),
++			pointer: (s) => `${QUESTION_ACCENT}${s}${QUESTION_RESET}`,
++			number: (s) => t.fg("muted", s),
++			selectedText: (s) => `${QUESTION_ACCENT}${s}${QUESTION_RESET}`,
+ 			description: (s) => t.fg("muted", s),
+ 			scrollInfo: (s) => t.fg("dim", s),
+ 		};
+@@ -268,6 +277,7 @@
+ 				getCurrentBodyHeight: heights.current,
+ 				getTerminalRows: this.getTerminalRows,
+ 				collapseKey: this.collapseKey,
++				externalEditorLabel: this.externalEditorLabel,
+ 			},
+ 			{ state: this.initialState, activePreviewPane: this.pickInitialActivePreview(tabs) },
+ 		);
+--- a/state/external-editor.ts
++++ b/state/external-editor.ts
+@@ -60,3 +60,28 @@
+ 		}
+ 	}
+ }
++
++const EDITOR_DISPLAY_NAMES: Record<string, string> = {
++	code: "VS Code",
++	cursor: "Cursor",
++	vi: "Vim",
++	vim: "Vim",
++	nvim: "Neovim",
++	nano: "nano",
++	notepad: "Notepad",
++	"start /wait notepad": "Notepad",
++	emacs: "Emacs",
++	subl: "Sublime Text",
++	atom: "Atom",
++};
++
++export function resolveEditorDisplayName(command: string): string | undefined {
++	const trimmed = command.trim();
++	if (!trimmed) return undefined;
++	const known = EDITOR_DISPLAY_NAMES[trimmed.toLowerCase()];
++	if (known) return known;
++	const base = trimmed.split(" ")[0];
++	const name = base?.split(/[\\/]/).pop();
++	if (!name) return undefined;
++	return EDITOR_DISPLAY_NAMES[name.toLowerCase()] ?? name;
++}
+--- a/state/key-router.ts
++++ b/state/key-router.ts
+@@ -31,6 +31,7 @@
+ 	| { kind: "notes_exit" }
+ 	| { kind: "submit" }
+ 	| { kind: "submit_nav"; nextIndex: 0 | 1 }
++	| { kind: "chat" }
+ 	| { kind: "notes_forward"; data: string }
+ 	/** Flip `state.collapsed`. Always available, regardless of inner mode (see top intercept in `routeKey`). */
+ 	| { kind: "toggle_collapsed" }
+@@ -245,6 +246,7 @@
+ 		// (→ confirm kind:"custom"). Defensive: never enter the toggle/multi_confirm
+ 		// path for an inputMode-activating row.
+ 		if (focusedMeta?.activatesInputMode) return { kind: "ignore" };
++		if (focusedKind === "chat") return { kind: "chat" };
+ 		// Enter on a regular row toggles (matching Space) — committing the question is now
+ 		// gated behind explicit focus on a row whose META declares `autoSubmitsInMulti`
+ 		// (the Next sentinel), so Enter on options is a no-cost way to flip checkboxes
+@@ -271,6 +273,7 @@
+ 	runtime: QuestionnaireRuntime,
+ ): QuestionnaireAction {
+ 	if (isConfirm(kb, data)) {
++		if (runtime.currentItem?.kind === "chat") return { kind: "chat" };
+ 		const answer = buildSingleSelectAnswer(state, runtime);
+ 		if (!answer) return { kind: "ignore" };
+ 		return { kind: "confirm", answer, autoAdvanceTab: computeAutoAdvanceTab(state, runtime) };
+--- a/state/questionnaire-session.ts
++++ b/state/questionnaire-session.ts
+@@ -22,6 +22,8 @@
+ 	editInput: (value: string) => Promise<string | undefined>;
+ 	/** Key spec for the collapse/expand shortcut, e.g. `"ctrl+]"` or `"alt+o"`. */
+ 	collapseKey: string;
++	/** Display name of Pi's configured external editor, or undefined when none is configured. */
++	externalEditorLabel: string | undefined;
+ 	/**
+ 	 * True iff `execute()` registered the raw `ctx.ui.onTerminalInput` listener — the only
+ 	 * path that can reach a hidden overlay. Gates the `set_overlay_hidden` effect: a host
+@@ -73,6 +75,7 @@
+ 	private readonly keybindings: QuestionnaireRuntime["keybindings"];
+ 	private readonly editInput: QuestionnaireSessionConfig["editInput"];
+ 	private readonly collapseKey: string;
++	private readonly externalEditorLabel: string | undefined;
+ 	private readonly canReopenWhileHidden: boolean;
+ 	private inputEditorOpen = false;
+ 
+@@ -96,6 +99,7 @@
+ 		this.keybindings = config.keybindings;
+ 		this.editInput = config.editInput;
+ 		this.collapseKey = config.collapseKey;
++		this.externalEditorLabel = config.externalEditorLabel;
+ 		this.canReopenWhileHidden = config.canReopenWhileHidden;
+ 
+ 		const built = buildQuestionnaire({
+@@ -107,6 +111,7 @@
+ 			initialState: this.state,
+ 			getCurrentTab: () => this.state.currentTab,
+ 			collapseKey: this.collapseKey,
++			externalEditorLabel: this.externalEditorLabel,
+ 		});
+ 
+ 		this.notesInput = built.notesInput;
+--- a/state/row-intent.ts
++++ b/state/row-intent.ts
+@@ -15,7 +15,7 @@
+  * derivation, and `LABELS_BY_KIND` consumers iterate this list.
+  */
+ export type SentinelKind = Exclude<RowKind, "option">;
+-export const SENTINEL_KINDS: readonly SentinelKind[] = ["other", "next"];
++export const SENTINEL_KINDS: readonly SentinelKind[] = ["other", "next", "chat"];
+ 
+ /**
+  * Per-kind static metadata. Pure data — no closures, no per-kind handler
+@@ -99,6 +99,17 @@
+ 		autoAppendOnSingleSelect: false,
+ 		autoAppendOnMultiSelect: true,
+ 	},
++	chat: {
++		label: "Chat about this",
++		reserved: true,
++		livesInMainList: true,
++		numbered: true,
++		activatesInputMode: false,
++		blocksMultiToggle: true,
++		autoSubmitsInMulti: false,
++		autoAppendOnSingleSelect: true,
++		autoAppendOnMultiSelect: true,
++	},
+ };
+ 
+ /**
+@@ -108,6 +119,7 @@
+ export const LABELS_BY_KIND: { readonly [K in SentinelKind]: string } = {
+ 	other: ROW_INTENT_META.other.label,
+ 	next: ROW_INTENT_META.next.label,
++	chat: ROW_INTENT_META.chat.label,
+ };
+ 
+ /**
+--- a/state/state-reducer.ts
++++ b/state/state-reducer.ts
+@@ -138,6 +138,17 @@
+ 	};
+ }
+ 
++function doneForChat(state: QuestionnaireState, ctx: ApplyContext): ApplyResult {
++	const globalNote = state.notesByTab.get(ctx.questions.length);
++	const result: QuestionnaireResult = {
++		answers: orderedAnswers(state, ctx.questions),
++		cancelled: true,
++		followUp: true,
++		...(globalNote && globalNote.length > 0 ? { globalNote } : {}),
++	};
++	return { state, effects: [{ kind: "done", result }] };
++}
++
+ function doneFor(state: QuestionnaireState, ctx: ApplyContext, cancelled: boolean): ApplyResult {
+ 	// Global note lift: the Submit-tab note lives at the `questions.length` pseudo-index
+ 	// in `notesByTab` — question tabs only occupy 0..questions.length-1, so this can never
+@@ -290,6 +301,7 @@
+ };
+ 
+ const cancelHandler: Handler<"cancel"> = (s, _a, c) => doneFor(s, c, true);
++const chatHandler: Handler<"chat"> = (s, _a, c) => doneForChat(s, c);
+ const submitHandler: Handler<"submit"> = (s, _a, c) => doneFor(s, c, false);
+ const submitNavHandler: Handler<"submit_nav"> = (s, a, _c) => ({
+ 	state: { ...s, submitChoiceIndex: a.nextIndex },
+@@ -321,6 +333,7 @@
+ 	toggle: toggleHandler,
+ 	multi_confirm: multiConfirmHandler,
+ 	cancel: cancelHandler,
++	chat: chatHandler,
+ 	notes_enter: notesEnterHandler,
+ 	notes_exit: notesExitHandler,
+ 	notes_forward: notesForwardHandler,
+--- a/tool/response-envelope.ts
++++ b/tool/response-envelope.ts
+@@ -4,6 +4,8 @@
+ export const DECLINE_MESSAGE = "User declined to answer questions";
+ export const ENVELOPE_PREFIX = "User has answered your questions:";
+ export const ENVELOPE_SUFFIX = "You can now continue with the user's answers in mind.";
++const FOLLOW_UP_PREFIX = "The user asked for more questions";
++const FOLLOW_UP_TOOL_NAME = "ask_user_question";
+ 
+ /**
+  * Map a `QuestionnaireResult` (or null/cancelled) to the LLM-facing tool envelope.
+@@ -14,6 +16,7 @@
+  * still yields the answered envelope.
+  */
+ export function buildQuestionnaireResponse(result: QuestionnaireResult | null | undefined, params: QuestionParams) {
++	if (result?.followUp) return buildFollowUpResult(result);
+ 	if (!result || result.cancelled) {
+ 		// Decline text stays canonical even when a global note rides the cancelled result;
+ 		// the note survives in `details` (like partial `answers`) for replay consumers.
+@@ -50,6 +53,22 @@
+ 	return `${parts.join(". ")}.`;
+ }
+ 
++function buildFollowUpFragment(a: QuestionAnswer): string {
++	const parts: string[] = [`"${a.question}"="${formatAnswerScalar(a, "envelope")}"`];
++	if (a.preview && a.preview.length > 0) parts.push(`selected preview: ${a.preview}`);
++	if (a.notes && a.notes.length > 0) parts.push(`notes: ${a.notes}`);
++	return parts.join(" ");
++}
++
++function buildFollowUpResult(result: QuestionnaireResult) {
++	const answered = result.answers.map(buildFollowUpFragment).join(", ");
++	const text =
++		answered.length > 0
++			? `${FOLLOW_UP_PREFIX} before you proceed. So far they answered: ${answered}. Call ${FOLLOW_UP_TOOL_NAME} again with follow-up questions that build on these answers (do not repeat these); do not start the task yet.`
++			: `${FOLLOW_UP_PREFIX} before answering. Call ${FOLLOW_UP_TOOL_NAME} again now with further questions about this decision (do not repeat these); do not proceed with the task yet.`;
++	return buildToolResult(text, result);
++}
++
+ export function buildToolResult(text: string, details: QuestionnaireResult) {
+ 	return {
+ 		content: [{ type: "text" as const, text }],
+--- a/tool/types.ts
++++ b/tool/types.ts
+@@ -147,6 +147,7 @@
+ 	 */
+ 	globalNote?: string;
+ 	error?: QuestionnaireError;
++	followUp?: boolean;
+ }
+ 
+ export function isQuestionnaireResult(value: unknown): value is QuestionnaireResult {
+--- a/view/components/multi-select-view.ts
++++ b/view/components/multi-select-view.ts
+@@ -1,6 +1,6 @@
+ import type { Theme } from "@earendil-works/pi-coding-agent";
+ import { truncateToWidth, visibleWidth, wrapTextWithAnsi } from "@earendil-works/pi-tui";
+-import { displayLabel } from "../../state/i18n-bridge.js";
++import { displayLabel, t } from "../../state/i18n-bridge.js";
+ import type { QuestionData } from "../../tool/types.js";
+ import type { StatefulView } from "../stateful-view.js";
+ import { renderInlineInputRow } from "./inline-input.js";
+@@ -11,9 +11,9 @@
+ const UNCHECKED = "[ ]";
+ const NUMBER_SEPARATOR = ". ";
+ const BOX_LABEL_GAP = " ";
+-// CC parity: description continuation indents to col 2 (past the pointer slot), NOT to the
+-// full prefix column. Wrap width still uses prefixVisibleWidth so naturalHeight matches render.
+-const CONTINUATION_INDENT = "  ";
++const ACCENT_FG = "[38;2;153;204;255m";
++const ACCENT_RESET = "[0m";
++const OTHER_LABEL_MULTI = "Type something";
+ 
+ export const MULTI_SUBMIT_LABEL = "Submit";
+ 
+@@ -108,7 +108,7 @@
+ 		build.lines.push(...this.renderOtherRow(contentWidth, numberWidth));
+ 		if (this.props.other.active) build.focusedRange = [otherStart, build.lines.length];
+ 
+-		this.appendNextRow(build, width);
++		this.appendNextRow(build, width, numberWidth);
+ 
+ 		const value = { lines: build.lines, focusedRange: build.focusedRange };
+ 		this.cachedLayout = { width, value };
+@@ -121,42 +121,48 @@
+ 			const row = this.props.rows[i];
+ 			if (!opt || !row) continue;
+ 			const start = build.lines.length;
+-			const pointer = row.active ? this.theme.fg("accent", ACTIVE_POINTER) : INACTIVE_POINTER;
+-			// Checked and active rows share the accent hue, matching the dialog's selection rhythm.
+-			const box = row.checked ? this.theme.fg("accent", CHECKED) : this.theme.fg("muted", UNCHECKED);
++			const pointer = row.active ? `${ACCENT_FG}${ACTIVE_POINTER}${ACCENT_RESET}` : INACTIVE_POINTER;
++			const number = this.theme.fg("muted", `${String(i + 1).padStart(numberWidth, " ")}${NUMBER_SEPARATOR}`);
++			const box = row.checked ? this.theme.fg("borderAccent", CHECKED) : UNCHECKED;
+ 			const label = truncateToWidth(opt.label, contentWidth, "…");
+-			const styledLabel = row.active ? this.theme.fg("accent", this.theme.bold(label)) : label;
+-			const number = String(i + 1).padStart(numberWidth, " ");
+-			build.lines.push(
+-				truncateToWidth(`${pointer}${number}${NUMBER_SEPARATOR}${box}${BOX_LABEL_GAP}${styledLabel}`, width, ""),
+-			);
++			const styledLabel = row.active ? `${ACCENT_FG}${label}${ACCENT_RESET}` : label;
++			build.lines.push(truncateToWidth(`${pointer}${number}${box}${BOX_LABEL_GAP}${styledLabel}`, width, ""));
+ 			if (opt.description) {
++				const continuationPrefix = " ".repeat(this.prefixVisibleWidth());
+ 				for (const segment of wrapTextWithAnsi(opt.description, contentWidth)) {
+-					build.lines.push(CONTINUATION_INDENT + this.theme.fg("muted", segment));
++					build.lines.push(continuationPrefix + this.theme.fg("muted", segment));
+ 				}
+ 			}
+ 			if (row.active) build.focusedRange = [start, build.lines.length];
+ 		}
+ 	}
+ 
+-	private appendNextRow(build: MultiSelectBuild, width: number): void {
++	private appendNextRow(build: MultiSelectBuild, width: number, numberWidth: number): void {
+ 		const nextStart = build.lines.length;
+-		const nextPointer = this.props.nextActive ? this.theme.fg("accent", ACTIVE_POINTER) : INACTIVE_POINTER;
+-		const nextLabel = this.props.nextActive
+-			? this.theme.fg("accent", this.theme.bold(this.props.nextLabel))
+-			: this.props.nextLabel;
+-		build.lines.push(truncateToWidth(`${nextPointer}${nextLabel}`, width, ""));
++		const nextPointer = this.props.nextActive ? `${ACCENT_FG}${ACTIVE_POINTER}${ACCENT_RESET}` : INACTIVE_POINTER;
++		const indent = " ".repeat(numberWidth + NUMBER_SEPARATOR.length);
++		const boldLabel = this.theme.bold(this.props.nextLabel);
++		const nextLabel = this.props.nextActive ? `${ACCENT_FG}${boldLabel}${ACCENT_RESET}` : boldLabel;
++		build.lines.push(truncateToWidth(`${nextPointer}${indent}${nextLabel}`, width, ""));
+ 		if (this.props.nextActive) build.focusedRange = [nextStart, build.lines.length];
+ 	}
+ 
++	private otherLabel(): string {
++		return this.question.multiSelect ? t("sentinel.other_multi", OTHER_LABEL_MULTI) : displayLabel("other");
++	}
++
+ 	private renderOtherRow(contentWidth: number, numberWidth: number): string[] {
+ 		const other = this.props.other;
+-		const pointer = other.active ? this.theme.fg("accent", ACTIVE_POINTER) : INACTIVE_POINTER;
+-		const box = this.theme.fg("muted", UNCHECKED);
+-		const number = String(this.question.options.length + 1).padStart(numberWidth, " ");
+-		const rowPrefix = `${pointer}${number}${NUMBER_SEPARATOR}${box}${BOX_LABEL_GAP}`;
++		const pointer = other.active ? `${ACCENT_FG}${ACTIVE_POINTER}${ACCENT_RESET}` : INACTIVE_POINTER;
++		const number = this.theme.fg(
++			"muted",
++			`${String(this.question.options.length + 1).padStart(numberWidth, " ")}${NUMBER_SEPARATOR}`,
++		);
++		const box = UNCHECKED;
++		const rowPrefix = `${pointer}${number}${box}${BOX_LABEL_GAP}`;
+ 		const continuationPrefix = " ".repeat(visibleWidth(rowPrefix));
+-		const selectedText = (text: string) => this.theme.fg("accent", this.theme.bold(text));
++		const selectedText = (text: string) => `${ACCENT_FG}${this.theme.bold(text)}${ACCENT_RESET}`;
++		const restingText = (text: string) => this.theme.fg("muted", text);
+ 
+ 		if (other.active && other.inputMode) {
+ 			return renderInlineInputRow({
+@@ -169,23 +175,15 @@
+ 			});
+ 		}
+ 
+-		return wrapTextWithAnsi(other.inputBuffer || displayLabel("other"), contentWidth).map((segment, index) => {
+-			const line = `${index === 0 ? rowPrefix : continuationPrefix}${segment}`;
+-			return other.active ? selectedText(line) : line;
++		return wrapTextWithAnsi(other.inputBuffer || this.otherLabel(), contentWidth).map((segment, index) => {
++			const prefix = index === 0 ? rowPrefix : continuationPrefix;
++			const styledSegment = other.active ? selectedText(segment) : restingText(segment);
++			return `${prefix}${styledSegment}`;
+ 		});
+ 	}
+ 
+ 	private prefixVisibleWidth(): number {
+-		// Canonical prefix for OPTION rows: INACTIVE_POINTER + numberWidth digits + NUMBER_SEPARATOR
+-		// + UNCHECKED + BOX_LABEL_GAP. State-independent because ACTIVE/INACTIVE pointer share
+-		// visibleWidth, CHECKED/UNCHECKED share visibleWidth, and numberWidth is constant per question.
+-		// The number column fits `options.length + 1` so the "Type something." row's N+1 number
+-		// is never clipped. The Next sentinel uses a bare `pointer + "Next"` shape — its width
+-		// never exceeds this prefix at any reasonable terminal width, so it's safe to leave it
+-		// out of the canonical computation.
+ 		const numberWidth = String(Math.max(1, this.question.options.length + 1)).length;
+-		return (
+-			visibleWidth(INACTIVE_POINTER) + numberWidth + visibleWidth(`${NUMBER_SEPARATOR}${UNCHECKED}${BOX_LABEL_GAP}`)
+-		);
++		return visibleWidth(INACTIVE_POINTER) + numberWidth + visibleWidth(`${NUMBER_SEPARATOR}${UNCHECKED}${BOX_LABEL_GAP}`);
+ 	}
+ }
+--- a/view/components/submit-picker.ts
++++ b/view/components/submit-picker.ts
+@@ -6,6 +6,8 @@
+ const ACTIVE_POINTER = "❯ ";
+ const INACTIVE_POINTER = "  ";
+ const NUMBER_SEPARATOR = ". ";
++const ACCENT_FG = "[38;2;153;204;255m";
++const ACCENT_RESET = "[0m";
+ 
+ export const SUBMIT_LABEL = "Submit answers";
+ export const CANCEL_LABEL = "Cancel";
+@@ -55,9 +57,9 @@
+ 		for (let i = 0; i < 2; i++) {
+ 			const text = i === 0 ? t("submit.label", SUBMIT_LABEL) : t("submit.cancel", CANCEL_LABEL);
+ 			const active = this.props.rows[i]?.active ?? false;
+-			const pointer = active ? ACTIVE_POINTER : INACTIVE_POINTER;
+-			const number = `${i + 1}${NUMBER_SEPARATOR}`;
+-			const label = active ? this.theme.fg("accent", this.theme.bold(text)) : this.theme.fg("text", text);
++			const pointer = active ? `${ACCENT_FG}${ACTIVE_POINTER}${ACCENT_RESET}` : INACTIVE_POINTER;
++			const number = this.theme.fg("muted", `${i + 1}${NUMBER_SEPARATOR}`);
++			const label = active ? `${ACCENT_FG}${text}${ACCENT_RESET}` : text;
+ 			lines.push(truncateToWidth(`${pointer}${number}${label}`, width, ""));
+ 		}
+ 		return lines;
+--- a/view/components/tab-bar.ts
++++ b/view/components/tab-bar.ts
+@@ -2,6 +2,10 @@
+ import { truncateToWidth } from "@earendil-works/pi-tui";
+ import type { StatefulView } from "../stateful-view.js";
+ 
++const CHIP_BG = "[48;2;153;204;255m";
++const CHIP_FG = "[38;2;0;0;0m";
++const CHIP_RESET = "[0m";
++
+ /**
+  * Per-tick projection of TabBar state. The selector
+  * (`selectTabBarProps`) hoists every render-time derivation
+@@ -30,25 +34,21 @@
+ 
+ 	invalidate(): void {}
+ 
++	private chip(text: string, active: boolean): string {
++		return active ? `${CHIP_BG}${CHIP_FG}${text}${CHIP_RESET}` : text;
++	}
++
+ 	render(width: number): string[] {
+-		const pieces: string[] = [" ← "];
++		const atFirstTab = this.props.tabs.length > 0 && this.props.tabs[0]?.active === true;
++		const pieces: string[] = [atFirstTab ? this.theme.fg("muted", "← ") : "← "];
+ 
+ 		for (const tab of this.props.tabs) {
+-			const box = tab.answered ? "■" : "□";
+-			const rawSeg = ` ${box} ${tab.label} `;
+-			const styled = tab.active
+-				? this.theme.bg("selectedBg", this.theme.fg("text", rawSeg))
+-				: this.theme.fg(tab.answered ? "success" : "muted", rawSeg);
+-			pieces.push(styled);
+-			pieces.push(" ");
++			const box = tab.answered ? "☒" : "☐";
++			pieces.push(this.chip(` ${box} ${tab.label} `, tab.active));
+ 		}
+ 
+-		const submitText = " ✓ Submit ";
+-		const submitStyled = this.props.submit.active
+-			? this.theme.bg("selectedBg", this.theme.fg("text", submitText))
+-			: this.theme.fg(this.props.submit.allAnswered ? "success" : "dim", submitText);
+-		pieces.push(submitStyled);
+-		pieces.push(" →");
++		pieces.push(this.chip(" ✔ Submit ", this.props.submit.active));
++		pieces.push(this.props.submit.active ? this.theme.fg("muted", " →") : " →");
+ 
+ 		const tabLine = truncateToWidth(pieces.join(""), width, "");
+ 		return [tabLine, ""];
+--- a/view/components/wrapping-select.ts
++++ b/view/components/wrapping-select.ts
+@@ -15,13 +15,20 @@
+  *   (label is "Type something."). Renders the headless multiline editor when active.
+  * - `next`: the explicit commit-and-advance row appended to multi-select questions
+  *   (label is "Next"). Renders without a number / checkbox.
++ * - `chat`: the "Chat about this" sentinel appended to single-select questions
++ *   only (Claude Code 2.1.280, measured). Shares nav/Enter with every other row
++ *   but renders nothing here — `QuestionTabStrategy.footerRows` draws it below
++ *   the dialog's own bottom rule instead, matching Claude's separate placement.
+  */
+ export type WrappingSelectItem =
+ 	| { kind: "option"; label: string; description?: string }
+ 	| { kind: "other"; label: string; description?: string }
+-	| { kind: "next"; label: string; description?: string };
++	| { kind: "next"; label: string; description?: string }
++	| { kind: "chat"; label: string; description?: string };
+ 
+ export interface WrappingSelectTheme {
++	pointer: (text: string) => string;
++	number: (text: string) => string;
+ 	selectedText: (text: string) => string;
+ 	description: (text: string) => string;
+ 	scrollInfo: (text: string) => string;
+@@ -208,6 +215,7 @@
+ 		width: number,
+ 		numberWidth: number,
+ 	): string[] {
++		if (item.kind === "chat") return [];
+ 		const rowPrefix = this.buildRowPrefix(index, isActive, numberWidth);
+ 		const continuationPrefix = " ".repeat(visibleWidth(rowPrefix));
+ 		const contentWidth = Math.max(WrappingSelect.MIN_CONTENT_WIDTH, width - visibleWidth(rowPrefix));
+@@ -218,9 +226,10 @@
+ 
+ 		const { label, isConfirmed } = this.deriveConfirmedState(item, index);
+ 		const applySelectedStyle = isActive || isConfirmed;
++		const restingPaint = item.kind === "other" ? this.theme.description : (text: string) => text;
+ 
+ 		return [
+-			...this.renderLabelBlock(label, rowPrefix, continuationPrefix, contentWidth, applySelectedStyle),
++			...this.renderLabelBlock(label, rowPrefix, continuationPrefix, contentWidth, applySelectedStyle, restingPaint),
+ 			...this.renderDescriptionBlock(item.description, continuationPrefix, contentWidth),
+ 		];
+ 	}
+@@ -248,10 +257,12 @@
+ 	}
+ 
+ 	private buildRowPrefix(index: number, isActive: boolean, numberWidth: number): string {
+-		const pointer = isActive ? WrappingSelect.ACTIVE_POINTER : WrappingSelect.INACTIVE_POINTER;
++		const pointerText = isActive ? WrappingSelect.ACTIVE_POINTER : WrappingSelect.INACTIVE_POINTER;
++		const pointer = isActive ? this.theme.pointer(pointerText) : pointerText;
+ 		const displayNumber = this.numberStartOffset + index + 1;
+ 		const paddedNumber = String(displayNumber).padStart(numberWidth, " ");
+-		return `${pointer}${paddedNumber}${WrappingSelect.NUMBER_SEPARATOR}`;
++		const number = this.theme.number(`${paddedNumber}${WrappingSelect.NUMBER_SEPARATOR}`);
++		return `${pointer}${number}`;
+ 	}
+ 
+ 	private shouldRenderAsInlineInput(item: WrappingSelectItem, isActive: boolean): boolean {
+@@ -276,12 +287,13 @@
+ 		continuationPrefix: string,
+ 		contentWidth: number,
+ 		applySelectedStyle: boolean,
++		restingPaint: (text: string) => string,
+ 	): string[] {
+ 		const wrapped = wrapTextWithAnsi(label, contentWidth);
+ 		return wrapped.map((segment, index) => {
+ 			const prefix = index === 0 ? rowPrefix : continuationPrefix;
+-			const line = `${prefix}${segment}`;
+-			return applySelectedStyle ? this.theme.selectedText(line) : line;
++			const text = applySelectedStyle ? this.theme.selectedText(segment) : restingPaint(segment);
++			return `${prefix}${text}`;
+ 		});
+ 	}
+ 
+--- a/view/dialog-builder.ts
++++ b/view/dialog-builder.ts
+@@ -16,6 +16,7 @@
+ export const HINT_PART_TOGGLE = "Space to toggle";
+ export const HINT_PART_NOTES = "n to add notes";
+ export const HINT_PART_TAB = "Tab to switch questions";
++export const HINT_PART_TAB_ARROW = "Tab/Arrow keys to navigate";
+ export const HINT_PART_CANCEL = "Esc to cancel";
+ /**
+  * Collapse/expand hint copy is templated on `KEY_PLACEHOLDER` because the
+@@ -27,6 +28,13 @@
+ export const KEY_PLACEHOLDER = "{key}";
+ export const HINT_PART_COLLAPSE_TEMPLATE = `${KEY_PLACEHOLDER} to collapse`;
+ export const HINT_PART_EXPAND_TEMPLATE = `${KEY_PLACEHOLDER} to expand`;
++/**
++ * Claude Code 2.1.280 (measured live): the external-editor hint reads
++ * "ctrl+g to edit in <editor>", lowercase "ctrl+g" unlike every other hint
++ * part. Same `{key}` placeholder convention, filled with the resolved editor
++ * display name instead of a key spec.
++ */
++export const HINT_PART_EDITOR_TEMPLATE = `ctrl+g to edit in ${KEY_PLACEHOLDER}`;
+ /** Default-key (`Ctrl+]`) rendering of the collapse template, for tests and default-config assertions. */
+ export const HINT_PART_COLLAPSE = HINT_PART_COLLAPSE_TEMPLATE.replace(
+ 	KEY_PLACEHOLDER,
+@@ -133,6 +141,8 @@
+ 	 * The footer hint interpolates it, and drops the collapse part when `"off"`.
+ 	 */
+ 	collapseKey: string;
++	/** Display name of Pi's configured external editor, or undefined when none is configured. */
++	externalEditorLabel: string | undefined;
+ }
+ 
+ /**
+@@ -162,6 +172,7 @@
+ 			isMulti: config.isMulti,
+ 			getCurrentBodyHeight: config.getCurrentBodyHeight,
+ 			collapseKey: config.collapseKey,
++			externalEditorLabel: config.externalEditorLabel,
+ 		});
+ 		this.submitStrategy = config.isMulti
+ 			? new SubmitTabStrategy({
+@@ -195,12 +206,12 @@
+ 		const headingCount = headingRowCache.length;
+ 
+ 		// Build container WITHOUT residual spacer — spacer handled below based on overflow.
+-		const natural = this.buildContainerFromStrategy(strategy, headingRowCache).render(width);
++		const natural = this.buildContainerFromStrategy(strategy, headingRowCache, onSubmit).render(width);
+ 
+ 		// Fixed region sizes (deterministic from structure).
+ 		// TabBar.render() returns [tabLine, ""] — always 2 rows.
+-		const topFixed = 1 + (this.config.isMulti && this.config.tabBar ? 2 : 0) + 1;
+-		const bottomFixed = 1 + strategy.footerRowCount;
++		const topFixed = 1 + (this.config.isMulti && this.config.tabBar ? 2 : 0);
++		const bottomFixed = (onSubmit ? 0 : 1) + strategy.footerRowCount;
+ 		const middleRows = natural.length - topFixed - bottomFixed;
+ 
+ 		// Residual spacer: equalizes total height across tabs (only needed when no overflow).
+@@ -214,8 +225,9 @@
+ 
+ 		const termRows = this.config.getTerminalRows();
+ 
+-		if (natural.length + spacerRows <= termRows) {
+-			return renderFitsTerminal(natural, spacerRows);
++		if (natural.length + spacerRows + (onSubmit ? 1 : 0) <= termRows) {
++			const rows = renderFitsTerminal(natural, spacerRows);
++			return onSubmit ? ["", ...rows] : rows;
+ 		}
+ 
+ 		// OVERFLOW — apply 3-region partition with scroll-to-focus.
+@@ -248,22 +260,28 @@
+ 		return result.length > termRows ? result.slice(0, termRows) : result;
+ 	}
+ 
+-	private buildContainerFromStrategy(strategy: TabContentStrategy, headingRowCache: Component[]): Container {
++	private buildContainerFromStrategy(
++		strategy: TabContentStrategy,
++		headingRowCache: Component[],
++		onSubmit: boolean,
++	): Container {
+ 		const { theme, isMulti, tabBar } = this.config;
+ 		const state = this.liveProps.state;
+ 		const container = new Container();
+-		const border = () => new DynamicBorder((s) => theme.fg("accent", s));
++		const border = () => new DynamicBorder((s) => theme.fg("muted", s));
+ 
+ 		container.addChild(border());
+ 		if (isMulti && tabBar) container.addChild(tabBar);
+-		container.addChild(new Spacer(1));
+ 
+ 		for (const c of headingRowCache) container.addChild(c);
+ 		container.addChild(strategy.bodyComponent(state));
+-		container.addChild(new Spacer(1));
+-		for (const c of strategy.midRows(state)) container.addChild(c);
++		const midRows = strategy.midRows(state);
++		if (midRows.length > 0) {
++			container.addChild(new Spacer(1));
++			for (const c of midRows) container.addChild(c);
++		}
+ 
+-		container.addChild(border());
++		if (!onSubmit) container.addChild(border());
+ 		for (const c of strategy.footerRows(state)) container.addChild(c);
+ 
+ 		// BodyResidualSpacer moved out of Container — handled in render().
+--- a/view/tab-content-strategy.ts
++++ b/view/tab-content-strategy.ts
+@@ -1,6 +1,5 @@
+ import type { Theme } from "@earendil-works/pi-coding-agent";
+ import { type Component, Container, type Editor, Spacer, Text, truncateToWidth } from "@earendil-works/pi-tui";
+-import { COLLAPSE_KEY_OFF, formatKeySpecForDisplay } from "../config.js";
+ import { t } from "../state/i18n-bridge.js";
+ import { formatAnswerScalar } from "../tool/format-answer.js";
+ import type { QuestionData } from "../tool/types.js";
+@@ -9,12 +8,11 @@
+ 	type DialogState,
+ 	HINT_PART_CANCEL,
+ 	HINT_PART_CLEAR,
+-	HINT_PART_COLLAPSE_TEMPLATE,
++	HINT_PART_EDITOR_TEMPLATE,
+ 	HINT_PART_ENTER,
+ 	HINT_PART_NAV,
+ 	HINT_PART_NEW_LINE,
+-	HINT_PART_NOTES,
+-	HINT_PART_TAB,
++	HINT_PART_TAB_ARROW,
+ 	HINT_PART_TOGGLE,
+ 	INCOMPLETE_WARNING_PREFIX,
+ 	KEY_PLACEHOLDER,
+@@ -24,6 +22,29 @@
+ import type { StatefulView } from "./stateful-view.js";
+ import type { TabComponents } from "./tab-components.js";
+ 
++const CHIP_BG = "[48;2;153;204;255m";
++const CHIP_FG = "[38;2;0;0;0m";
++const CHIP_RESET = "[0m";
++const CHAT_FG = "[38;2;153;204;255m";
++const CHAT_LABEL = "Chat about this";
++
++class ChatRow implements Component {
++	constructor(
++		private readonly focused: boolean,
++		private readonly text: string,
++	) {}
++
++	render(width: number): string[] {
++		const pointer = this.focused ? `${CHAT_FG}❯ ${CHIP_RESET}` : "  ";
++		const label = this.focused ? `${CHAT_FG}${this.text}${CHIP_RESET}` : this.text;
++		return [truncateToWidth(`${pointer}${label}`, width, "")];
++	}
++
++	invalidate(): void {}
++
++	handleInput(_data: string): void {}
++}
++
+ const NOTES_HEADER = "Notes:";
+ const GLOBAL_NOTES_HEADER = "Global note:";
+ const REVIEW_GLOBAL_HINT = "n to add a note";
+@@ -31,7 +52,7 @@
+ 
+ /**
+  * Single-row, width-clipped chrome cell. The footer row count is invariant
+- * (`QuestionTabStrategy.footerRowCount = 2`) — pi-tui's `Text` word-wraps when
++ * (`QuestionTabStrategy.footerRowCount = 3`) — pi-tui's `Text` word-wraps when
+  * the styled hint exceeds `width`, inflating that row count and desyncing the
+  * `bodyHeight + footerRowCount` math in `DialogView.render`. Clipping with
+  * `truncateToWidth` (ANSI-aware, matches `multi-select-view.ts` usage) keeps
+@@ -93,11 +114,13 @@
+ 	getCurrentBodyHeight: (width: number) => number;
+ 	/** Resolved collapse key spec (`"ctrl+]"`, `"alt+o"`, or `"off"`). Drives the footer's collapse hint. */
+ 	collapseKey: string;
++	/** Display name of Pi's configured external editor, or undefined when none is configured. */
++	externalEditorLabel: string | undefined;
+ }
+ 
+ export class QuestionTabStrategy implements TabContentStrategy {
+-	/** Spacer(1) + OneLineClippedText(hint, 1) = 2 rendered rows. */
+-	readonly footerRowCount = 2;
++	/** [ChatRow | Spacer(1) placeholder] + Spacer(1) + OneLineClippedText(hint, 1) = 3 rendered rows. */
++	readonly footerRowCount = 3;
+ 
+ 	constructor(private readonly config: QuestionTabStrategyConfig) {}
+ 
+@@ -106,11 +129,11 @@
+ 		const question = this.config.questions[state.currentTab];
+ 		// In multi-question mode the tab bar already shows the header; suppress the inline badge.
+ 		if (!this.config.isMulti && question?.header && question.header.length > 0) {
+-			out.push(new Text(this.config.theme.bg("selectedBg", ` ${question.header} `), 1, 0));
++			out.push(new Text(`${CHIP_BG}${CHIP_FG} ☐ ${question.header} ${CHIP_RESET}`, 0, 0));
+ 			out.push(new Spacer(1));
+ 		}
+ 		if (question) {
+-			out.push(new Text(this.config.theme.bold(question.question), 1, 0));
++			out.push(new Text(this.config.theme.fg("text", this.config.theme.bold(question.question)), 0, 0));
+ 			out.push(new Spacer(1));
+ 		}
+ 		return out;
+@@ -138,15 +161,30 @@
+ 
+ 	footerRows(state: DialogState): Component[] {
+ 		const question = this.config.questions[state.currentTab];
++		// Claude Code 2.1.280 (measured live): every question's picker ends with a
++		// "Chat about this" row below the dialog's existing bottom rule — single-select
++		// AND multiSelect alike. Its focus index sits one past the last row the current
++		// question type puts in `itemsByTab`: option/other for single-select, plus the
++		// "Next" sentinel for multiSelect.
++		const chatRow = question
++			? new ChatRow(
++					state.optionIndex === question.options.length + (question.multiSelect === true ? 2 : 1),
++					`${question.options.length + 2}. ${t("sentinel.chat", CHAT_LABEL)}`,
++				)
++			: new Spacer(1);
+ 		// OneLineClippedText (not pi-tui `Text`) — `buildHintText` includes the collapse
+ 		// affordance, pushing the rendered string past 80 columns; `Text` would wrap and
+-		// break the strategy's `footerRowCount = 2` invariant. Clipping on narrow terminals
++		// break the strategy's `footerRowCount = 3` invariant. Clipping on narrow terminals
+ 		// drops the trailing parts (collapse hint first, then cancel) with `…`.
+ 		return [
++			chatRow,
+ 			new Spacer(1),
+ 			new OneLineClippedText(
+-				this.config.theme.fg("dim", buildHintText(question, this.config.isMulti, state, this.config.collapseKey)),
+-				1,
++				this.config.theme.fg(
++					"muted",
++					buildHintText(question, this.config.isMulti, state, this.config.collapseKey, this.config.externalEditorLabel),
++				),
++				0,
+ 			),
+ 		];
+ 	}
+@@ -175,7 +213,7 @@
+ 
+ 	headingRows(_state: DialogState): Component[] {
+ 		return [
+-			new Text(this.config.theme.bold(this.config.theme.fg("accent", t("review.heading", REVIEW_HEADING))), 1, 0),
++			new Text(this.config.theme.bold(this.config.theme.fg("text", t("review.heading", REVIEW_HEADING))), 0, 0),
+ 			new Spacer(1),
+ 		];
+ 	}
+@@ -186,12 +224,9 @@
+ 			const q = this.config.questions[i];
+ 			const a = state.answers.get(i);
+ 			if (!a) continue;
+-			const label = q.header && q.header.length > 0 ? q.header : `Q${i + 1}`;
+ 			const answerText = formatAnswerScalar(a, "summary");
+-			c.addChild(new Text(this.config.theme.fg("muted", ` ● ${label}`), 1, 0));
+-			c.addChild(
+-				new Text(`   ${this.config.theme.fg("muted", "→")} ${this.config.theme.fg("text", answerText)}`, 1, 0),
+-			);
++			c.addChild(new Text(` ● ${q.question}`, 0, 0));
++			c.addChild(new Text(`  ${this.config.theme.fg("borderAccent", `→ ${answerText}`)}`, 1, 0));
+ 			if (a.notes && a.notes.length > 0) {
+ 				c.addChild(new Text(this.config.theme.fg("dim", `     notes: ${a.notes}`), 1, 0));
+ 			}
+@@ -243,20 +278,13 @@
+ 						"warning",
+ 						`${t("review.incomplete", INCOMPLETE_WARNING_PREFIX)} ${missing.join(", ")}`,
+ 					);
+-		const out: Component[] = [new Spacer(1), new Text(promptText, 1, 0)];
++		const out: Component[] = [new Spacer(1), new Text(promptText, 0, 0), new Spacer(1)];
+ 		if (this.config.submitPicker) {
+ 			out.push(this.config.submitPicker);
+ 		} else {
+-			// Padding when the picker isn't wired — keeps rendered row count at footerRowCount=5.
+ 			out.push(new Spacer(1));
+ 			out.push(new Spacer(1));
+ 		}
+-		// Bottom key-hint row, mirroring QuestionTabStrategy's footer idiom (one dim
+-		// `·`-joined line below everything) — the prompt reads straight into its picker
+-		// with no hint wedged between them. Always present so footerRowCount stays
+-		// exactly 5. OneLineClippedText (not pi-tui Text) — a wrapped hint would inflate
+-		// the footer past footerRowCount and desync the chrome's cross-tab height math.
+-		out.push(new OneLineClippedText(this.config.theme.fg("dim", buildSubmitHintText(state)), 1));
+ 		return out;
+ 	}
+ 
+@@ -267,13 +295,15 @@
+ 
+ /**
+  * Build the controls hint line. Order:
+- *   Enter · ↑/↓ [· Space toggle] [· n notes] [· Tab switch] · Esc [· <key> collapse]
+- *   [· Shift+Enter newline] [· Ctrl+U clear]
++ *   Enter · ↑/↓ [· Space toggle] [· n notes] [· Tab switch] [· ctrl+g edit in <editor>]
++ *   · Esc [· <key> collapse] [· Shift+Enter newline] [· Ctrl+U clear]
+  *
+  * `NOTES` is part of the resting (notes-closed) core — it drops while the notes
+- * editor or custom-answer input has the keyboard. Ctrl+G is Pi's global external-
+- * editor shortcut and needs no local hint; the context-specific clear shortcut is
+- * appended at the far right while input mode is active.
++ * editor or custom-answer input has the keyboard. The `ctrl+g to edit in <editor>`
++ * part (Claude Code 2.1.280, measured live) shows once the focused row is the
++ * "Type something." row or past it, and stays sticky on rows past it (e.g. "Chat
++ * about this") until focus returns to an earlier, regular option — matching
++ * Claude's own behaviour; omitted entirely when no external editor is configured.
+  *
+  * The collapse part interpolates the configured `collapseKey` (display-cased)
+  * and is omitted entirely when the shortcut is `"off"` — `routeKey` and the raw
+@@ -284,18 +314,20 @@
+ 	question: QuestionData | undefined,
+ 	isMulti: boolean,
+ 	state: DialogState,
+-	collapseKey: string,
++	_collapseKey: string,
++	externalEditorLabel?: string,
+ ): string {
+-	const parts: string[] = [t("hint.enter", HINT_PART_ENTER), t("hint.navigate", HINT_PART_NAV)];
+-	if (question?.multiSelect === true) parts.push(t("hint.toggle", HINT_PART_TOGGLE));
+-	if (question && !state.notesVisible && !state.inputMode) parts.push(t("hint.notes", HINT_PART_NOTES));
+-	if (isMulti) parts.push(t("hint.tab", HINT_PART_TAB));
+-	parts.push(t("hint.cancel", HINT_PART_CANCEL));
+-	if (collapseKey !== COLLAPSE_KEY_OFF) {
+-		parts.push(
+-			t("hint.collapse", HINT_PART_COLLAPSE_TEMPLATE).replace(KEY_PLACEHOLDER, formatKeySpecForDisplay(collapseKey)),
+-		);
++	const parts: string[] = [t("hint.enter", HINT_PART_ENTER)];
++	if (isMulti) {
++		parts.push(t("hint.tabArrow", HINT_PART_TAB_ARROW));
++	} else {
++		parts.push(t("hint.navigate", HINT_PART_NAV));
++		if (question?.multiSelect === true) parts.push(t("hint.toggle", HINT_PART_TOGGLE));
+ 	}
++	if (question && externalEditorLabel && state.optionIndex >= question.options.length) {
++		parts.push(t("hint.editor", HINT_PART_EDITOR_TEMPLATE).replace(KEY_PLACEHOLDER, externalEditorLabel));
++	}
++	parts.push(t("hint.cancel", HINT_PART_CANCEL));
+ 	if (state.notesVisible || state.inputMode) parts.push(t("hint.newline", HINT_PART_NEW_LINE));
+ 	if (state.inputMode) parts.push(t("hint.clear", HINT_PART_CLEAR));
+ 	return parts.join(" · ");

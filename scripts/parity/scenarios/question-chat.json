@@ -1,0 +1,49 @@
+{
+ "prompt": "Use your ask_user_question tool to ask me exactly one question, \"Which colour do you prefer?\", header \"Colour\", options \"Red\" (description \"Warm\") and \"Blue\" (description \"Cool\"). If I ask to clarify instead of answering, ask me what I'd like to clarify and wait. Otherwise, after I answer, reply with exactly: noted. No other text.",
+ "steps": [
+  {
+   "until": "Type something",
+   "timeout": 90
+  },
+  {
+   "until": "Thought for",
+   "timeout": 10
+  },
+  {
+   "snap": "asking"
+  },
+  {
+   "keys": "\u001b[B"
+  },
+  {
+   "keys": "\u001b[B"
+  },
+  {
+   "keys": "\u001b[B"
+  },
+  {
+   "until": "❯ 4\\. Chat about this",
+   "timeout": 5
+  },
+  {
+   "snap": "chat-focused"
+  },
+  {
+   "keys": "\r"
+  },
+  {
+   "until": "(?s)declined to answer questions.*ctx \\d+%",
+   "timeout": 15
+  },
+  {
+   "snap": "chat-picked"
+  },
+  {
+   "until": "✻ \\S+ for [^\\n]*· done",
+   "timeout": 20
+  },
+  {
+   "sleep": 1
+  }
+ ]
+}

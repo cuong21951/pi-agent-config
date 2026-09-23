@@ -61,5 +61,8 @@
   "quietStartup": true,
   "treeFilterMode": "no-tools",
   "outputPad": 1,
-  "tuiMode": "regular"
+  "tuiMode": "regular",
+  "markdown": {
+    "codeBlockIndent": ""
+  }
 }

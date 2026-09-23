@@ -1,0 +1,29 @@
+{
+ "prompt": "Call bash exactly twice, one after the other, with no text in between and no text before the first call. First call: description \"List the directory\", command: ls. Second call: description \"Wait for the build\", command: sleep 15 && echo built.",
+ "steps": [
+  {
+   "until": "(?m)^● Waiting for the build · \\d+s *\\n +⎿ +\\$ sleep 15 && echo built \\([3-9]s\\)",
+   "timeout": 90
+  },
+  {
+   "snap": "running"
+  },
+  {
+   "until": "(?m)^● Waiting for the build · \\d+s *\\n +⎿ +\\$ sleep 15 && echo built \\((?:[7-9]|1[0-2])s\\)",
+   "timeout": 20
+  },
+  {
+   "snap": "running-b"
+  },
+  {
+   "until": "✻ \\S+ for [^\\n]*· done",
+   "timeout": 30
+  },
+  {
+   "sleep": 1
+  },
+  {
+   "snap": "finished"
+  }
+ ]
+}

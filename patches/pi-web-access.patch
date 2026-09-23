@@ -1,14 +1,15 @@
 --- a/index.ts
 +++ b/index.ts
-@@ -58,6 +58,22 @@
+@@ -58,6 +58,33 @@
  import { isFirecrawlAvailable } from "./firecrawl.ts";
  import { isJinaSearchAvailable } from "./jina-search.ts";
  import { isSerpdiveAvailable } from "./serpdive.ts";
 +
-+// Claude Code 2.1.261 look for fetch (measured 2026-09-05): "● Fetch(url)" with a grey dot blinking while
-+// it runs and a blue one once done, then "  ⎿  Received 559 bytes (200 OK)"; pi-web-access has no HTTP
-+// status, so the line says chars. The finished set is claude-tools' (shared through globalThis).
-+const CLAUDE_ELBOW = "  ⎿  ";
++// Claude Code 2.1.280 look for fetch (measured 2026-09-23): "● Fetch(url)" with a grey dot blinking while
++// it runs and a blue one once done, then "  ⎿ \u00a0Received 559 bytes (200 OK)" — the elbow's own NBSP
++// row (‘Le’ in the bundle) is used for both the running and the finished line. The finished set is
++// claude-tools' (shared through globalThis).
++const CLAUDE_ELBOW = "  ⎿ \u00a0";
 +const claudeRows = ((globalThis as any).__claudeRows ??= { finished: new Set<string>(), failed: new Set<string>() }) as { finished: Set<string> };
 +
 +export function claudeDot(id: string, theme: { fg: (role: any, text: string) => string }, now = Date.now()): string {
@@ -20,10 +21,29 @@
 +	return { render, invalidate() {} };
 +}
 +
++export function formatBytes(bytes: number): string {
++	const kb = bytes / 1024;
++	if (kb < 1) return `${bytes} bytes`;
++	const trim = (s: string) => s.replace(/\.0$/, "");
++	if (kb < 1024) return `${trim(kb.toFixed(1))}KB`;
++	const mb = kb / 1024;
++	if (mb < 1024) return `${trim(mb.toFixed(1))}MB`;
++	return `${trim((mb / 1024).toFixed(1))}GB`;
++}
++
  import { isKagiAvailable } from "./kagi.ts";
  import { isBochaAvailable } from "./bocha.ts";
  import { isOllamaAvailable } from "./ollama.ts";
-@@ -2685,136 +2701,29 @@
+@@ -2663,6 +2690,8 @@
+ 							mode,
+ 							mimeType: result.mimeType,
+ 							status: result.status,
++							statusText: result.statusText,
++							bytes: result.bytes,
+ 							totalBytes: slice.totalBytes,
+ 							totalLines: slice.totalLines,
+ 							shownBytes: slice.shownBytes,
+@@ -2692,136 +2721,30 @@
  			});
  		},
  
@@ -153,7 +173,7 @@
 +			const { urlList } = normalizeFetchContentParams(args);
 +			const label = urlList.length === 1 ? urlList[0] : `${urlList.length} URLs`;
 +			const id = (context as { toolCallId?: string } | undefined)?.toolCallId ?? "";
-+			return claudeRow((width) => [truncateToWidth(claudeDot(id, theme) + theme.fg("toolTitle", theme.bold("Fetch")) + theme.fg("toolTitle", `(${label})`), width)]);
++			return claudeRow((width) => [truncateToWidth(claudeDot(id, theme) + theme.bold("Fetch") + `(${label})`, width)]);
 +		},
  
 -			const countColor = (details?.successful ?? 0) > 0 ? "success" : "error";
@@ -165,19 +185,83 @@
 -			const preview = textContent.length > 500 ? textContent.slice(0, 500) + "..." : textContent;
 -			return new Text(statusLine + "\n" + theme.fg("dim", preview), 0, 0);
 +		renderResult(result, { expanded, isPartial }, theme, context) {
-+			const details = result.details as { error?: string; totalChars?: number; urlCount?: number; successful?: number } | undefined;
++			const details = result.details as { error?: string; totalChars?: number; urlCount?: number; successful?: number; bytes?: number; status?: number; statusText?: string } | undefined;
 +			const elbow = theme.fg("muted", CLAUDE_ELBOW);
 +			if (isPartial) return claudeRow(() => [elbow + theme.fg("muted", "Fetching…")]);
 +			const text = result.content.find((c) => c.type === "text")?.text ?? "";
 +			if (details?.error || (context as { isError?: boolean } | undefined)?.isError) {
 +				return claudeRow((width) => [truncateToWidth(elbow + theme.fg("error", text.split("\n")[0] || `Error: ${details?.error}`), width)]);
 +			}
-+			const chars = details?.totalChars ?? text.length;
++			const bytes = details?.bytes ?? Buffer.byteLength(text, "utf8");
++			const statusSuffix = details?.status !== undefined ? ` (${details.status}${details.statusText ? ` ${details.statusText}` : ""})` : "";
 +			const from = (details?.urlCount ?? 1) > 1 ? ` from ${details?.successful ?? 0}/${details?.urlCount} URLs` : "";
-+			const head = elbow + theme.fg("toolTitle", "Received ") + theme.fg("toolTitle", theme.bold(`${chars} chars`)) + theme.fg("toolTitle", from);
++			const head = elbow + "Received " + theme.bold(formatBytes(bytes)) + statusSuffix + from;
 +			if (!expanded) return claudeRow(() => [head]);
 +			const preview = text.split("\n").slice(0, 20).map((line) => theme.fg("muted", `     ${line}`));
 +			return claudeRow((width) => [head, ...preview].map((line) => truncateToWidth(line, width)));
  		},
  	});
  
+--- a/extract.ts
++++ b/extract.ts
+@@ -326,6 +326,8 @@
+ 	duration?: number;
+ 	mimeType?: string;
+ 	status?: number;
++	statusText?: string;
++	bytes?: number;
+ }
+ 
+ type HttpExtractedContent = ExtractedContent & { declaredLinks?: DeclaredWebLink[] };
+@@ -1199,6 +1201,7 @@
+ 				content: "",
+ 				error: `HTTP ${response.status}: ${response.statusText}`,
+ 				status: response.status,
++				statusText: response.statusText,
+ 			};
+ 		}
+ 
+@@ -1234,7 +1237,7 @@
+ 			}
+ 			const text = await readTextResponseWithLimit(response, maxResponseSize);
+ 			activityMonitor.logComplete(activityId, response.status);
+-			return { url, title: extractTextTitle(text, url), content: text, error: null, mimeType, status: response.status };
++			return { url, title: extractTextTitle(text, url), content: text, error: null, mimeType, status: response.status, statusText: response.statusText, bytes: Buffer.byteLength(text, "utf8") };
+ 		}
+ 
+ 		if (SUPPORTED_IMAGE_TYPES.has(mimeType)) {
+@@ -1306,12 +1309,13 @@
+ 		}
+ 
+ 		const text = await readTextResponseWithLimit(response, maxResponseSize);
++		const rawBytes = Buffer.byteLength(text, "utf8");
+ 		const isHTML = contentType.includes("text/html") || contentType.includes("application/xhtml+xml");
+ 
+ 		if (!isHTML) {
+ 			activityMonitor.logComplete(activityId, response.status);
+ 			const title = extractTextTitle(text, url);
+-			return { url, title, content: text, error: null };
++			return { url, title, content: text, error: null, status: response.status, statusText: response.statusText, bytes: rawBytes };
+ 		}
+ 
+ 		const { parseHTML } = await import("linkedom");
+@@ -1404,6 +1408,9 @@
+ 					? "Page appears to be JavaScript-rendered (content loads dynamically)"
+ 					: "Extracted content appears incomplete",
+ 				declaredLinks,
++				status: response.status,
++				statusText: response.statusText,
++				bytes: rawBytes,
+ 			};
+ 		}
+ 
+@@ -1413,6 +1420,9 @@
+ 			content: appendDeclaredWebLinks(markdown, declaredLinks),
+ 			error: null,
+ 			declaredLinks,
++			status: response.status,
++			statusText: response.statusText,
++			bytes: rawBytes,
+ 		};
+ 	} catch (err) {
+ 		const message = err instanceof Error ? err.message : String(err);

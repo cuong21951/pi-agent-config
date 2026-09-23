@@ -7,14 +7,15 @@ Do these steps in order. One tool call per step, nothing else: no other tool cal
 3. Run this shell command, with the description "List source files": ls src
 4. Run this shell command, with the description "Print a marker": echo parity-ok
 5. Run this shell command, with the description "List missing folder": ls ./missing-folder
-6. In src/app.ts, replace `return a + b;` with `return a - b;`.
-7. Create the file summary.md containing exactly these three lines:
+6. Read the file src/app.ts.
+7. In src/app.ts, replace `return a + b;` with `return a - b;`.
+8. Create the file summary.md containing exactly these three lines:
 
    # Summary
    - alpha
    - beta
 
-8. Finally reply with exactly the markdown below, and nothing else:
+9. Finally reply with exactly the markdown below, and nothing else:
 
 ## Result
 

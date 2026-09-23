@@ -1,7 +1,7 @@
 import { createBashTool, type BashToolDetails, type ExtensionAPI } from "@earendil-works/pi-coding-agent";
 import { truncateToWidth } from "@earendil-works/pi-tui";
-import { blinkOn, dynamic, failed, finished, summaryFor, watch } from "../claude-tools/rows.ts";
-import { commandBody, commandLine, DEFAULT_TIMEOUT_SECONDS, doneLine, resultLines, runningLine, withDefaultTimeout } from "./render.ts";
+import { describeTool, dynamic, failed, finished, groupRow, joinOnExecute, watch } from "../claude-tools/rows.ts";
+import { commandBody, DEFAULT_TIMEOUT_SECONDS, describeBash, doneLine, resultLines, withDefaultTimeout } from "./render.ts";
 
 // ponytail: map is only a fallback when the model omits `description`.
 // Claude's real mechanism is a model-supplied `description` field per bash call.
@@ -63,6 +63,8 @@ function describe(raw: string): string {
 export default function (pi: ExtensionAPI) {
 	const originalBash = createBashTool(process.cwd());
 	const params = originalBash.parameters as Record<string, any>;
+	const run = joinOnExecute("bash", (toolCallId: string, params: any, signal?: AbortSignal, onUpdate?: any) => originalBash.execute(toolCallId, withDefaultTimeout(params), signal, onUpdate));
+	describeTool("bash", describeBash);
 
 	pi.registerTool({
 		name: "bash",
@@ -82,35 +84,30 @@ export default function (pi: ExtensionAPI) {
 		},
 
 		async execute(toolCallId, params, signal, onUpdate) {
-			return originalBash.execute(toolCallId, withDefaultTimeout(params), signal, onUpdate);
+			return run(toolCallId, params, signal, onUpdate);
 		},
 
-		renderCall(args, theme, context) {
-			const intent = (args as any).description?.trim() || describe((args as any).command);
-			return dynamic((width) => {
-				const id = (context as { toolCallId?: string })?.toolCallId ?? "";
-				return finished.has(id) ? [] : [truncateToWidth(runningLine(intent, blinkOn(), theme), width)];
-			});
+		renderCall(_args, theme, context) {
+			const id = (context as { toolCallId?: string })?.toolCallId ?? "";
+			const invalidate = (context as { invalidate?: () => void })?.invalidate;
+			if (id && invalidate) watch(id, invalidate);
+			const expanded = (context as { expanded?: boolean })?.expanded === true;
+			return dynamic((width) => (expanded && finished.has(id) ? [] : groupRow(id, width, theme).map((line) => truncateToWidth(line, width))));
 		},
 
 		renderResult(result, { expanded, isPartial }, theme, context) {
+			if (isPartial || !expanded) return dynamic(() => []);
 			const args = (context as { args?: { command?: unknown; description?: unknown } })?.args ?? {};
 			const command = String(args.command ?? "");
 			const intent = String(args.description ?? "").trim() || describe(command);
-			if (isPartial) return dynamic((width) => [truncateToWidth(commandLine(command, theme), width)]);
-
 			const details = result.details as BashToolDetails | undefined;
 			const content = result.content[0];
 			const output = content?.type === "text" ? content.text : "";
 			const exitMatch = output.match(/exit(?:ed with)? code:? (\d+)/);
 			const id = (context as { toolCallId?: string })?.toolCallId ?? "";
-			const invalidate = (context as { invalidate?: () => void })?.invalidate;
-			if (id && invalidate) watch(id, invalidate);
 			const exitCode = exitMatch ? parseInt(exitMatch[1], 10) : failed.has(id) ? 1 : null;
 			const lines = resultLines(output, exitCode, expanded, details?.truncation?.truncated === true, theme);
-			const group = lines === null && !expanded ? summaryFor(id, theme.bold) : null;
-			if (group === "") return dynamic(() => []);
-			return dynamic((width) => [group === null ? doneLine(intent, theme) : theme.fg("muted", group), ...(lines ?? [])].map((line) => truncateToWidth(line, width)));
+			return dynamic((width) => [doneLine(intent, theme), ...(lines ?? [])].map((line) => truncateToWidth(line, width)));
 		},
 	});
 }

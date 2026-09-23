@@ -9,6 +9,15 @@
        renderResult: renderMcpToolResult,
      });
    }
+@@ -507,7 +507,7 @@
+     syncProxyTool(config, cache, result.specs);
+     syncNamespaceTools(config, cache, result.reservedDirectNames, result.activeDirectNames);
+     const changed = result.added.length + result.updated.length + result.deactivated.length;
+-    if (changed > 0 && ctx?.hasUI) {
++    if (changed > 0 && ctx?.hasUI && config.settings?.notifyOnStartupConnect === true) {
+       ctx.ui.notify(
+         `MCP: direct tools refreshed (+${result.added.length}, ~${result.updated.length}, -${result.deactivated.length})`,
+         "info",
 @@ -1131,6 +1131,7 @@
          code: Type.String({ description: "Trusted JavaScript MCP script. Use tools.<prefixedToolName>(args) and emit(value)." }),
          timeoutMs: optionalNumber({ minimum: 1, description: "Execution timeout in milliseconds (default: 30000)" }),
@@ -22,7 +31,7 @@
 @@ -1,5 +1,5 @@
  import type { AgentToolResult, ToolRenderResultOptions } from "@earendil-works/pi-coding-agent";
 -import { type Component, Text, truncateToWidth, visibleWidth } from "@earendil-works/pi-tui";
-+import { type Component, Text } from "@earendil-works/pi-tui";
++import { type Component, Text, truncateToWidth } from "@earendil-works/pi-tui";
  
  type McpToolResultDetails = Record<string, unknown> & { error?: unknown };
  type McpToolContentBlock = AgentToolResult<McpToolResultDetails>["content"][number];
@@ -50,7 +59,7 @@
 +// Claude Code 2.1.261, measured: a running MCP call is a blinking grey dot + "Calling <server>…", a finished
 +// one is a single grey "Called <server>" line; ctrl+o expands to the full "● server - tool (MCP)(args)" row.
 +const COMPACT_BULLET = "● ";
-+const COMPACT_RESULT_PREFIX = "  ⎿  ";
++const COMPACT_RESULT_PREFIX = "  ⎿ \u00a0";
 +const COMPACT_RESULT_CONTINUATION_PREFIX = "     ";
 +const BLINK_MS = 500;
  
@@ -195,7 +204,7 @@
  }
  
  function renderToolCall(
-@@ -292,10 +311,12 @@
+@@ -292,12 +311,14 @@
    theme: RenderTheme | undefined,
    context: McpToolRenderContext | undefined,
    options: McpToolRenderOptions,
@@ -208,9 +217,12 @@
 +    context.state.compactInputPreview = compactDisplay?.argsPreview ?? formatCompactInputPreview(lines);
 +    context.state.compactServer = compactDisplay?.server;
    }
-   if (shouldUseCompactFinalRender(options, context)) return new EmptyComponent();
+-  if (shouldUseCompactFinalRender(options, context)) return new EmptyComponent();
++  if (shouldUseCompactFinalRender(options, context)) return claudeGroupCall(context, theme, compactDisplay?.server) ?? new EmptyComponent();
    return renderToolCallLines(lines, theme);
-@@ -306,18 +327,29 @@
+ }
+ 
+@@ -306,24 +327,35 @@
    theme?: RenderTheme,
    context?: McpToolRenderContext,
  ) {
@@ -244,7 +256,14 @@
    };
  }
  
-@@ -429,6 +461,107 @@
+ export function createMcpScriptToolCallRenderer(options = resolveMcpToolRenderOptions()) {
+   return (args: { code: string }, theme?: RenderTheme, context?: McpToolRenderContext) => {
+-    if (shouldUseCompactFinalRender(options, context)) return new EmptyComponent();
++    if (shouldUseCompactFinalRender(options, context)) return claudeGroupCall(context, theme, undefined) ?? new EmptyComponent();
+     return renderToolCallLines(formatMcpScriptToolCallLines(args), theme);
+   };
+ }
+@@ -429,6 +461,115 @@
    return { lines, truncated: false };
  }
  
@@ -262,26 +281,34 @@
 +// claude-tools (extensions/claude-tools/rows.ts) merges consecutive calls to one server into Claude's
 +// "Called dse 2 times" and hides the earlier rows; it shares its functions through globalThis.
 +type ClaudeRows = {
-+  summaryFor(id: string, bold: (text: string) => string): string | null;
++  groupRow(id: string, width: number, brush: { fg: (role: string, text: string) => string; bold: (text: string) => string }): string[];
 +  noteServer(id: string, server: string): void;
 +  watch(id: string, invalidate: () => void): void;
 +};
 +
 +function claudeRows(): ClaudeRows | undefined {
 +  const rows = (globalThis as { __claudeRows?: Partial<ClaudeRows> }).__claudeRows;
-+  return rows?.summaryFor && rows.noteServer && rows.watch ? (rows as ClaudeRows) : undefined;
++  return rows?.groupRow && rows.noteServer && rows.watch ? (rows as ClaudeRows) : undefined;
 +}
 +
-+function formatMcpCompactGroupRow(server: string | undefined, theme: RenderTheme, context: McpToolRenderContext | undefined): string | null {
++function claudeGroupCall(context: McpToolRenderContext | undefined, theme: RenderTheme | undefined, server: string | undefined): Component | undefined {
++  const rows = claudeRows();
++  const id = (context as { toolCallId?: string } | undefined)?.toolCallId;
++  if (!rows || !id || context?.expanded === true) return undefined;
++  if (server) rows.noteServer(id, server);
++  const activeTheme = theme ?? plainTheme;
++  const brush = { fg: (role: string, text: string) => activeTheme.fg(role, text), bold: (text: string) => (activeTheme.bold ? activeTheme.bold(text) : text) };
++  return { render: (width: number) => rows.groupRow(id, width, brush).map((line) => truncateToWidth(line, width)), invalidate() {} };
++}
++
++function formatMcpCompactGroupRow(server: string | undefined, context: McpToolRenderContext | undefined): string | null {
 +  const rows = claudeRows();
 +  const id = (context as { toolCallId?: string } | undefined)?.toolCallId;
 +  if (!rows || !id) return null;
 +  if (server) rows.noteServer(id, server);
 +  const invalidate = (context as { invalidate?: () => void } | undefined)?.invalidate;
 +  if (invalidate) rows.watch(id, invalidate);
-+  const group = rows.summaryFor(id, theme.bold ?? ((text) => text));
-+  if (group === null || group === "") return group;
-+  return theme.fg("muted", group);
++  return "";
 +}
 +
 +function formatMcpCompactDoneRow(server: string | undefined, title: string, theme: RenderTheme): string {
@@ -334,9 +361,9 @@
 +  const server = compactServer(context, result.details);
 +  const isError = context?.isError === true || Boolean(result.details?.error);
 +
-+  if (options.isPartial) return formatMcpCompactRunningRow(server ?? title, theme);
-+  const group = options.expanded ? null : formatMcpCompactGroupRow(server, theme, context);
++  const group = options.expanded ? null : formatMcpCompactGroupRow(server, context);
 +  if (group !== null) return group;
++  if (options.isPartial) return formatMcpCompactRunningRow(server ?? title, theme);
 +  if (!options.expanded && !isError) return formatMcpCompactDoneRow(server, title, theme);
 +
 +  const titleLine = title ? formatMcpCompactTitleLine(title, argsPreview, theme) : "";
@@ -352,7 +379,7 @@
  export function renderMcpToolResult(
    result: AgentToolResult<McpToolResultDetails>,
    options: ToolRenderResultOptions,
-@@ -437,19 +570,17 @@
+@@ -437,19 +578,17 @@
    renderOptions = resolveMcpToolRenderOptions(),
  ) {
    const activeTheme = theme ?? plainTheme;
@@ -377,3 +404,14 @@
    const display = formatMcpToolResultLines(result, expanded, renderOptions.collapsedResultLines);
    const identity = formatMcpToolResultIdentity(result.details);
    const output = [
+--- a/init.ts
++++ b/init.ts
+@@ -427,7 +427,7 @@
+ 
+   const connectedCount = results.filter(r => r.connection).length;
+   const failedCount = results.filter(r => r.error).length;
+-  if (ui && connectedCount > 0 && config.settings?.notifyOnStartupConnect !== false) {
++  if (ui && connectedCount > 0 && config.settings?.notifyOnStartupConnect === true) {
+     const totalTools = totalToolCount(state);
+     const msg = failedCount > 0
+       ? `MCP: ${connectedCount}/${startupServers.length} servers connected (${totalTools} tools)`

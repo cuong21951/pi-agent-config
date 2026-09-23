@@ -3,9 +3,11 @@ auth.json
 auth.json.bak
 # caches and runtime state
 sessions/
+plans/
 models-store.json
 mcp-cache.json
 mcp-npx-cache.json
+web-search-cache/
 trust.json
 powerline-footer/
 *.log
@@ -13,6 +15,8 @@ powerline-footer/
 npm/node_modules/
 npm/package-lock.json
 git/
+# extensions' own npm deps pi auto-installs at the repo root on first missing-module load
+node_modules/
 # backups and scratch
 *.bak
 __pycache__/

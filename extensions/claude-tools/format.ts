@@ -1,4 +1,4 @@
-import { isAbort } from "./rows.ts";
+import { isAbort, thoughtText } from "./rows.ts";
 
 export type Paint = (role: string, text: string) => string;
 export interface Roots {
@@ -23,7 +23,7 @@ export interface ResultView {
 	hint: string;
 }
 
-export type RowKind = "plain" | "muted" | "context" | "code" | "added" | "removed";
+export type RowKind = "plain" | "muted" | "thought" | "context" | "code" | "added" | "removed";
 export type Span = [number, number];
 export type Tint = [number, number, string];
 export type Highlight = (code: string) => string;
@@ -35,10 +35,10 @@ export interface Row {
 }
 
 const LABEL: Record<string, string> = { write: "Write", edit: "Update" };
-const VERB: Record<string, string> = { read: "Reading", grep: "Searching", find: "Searching", ls: "Listing" };
 const PAST: Record<string, string> = { read: "Read", grep: "Searched", find: "Searched", ls: "Listed" };
 export const WRITE_TOOLS = new Set(["write", "edit"]);
 const ELBOW = "  ⎿  ";
+const RESULT_ELBOW = "  ⎿ \u00a0";
 const WRITE_PREVIEW_LINES = 10;
 const EXPANDED_OUTPUT_LINES = 20;
 
@@ -75,15 +75,18 @@ export function target(tool: string, args: Record<string, unknown>, s: Roots): s
 	}
 }
 
-export function runningLine(tool: string, args: Record<string, unknown>, blink: boolean, s: Style): string {
-	return (blink ? s.fg("muted", "● ") : "  ") + `${VERB[tool] ?? "Running"} ${target(tool, args, s)}`;
-}
-
 export function doneLine(tool: string, args: Record<string, unknown>, s: Style): string {
 	return s.fg("muted", `${PAST[tool] ?? "Ran"} ${target(tool, args, s)}`);
 }
 
+const PLAN_FILE = /[\\/]\.pi[\\/]agent[\\/]plans[\\/][^\\/]+\.md$/;
+
+export function isPlanFile(path: unknown): boolean {
+	return typeof path === "string" && PLAN_FILE.test(path);
+}
+
 export function writeCallLine(tool: string, args: Record<string, unknown>, s: Style): string {
+	if (isPlanFile(args.path)) return s.fg("borderAccent", "● ") + s.bold("Updated plan");
 	return s.fg("borderAccent", "● ") + s.bold(LABEL[tool] ?? tool) + `(${shortPath(args.path, s)})`;
 }
 
@@ -133,11 +136,30 @@ export function summary(tool: string, args: Record<string, unknown>, outcome: To
 }
 
 const DIFF_LINE = /^([ +-])\s*(\d+) (.*)$/;
-const WORD = /\s+|\S+/g;
 const WORD_DIFF_LIMIT = 0.4;
 
 function words(text: string): string[] {
-	return text.match(WORD) ?? [];
+	const tokens: string[] = [];
+	let i = 0;
+	while (i < text.length) {
+		const ch = text[i];
+		if (/[\p{L}\p{N}_]/u.test(ch)) {
+			let j = i + 1;
+			while (j < text.length && /[\p{L}\p{N}_]/u.test(text[j])) j++;
+			tokens.push(text.slice(i, j));
+			i = j;
+		} else if (/\s/.test(ch)) {
+			let j = i + 1;
+			while (j < text.length && /\s/.test(text[j])) j++;
+			tokens.push(text.slice(i, j));
+			i = j;
+		} else {
+			const size = (text.codePointAt(i) ?? 0) > 0xffff ? 2 : 1;
+			tokens.push(text.slice(i, i + size));
+			i += size;
+		}
+	}
+	return tokens;
 }
 
 interface Part {
@@ -209,7 +231,7 @@ const CLEARS_FG = new Set(["\x1b[39m", "\x1b[0m", "\x1b[m"]);
 // with this exact word list, both read out of the 2.1.261 bundle. pi's highlighter has no such bucket, so
 // the swap happens here, on an exact token match: a run reading `"const"` with its quotes is a string and
 // keeps the string colour.
-const STORAGE = new Set([
+export const STORAGE = new Set([
 	"const", "let", "var", "function", "class", "type", "interface", "enum",
 	"namespace", "module", "def", "fn", "func", "struct", "trait", "impl",
 ]);
@@ -249,10 +271,58 @@ function tintsFor(code: string, offset: number, highlight?: Highlight): Tint[] |
 		return undefined;
 	}
 	if (painted.replace(ANSI, "") !== code) return undefined;
-	const runs = tints(painted, offset).map(([start, end, colour]) =>
+	const withStorage = tints(painted, offset).map(([start, end, colour]) =>
 		STORAGE.has(code.slice(start - offset, end - offset)) ? ([start, end, STORAGE_FG] as Tint) : ([start, end, colour] as Tint),
 	);
+	const runs = withStorage.filter(([start, end, colour], i) => {
+		if (code.slice(start - offset, end - offset) !== "(") return true;
+		const prev = withStorage[i - 1];
+		return !(prev && prev[1] === start && prev[2] === colour);
+	});
 	return runs.length > 0 ? runs : undefined;
+}
+
+const DIFF_CONTEXT_LINES = 3;
+
+export function trimDiffContext(lines: string[], contextLines = DIFF_CONTEXT_LINES): string[] {
+	const parsed = lines.map((line) => line.match(DIFF_LINE));
+	const width = Math.max(1, ...parsed.map((m) => (m ? m[2].length : 0)));
+	const gap = ` ${"".padStart(width)} ...`;
+	const isChange = (i: number) => parsed[i]?.[1] === "+" || parsed[i]?.[1] === "-";
+	const changes = parsed.map((_, i) => i).filter(isChange);
+	const between = (i: number) => changes.length > 0 && changes[0] < i && i < changes[changes.length - 1];
+	const out: string[] = [];
+	let i = 0;
+	while (i < lines.length) {
+		if (isChange(i) || !parsed[i]) {
+			if (lines[i].trim() !== "..." || between(i)) out.push(lines[i]);
+			i++;
+			continue;
+		}
+		const run: number[] = [];
+		let j = i;
+		while (j < lines.length && !isChange(j)) {
+			if (parsed[j]) run.push(j);
+			j++;
+		}
+		const hasLeading = i > 0 && isChange(i - 1);
+		const hasTrailing = j < lines.length && isChange(j);
+		if (hasLeading && hasTrailing) {
+			if (run.length <= contextLines * 2) {
+				for (const k of run) out.push(lines[k]);
+			} else {
+				for (const k of run.slice(0, contextLines)) out.push(lines[k]);
+				out.push(gap);
+				for (const k of run.slice(run.length - contextLines)) out.push(lines[k]);
+			}
+		} else if (hasLeading) {
+			for (const k of run.slice(0, contextLines)) out.push(lines[k]);
+		} else if (hasTrailing) {
+			for (const k of run.slice(Math.max(0, run.length - contextLines))) out.push(lines[k]);
+		}
+		i = j;
+	}
+	return out;
 }
 
 // ponytail: Claude's diff row is the line number right-aligned in (widest digits + 1) columns, a space,
@@ -265,7 +335,8 @@ export function diffRows(lines: string[], highlight?: Highlight): Row[] {
 	const rows: Row[] = lines.map((line, i) => {
 		const m = parsed[i];
 		if (!m) return { kind: "muted", text: line };
-		const [, sign, num, text] = m;
+		const [, sign, num, rawText] = m;
+		const text = convertLeadingTabs(rawText);
 		const kind: RowKind = sign === "+" ? "added" : sign === "-" ? "removed" : "context";
 		// ponytail: a removed line is never syntax-highlighted — it renders in the plain foreground while
 		// added and context lines keep their tokens. Measured three ways: the 2.1.261 bundle branches on the
@@ -294,6 +365,7 @@ export function diffRows(lines: string[], highlight?: Highlight): Row[] {
 // Claude-side, not the terminal. The measured values win — the point is to look identical.
 const CODE = "\x1b[38;2;248;248;242m";
 const DIM = "\x1b[2m";
+const UNDIM = "\x1b[22m";
 const RESET = "\x1b[0m";
 const LINE_BG: Partial<Record<RowKind, string>> = { removed: "\x1b[48;2;61;1;0m", added: "\x1b[48;2;0;27;41m" };
 const WORD_BG: Partial<Record<RowKind, string>> = { removed: "\x1b[48;2;92;2;0m", added: "\x1b[48;2;0;48;71m" };
@@ -306,12 +378,14 @@ const CODE_GUTTER = /^ *\d+ /;
 // each piece with only the escapes that changed is the one composition that survives all three at once.
 export function paint(row: Row, text: string, pad: number): string {
 	if (row.kind === "plain") return text;
+	if (row.kind === "thought") return thoughtText(text);
 	if (row.kind === "muted") return DIM + text + RESET;
 	const bg = LINE_BG[row.kind] ?? "";
 	const word = WORD_BG[row.kind] ?? "";
 	const gutterEnd = Math.min(text.length, text.match(row.kind === "code" ? CODE_GUTTER : SIGN_GUTTER)?.[0].length ?? 0);
+	const dimEnd = row.kind === "code" ? gutterEnd : row.kind === "context" ? Math.max(0, gutterEnd - 1) : 0;
 	const clamp = (n: number) => Math.max(0, Math.min(n, text.length));
-	const cuts = new Set<number>([0, gutterEnd, text.length]);
+	const cuts = new Set<number>([0, gutterEnd, dimEnd, text.length]);
 	for (const [start, end] of row.hi ?? []) cuts.add(clamp(start)), cuts.add(clamp(end));
 	for (const [start, end] of row.fg ?? []) cuts.add(clamp(start)), cuts.add(clamp(end));
 	const marks = [...cuts].sort((a, b) => a - b);
@@ -321,14 +395,17 @@ export function paint(row: Row, text: string, pad: number): string {
 	let out = "";
 	let shownBg = "";
 	let shownFg = "";
+	let shownDim = false;
 	for (let i = 0; i < marks.length - 1; i++) {
 		const from = marks[i];
 		const to = marks[i + 1];
 		if (from >= to) continue;
 		const nextBg = bg === "" ? "" : changed(from) ? word : bg;
 		const nextFg = tint(from);
+		const nextDim = from < dimEnd;
 		if (nextBg !== shownBg) out += (shownBg = nextBg);
 		if (nextFg !== shownFg) out += (shownFg = nextFg);
+		if (nextDim !== shownDim) out += (shownDim = nextDim) ? DIM : UNDIM;
 		out += text.slice(from, to);
 	}
 	if (bg !== "") out += (shownBg === bg ? "" : bg) + " ".repeat(pad);
@@ -385,13 +462,17 @@ export function wrapRow(row: Row, width: number): Row[] {
 	});
 }
 
+export function convertLeadingTabs(text: string): string {
+	return text.includes("\t") ? text.replace(/^\t+/gm, (m) => "  ".repeat(m.length)) : text;
+}
+
 export function contentRows(content: string, highlight?: Highlight): Row[] {
-	const lines = content.replace(/\n$/, "").split("\n");
+	const lines = convertLeadingTabs(content).replace(/\n$/, "").split("\n");
 	const width = String(lines.length).length;
 	return lines.map((text, i) => ({
 		kind: "code",
-		text: `${String(i + 1).padStart(width)} ${text}`,
-		fg: tintsFor(text, width + 1, highlight),
+		text: ` ${String(i + 1).padStart(width)} ${text}`,
+		fg: tintsFor(text, width + 2, highlight),
 	}));
 }
 
@@ -406,7 +487,7 @@ function writeBody(tool: string, args: Record<string, unknown>, outcome: ToolOut
 	const highlight = s.code && path !== "" ? (code: string) => s.code!(code, path) : undefined;
 	// ponytail: an edit shows its whole diff, however long - only a write truncates its preview. pi already
 	// cuts the diff down to the changed lines plus context, with a "..." row where it skipped a stretch.
-	if (tool === "edit") return diffRows(diffLines(outcome.details), highlight);
+	if (tool === "edit") return diffRows(trimDiffContext(diffLines(outcome.details)), highlight);
 	const all = contentRows(String(args.content ?? ""), highlight);
 	const shown = view.expanded ? all : all.slice(0, WRITE_PREVIEW_LINES);
 	return [...shown, ...more(all.length - shown.length)];
@@ -427,9 +508,9 @@ export interface Result {
 // ponytail: null means the row draws nothing. A finished read-only tool is only its grey call line, like
 // Claude's collapsed "Read 1 file"; ctrl+o brings the elbow and the output back.
 export function resultRows(tool: string, args: Record<string, unknown>, outcome: ToolOutcome, view: ResultView, s: Style): Result | null {
-	const elbow = s.fg("muted", ELBOW);
 	const write = WRITE_TOOLS.has(tool);
-	if (view.isPartial) return { head: elbow + s.fg("muted", write ? "…" : target(tool, args, s)), rows: [], indent: 0 };
+	if (view.isPartial) return write ? { head: s.fg("muted", ELBOW) + s.fg("muted", "…"), rows: [], indent: 0 } : null;
+	const elbow = s.fg("muted", RESULT_ELBOW);
 	if (outcome.isError && isAbort(outcome.text)) return null;
 	if (!write && !view.expanded) return null;
 	if (outcome.isError) {
@@ -439,8 +520,10 @@ export function resultRows(tool: string, args: Record<string, unknown>, outcome:
 		// ✗ in the 2.1.261 bundle belongs to the session picker's one-line preview, not to a tool row.
 		return { head: elbow + s.fg("error", first), rows, indent: 0 };
 	}
-	if (write) return { head: elbow + summary(tool, args, outcome, s), rows: writeBody(tool, args, outcome, view, s), indent: ELBOW.length };
-	return { head: elbow + summary(tool, args, outcome, s), rows: outputRows(outcome.text, view.hint), indent: 0 };
+	if (write && isPlanFile(args.path)) return { head: s.fg("muted", `${RESULT_ELBOW}/plan to preview`), rows: [], indent: 0 };
+	if (write) return { head: elbow + summary(tool, args, outcome, s), rows: writeBody(tool, args, outcome, view, s), indent: RESULT_ELBOW.length };
+	const output = tool === "read" ? convertLeadingTabs(outcome.text) : outcome.text;
+	return { head: elbow + summary(tool, args, outcome, s), rows: outputRows(output, view.hint), indent: 0 };
 }
 
 if (process.env.CLAUDE_TOOLS_SELFTEST) {
@@ -453,9 +536,7 @@ if (process.env.CLAUDE_TOOLS_SELFTEST) {
 	const view = (expanded = false): ResultView => ({ expanded, isPartial: false, hint: "ctrl+o to expand" });
 	const ok = (text: string, details?: unknown): ToolOutcome => ({ text, isError: false, details });
 
-	check(runningLine("read", { path: "/home/me/a.ts" }, true, tagged) === "<muted>● </muted>Reading ~/a.ts", "running read: grey dot, plain text");
-	check(runningLine("read", { path: "a.ts" }, false, plain) === "  Reading a.ts", "blink off hides the dot, keeps the column");
-	check(runningLine("grep", { pattern: "foo" }, true, plain) === '● Searching "foo"', "running grep names the pattern");
+	check(target("read", { path: "/home/me/a.ts" }, tagged) === "~/a.ts" && target("grep", { pattern: "foo" }, plain) === '"foo"', "a call names the thing: the path, or the quoted pattern");
 	check(doneLine("read", { path: "/home/me/a.ts" }, tagged) === "<muted>Read ~/a.ts</muted>", "finished read is one grey line without a dot");
 	check(doneLine("ls", {}, plain) === "Listed .", "ls defaults to cwd");
 	check(doneLine("find", { pattern: "**/*.ts" }, plain) === 'Searched "**/*.ts"', "find is a search");
@@ -469,31 +550,39 @@ if (process.env.CLAUDE_TOOLS_SELFTEST) {
 	check(resultRows("read", { path: "a" }, ok("l1\nl2\nl3\n"), view(), plain) === null, "collapsed read result draws nothing");
 	check(resultRows("read", { path: "a" }, { text: "Operation aborted", isError: true }, view(), plain) === null, "an aborted tool draws no error row (pi core prints Interrupted)");
 	const expanded = resultRows("read", { path: "a" }, ok("l1\nl2"), view(true), plain)!;
-	check(expanded.head === "  ⎿  Read 2 lines" && expanded.rows.map((r) => r.text).join("|") === "    l1|    l2", "expanded read shows elbow, summary and output");
-	check(resultRows("read", { path: "a" }, ok(""), { ...view(), isPartial: true }, tagged)!.head === "<muted>  ⎿  </muted><muted>a</muted>", "partial read shows the target under the elbow");
+	check(expanded.head === "  ⎿ \u00a0Read 2 lines" && expanded.rows.map((r) => r.text).join("|") === "    l1|    l2", "expanded read shows elbow, summary and output");
+	const tabbedRead = resultRows("read", { path: "a" }, ok("\tx\nl2"), view(true), plain)!;
+	check(tabbedRead.rows.map((r) => r.text).join("|") === "      x|    l2", "an expanded read converts a leading tab in the file content to two spaces, like the Update diff and Write preview");
+	check(resultRows("read", { path: "a" }, ok(""), { ...view(), isPartial: true }, tagged) === null, "a running read draws no rows of its own: the active group row carries its hint");
+	check(resultRows("write", { path: "a" }, ok(""), { ...view(), isPartial: true }, plain)!.head === "  ⎿  …", "a running write keeps its own elbow row");
 	check(resultRows("read", {}, { text: "ENOENT\nmore", isError: true, details: undefined }, view(), tagged) === null, "a failed read folds into the group like any other call; its row draws nothing");
-	check(resultRows("read", {}, { text: "ENOENT\nmore", isError: true, details: undefined }, view(true), tagged)!.head === "<muted>  ⎿  </muted><error>ENOENT</error>", "ctrl+o shows the error red under the elbow, with no glyph of its own");
-	check(resultRows("edit", { path: "x.ts" }, { text: "String not found", isError: true, details: undefined }, view(), plain)!.head === "  ⎿  String not found", "a failed edit keeps its own error row");
+	check(resultRows("read", {}, { text: "ENOENT\nmore", isError: true, details: undefined }, view(true), tagged)!.head === "<muted>  ⎿ \u00a0</muted><error>ENOENT</error>", "ctrl+o shows the error red under the elbow, with no glyph of its own");
+	check(resultRows("edit", { path: "x.ts" }, { text: "String not found", isError: true, details: undefined }, view(), plain)!.head === "  ⎿ \u00a0String not found", "a failed edit keeps its own error row");
 
 	const wrote = resultRows("write", { path: "/home/me/n.ts", content: "a\nb" }, ok("Successfully wrote"), view(), tagged)!;
-	check(wrote.head === "<muted>  ⎿  </muted>Wrote <b>2</b> lines to <b>~/n.ts</b>", "write summary bolds the count and the path");
-	check(wrote.rows.map((r) => `${r.kind}:${r.text}`).join("|") === "code:1 a|code:2 b" && wrote.indent === 5, "write preview numbers the content, the block sits under the elbow's text");
+	check(wrote.head === "<muted>  ⎿ \u00a0</muted>Wrote <b>2</b> lines to <b>~/n.ts</b>", "write summary bolds the count and the path");
+	check(wrote.rows.map((r) => `${r.kind}:${r.text}`).join("|") === "code: 1 a|code: 2 b" && wrote.indent === 5, "write preview numbers the content, the block sits under the elbow's text");
 	const long = Array.from({ length: 14 }, (_, i) => `l${i + 1}`).join("\n");
 	const preview = resultRows("write", { path: "n.ts", content: long }, ok(""), view(), plain)!.rows;
-	check(preview.length === 11 && preview[10].text === "… +4 lines" && preview[9].text === "10 l10" && preview[0].text === " 1 l1", "write shows ten lines, numbers right-aligned, then a bare count");
+	check(preview.length === 11 && preview[10].text === "… +4 lines" && preview[9].text === " 10 l10" && preview[0].text === "  1 l1", "write shows ten lines, numbers right-aligned, then a bare count");
 	check(resultRows("write", { path: "n.ts", content: long }, ok(""), view(true), plain)!.rows.length === 14, "expanded write shows everything");
+	check(convertLeadingTabs("\treturn a + b;") === "  return a + b;", "a leading tab becomes two spaces, Claude's Update-diff measurement");
+	check(convertLeadingTabs("\t\tx") === "    x", "two leading tabs become four spaces, one pair each");
+	check(convertLeadingTabs("a\tb") === "a\tb", "a tab that is not leading is left alone");
+	check(contentRows("\tconst x = 1;")[0].text === " 1   const x = 1;", "the write preview expands a leading tab to two spaces before numbering");
 
 	const diff = " 1 one\n-2 two\n+2 2\n 3 three";
 	const updated = resultRows("edit", { path: "x.ts" }, ok("done", { diff }), view(), tagged)!;
-	check(updated.head === "<muted>  ⎿  </muted>Added <b>1</b> line, removed <b>1</b> line", "update summary matches Claude's wording");
-	check(resultRows("edit", { path: "x.ts" }, ok("done", { diff: " 1 one\n+2 two\n+3 three" }), view(), plain)!.head === "  ⎿  Added 2 lines", "a pure addition names no removed count");
-	check(resultRows("edit", { path: "x.ts" }, ok("done", { diff: "-2 two" }), view(), plain)!.head === "  ⎿  Removed 1 line", "a pure removal names no added count");
+	check(updated.head === "<muted>  ⎿ \u00a0</muted>Added <b>1</b> line, removed <b>1</b> line", "update summary matches Claude's wording");
+	check(resultRows("edit", { path: "x.ts" }, ok("done", { diff: " 1 one\n+2 two\n+3 three" }), view(), plain)!.head === "  ⎿ \u00a0Added 2 lines", "a pure addition names no removed count");
+	check(resultRows("edit", { path: "x.ts" }, ok("done", { diff: "-2 two" }), view(), plain)!.head === "  ⎿ \u00a0Removed 1 line", "a pure removal names no added count");
 	check(updated.indent === 5, "the diff sits under the elbow's text");
 	check(
 		updated.rows.map((r) => `${r.kind}:${r.text}`).join("|") === "context: 1  one|removed: 2 -two|added: 2 +2|context: 3  three",
 		"diff rows: number first, sign column, Claude's spacing",
 	);
 	check(diffRows(["-  9 a", "+ 10 b", "     ..."]).map((r) => r.text).join("|") === "  9 -a| 10 +b|     ...", "numbers right-align to the widest, gaps pass through");
+	check(diffRows(["-4 \treturn a + b;", "+4 \treturn a - b;"]).map((r) => r.text).join("|") === " 4 -  return a + b;| 4 +  return a - b;", "a leading tab in a diff line becomes two spaces, like Claude's Update diff");
 	check(updated.rows.every((row) => row.hi === undefined), "a line rewritten end to end trips Claude's 40% guard and keeps no word span");
 	const swap = diffRows(["-1 const total = a + b;", "+1 const total = a - b;"]);
 	check(
@@ -506,7 +595,12 @@ if (process.env.CLAUDE_TOOLS_SELFTEST) {
 		"two words changed far apart give two spans, not one block over the middle",
 	);
 	check(diffRows(["-1 one two", "+1 six ten"]).every((row) => row.hi === undefined), "a pair past the 40% guard keeps no spans at all");
-	check(resultRows("edit", { path: "x.ts" }, ok("done", {}), view(), plain)!.head === "  ⎿  Updated x.ts", "edit without diff details omits counts");
+	const importSwap = diffRows(['-1 import { clamp } from "./util";', '+1 import { clamp } from "./helpers";']);
+	check(
+		JSON.stringify([importSwap[0].hi, importSwap[1].hi]) === "[[[29,33]],[[29,36]]]",
+		"punctuation is its own token, so a word change inside a quoted path marks only the word, not the whole \"./path\"; (Claude 2.1.280)",
+	);
+	check(resultRows("edit", { path: "x.ts" }, ok("done", {}), view(), plain)!.head === "  ⎿ \u00a0Updated x.ts", "edit without diff details omits counts");
 	const shown = (row: Row, width: number) => paint(row, row.text, width - row.text.length).replace(/\x1b\[/g, "^");
 	check(
 		shown(swap[0], 27) === "^48;2;61;1;0m^38;2;220;90;90m 1 -^38;2;248;248;242mconst total = a ^48;2;92;2;0m+^48;2;61;1;0m b;   ^0m",
@@ -516,7 +610,9 @@ if (process.env.CLAUDE_TOOLS_SELFTEST) {
 		shown(swap[1], 26) === "^48;2;0;27;41m^38;2;81;160;200m 1 +^38;2;248;248;242mconst total = a ^48;2;0;48;71m-^48;2;0;27;41m b;  ^0m",
 		"an added row: blue number and sign on the added pair of colours",
 	);
-	check(shown({ kind: "context", text: " 1  one" }, 7) === "^38;2;248;248;242m 1  one^0m", "a context row has no background; number and code share the code colour");
+	check(shown({ kind: "context", text: " 1  one" }, 7) === "^38;2;248;248;242m^2m 1 ^22m one^0m", "a context row has no background; the gutter number is dim, the sign column and code are not (Claude 2.1.280)");
+	check(shown({ kind: "code", text: " 1 one" }, 6) === "^38;2;248;248;242m^2m 1 ^22mone^0m", "a Write-preview row dims its whole gutter, number and trailing space alike");
+	check(!shown(swap[0], 27).includes("^2m") && !shown(swap[1], 26).includes("^2m"), "a removed or added row's coloured gutter is never dim");
 	check(
 		JSON.stringify(wrapRow({ kind: "code", text: " 4 aaaa bbbb cccc" }, 10).map((row) => row.text)) === JSON.stringify([" 4 aaaa ", "   bbbb ", "   cccc"]),
 		"a written line wraps under its code, like Claude's Write preview",
@@ -548,6 +644,17 @@ if (process.env.CLAUDE_TOOLS_SELFTEST) {
 		JSON.stringify(diffRows(['+1 s = "const";'], (code) => code.replace(/"const"/, (t) => `${PINK}${t}\x1b[39m`))[0].fg) ===
 			JSON.stringify([[8, 15, PINK]]),
 		"a run reading \"const\" with its quotes is a string and is left alone",
+	);
+	const asFunctionName: Highlight = (code) =>
+		code.replace(/\badd/, (m) => `${YELLOW}${m}\x1b[39m`).replace(/(add\x1b\[39m)\(/, (_m, name) => `${name}${YELLOW}(\x1b[39m`);
+	check(
+		JSON.stringify(diffRows(["+1 export function add(a) {"], asFunctionName)[0].fg) === JSON.stringify([[20, 23, YELLOW]]),
+		"a paren the highlighter coloured as its own run right after the function name loses that colour — Claude paints it plain",
+	);
+	const openParenOwnColour: Highlight = (code) => code.replace(/\badd/, (m) => `${YELLOW}${m}\x1b[39m`).replace("(", `${PINK}(\x1b[39m`);
+	check(
+		JSON.stringify(diffRows(["+1 add(a);"], openParenOwnColour)[0].fg) === JSON.stringify([[4, 7, YELLOW], [7, 8, PINK]]),
+		"a paren the highlighter coloured differently from the name keeps its own colour",
 	);
 	const litRow = shown(lit[1], 24);
 	check(
@@ -586,5 +693,29 @@ if (process.env.CLAUDE_TOOLS_SELFTEST) {
 	const rows = resultRows("edit", { path: "x" }, ok("", { diff: longDiff }), view(), plain)!.rows;
 	check(rows.length === 25, "an edit shows its whole diff — only a write truncates");
 	check(more(1, "ctrl+o to expand")[0].text === "… +1 line (ctrl+o to expand)", "the hint says one line, not one lines");
+
+	check(trimDiffContext(["   ...", " 8   }", " 9 ", "-10 a", "+10 b", " 11 c", "   ..."]).join("|") === " 8   }| 9 |-10 a|+10 b| 11 c", "pi's own \"...\" before the first or after the last change is dropped: Claude 2.1.280's Update of src/shapes.ts line 10 starts at its first context row");
+	check(trimDiffContext(["-1 a", "+1 b", "   ...", "-9 c", "+9 d"]).join("|") === "-1 a|+1 b|   ...|-9 c|+9 d", "a gap between two hunks stays");
+	const tailContext = [" 1 a", " 2 b", " 3 c", "-4 old", "+4 new", " 5 d", " 6 e", " 7 f", " 8 g", "    ..."];
+	check(
+		trimDiffContext(tailContext).join("|") === " 1 a| 2 b| 3 c|-4 old|+4 new| 5 d| 6 e| 7 f",
+		"3 lines of context after the last hunk, nothing after that — no trailing gap row",
+	);
+	const farApart = [
+		"-4 old",
+		"+4 new",
+		...Array.from({ length: 10 }, (_, i) => ` ${i + 5} x${i}`),
+		"-16 old2",
+		"+16 new2",
+	];
+	check(
+		trimDiffContext(farApart).join("|") === "-4 old|+4 new| 5 x0| 6 x1| 7 x2|    ...| 12 x7| 13 x8| 14 x9|-16 old2|+16 new2",
+		"two hunks far apart keep 3 lines of context on each side and a gap row between them",
+	);
+	const plan = "C:\\Users\\me\\.pi\\agent\\plans\\plan-a-b.md";
+	check(writeCallLine("write", { path: plan }, tagged) === "<borderAccent>● </borderAccent><b>Updated plan</b>", "a write to the plan file is Claude 2.1.280's \"● Updated plan\" row, no path");
+	check(writeCallLine("edit", { path: plan }, plain) === "● Updated plan", "an edit to the plan file too");
+	check(resultRows("write", { path: plan, content: "a\nb" }, ok("done"), view(), tagged)!.head === "<muted>  ⎿ \u00a0/plan to preview</muted>", "the plan file result is \"⎿ /plan to preview\", no content");
+	check(!isPlanFile("/home/me/plans/a.md") && isPlanFile("/home/me/.pi/agent/plans/a.md"), "only pi's own plans folder counts");
 	console.log("\nAll claude-tools checks passed.");
 }

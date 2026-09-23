@@ -17,7 +17,8 @@ const DIFFS = [
 	["pi-deepseek-search", "pi-deepseek-search.patch", "pi-deepseek-search.selftest.ts"],
 	["pi-web-access", "pi-web-access.patch", "pi-web-access.selftest.ts"],
 	["@juicesharp/rpiv-ask-user-question", "rpiv-ask-user-question.patch", "rpiv-ask-user-question.selftest.ts"],
-	["@tintinweb/pi-subagents", "pi-subagents.patch", null],
+	["@tintinweb/pi-subagents", "pi-subagents.patch", "pi-subagents.selftest.ts"],
+	["@dietrichgebert/ponytail", "ponytail.patch", "ponytail.selftest.ts"],
 ];
 
 const PI_INSTALLS = [

@@ -1,0 +1,32 @@
+{
+ "turns": [
+  {
+   "prompt": "Error sample.",
+   "steps": [
+    {
+     "assistant": [
+      {
+       "type": "toolCall",
+       "name": "read",
+       "arguments": {
+        "path": "notes.txt"
+       }
+      }
+     ],
+     "results": [
+      {
+       "text": "alpha: 1\nbeta: 2\ngamma: 3\n"
+      }
+     ],
+     "gap": 2
+    },
+    {
+     "assistant": [],
+     "stopReason": "error",
+     "errorMessage": "400 {\"type\":\"error\",\"error\":{\"type\":\"invalid_request_error\",\"message\":\"messages.2.content.0: unexpected tool_use_id\"}}",
+     "gap": 1
+    }
+   ]
+  }
+ ]
+}

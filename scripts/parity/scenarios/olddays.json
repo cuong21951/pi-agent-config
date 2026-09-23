@@ -1,0 +1,11 @@
+{
+  "prompt": "First old turn.",
+  "steps": [
+    {"until": "✻ \\S+ for [^\\n]*· done", "timeout": 60},
+    {"sleep": 1.5},
+    {"keys": "Second old turn."}, {"sleep": 1.5}, {"keys": "\r"},
+    {"until": "Five days ago", "timeout": 60},
+    {"sleep": 3}
+  ],
+  "end": "."
+}

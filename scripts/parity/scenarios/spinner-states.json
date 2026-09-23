@@ -1,0 +1,20 @@
+{
+ "prompt": "Run exactly one shell command, with the description \"Pause a few seconds\": sleep 8 && echo ok. Do not write any text before the tool call. After it finishes, write a short paragraph (at least 4 sentences) about three fun facts about lighthouses.",
+ "steps": [
+  {
+   "until": "(?m)^● Pause a few seconds · \\d+s *\\n +⎿ +\\$ sleep 8 && echo ok \\([3-9]s\\)",
+   "timeout": 90
+  },
+  {
+   "snap": "tool-running"
+  },
+  {
+   "until": "(?m)^● Pause a few seconds *$",
+   "timeout": 20
+  },
+  {
+   "snap": "tool-finished"
+  }
+ ],
+ "end": "✻ \\S+ for [^\\n]*· done"
+}

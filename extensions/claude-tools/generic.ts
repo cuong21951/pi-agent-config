@@ -1,15 +1,16 @@
-import { blinkOn, dynamic, failed, finished, summaryFor, watch } from "./rows.ts";
+import { truncateToWidth } from "@earendil-works/pi-tui";
+import { type Brush, dynamic, failed, finished, groupRow, join, summaryFor, watch } from "./rows.ts";
 
 export type Paint = (role: string, text: string) => string;
 export type Theme = { fg: (role: never, text: string) => string; bold: (text: string) => string };
 
-const ELBOW = "  ⎿  ";
+const ELBOW = "  ⎿  ";
 
 // ponytail: pi draws a tool nobody registered a renderer for as a bare bold name and a raw text dump.
 // Claude has no such row — an unrecognised tool only adds "called N tools" to the grey group sentence.
 // These two are the whole visible behaviour, kept pure so the selftest can reach them.
-export function fallbackCall(toolName: string, done: boolean, blink: boolean, paint: Paint): string[] {
-	return done ? [] : [(blink ? paint("muted", "● ") : "  ") + `Running ${toolName}`];
+export function fallbackCall(id: string, width: number, brush: Brush): string[] {
+	return groupRow(id, width, brush).map((line) => truncateToWidth(line, width));
 }
 
 export function fallbackResult(toolName: string, group: string | null, error: string, paint: Paint): string[] {
@@ -45,6 +46,7 @@ export function patchGenericTools(prototype: object): void {
 
 	type Slot = { toolName: string; toolCallId?: string };
 	const paintWith = (theme: Theme): Paint => (role, text) => theme.fg(role as never, text);
+	const brushWith = (theme: Theme): Brush => ({ fg: paintWith(theme), bold: (text) => theme.bold(text) });
 	const rendersItself = (slot: Slot) => hasOwnRenderer.call(slot) && (callOf.call(slot) !== undefined || resultOf.call(slot) !== undefined);
 
 	proto.hasRendererDefinition = function () {
@@ -55,9 +57,7 @@ export function patchGenericTools(prototype: object): void {
 	};
 	proto.getCallRenderer = function (this: Slot) {
 		if (rendersItself(this)) return callOf.call(this);
-		const name = this.toolName;
-		return (_args: unknown, theme: Theme, context: { toolCallId?: string }) =>
-			dynamic(() => fallbackCall(name, finished.has(context.toolCallId ?? ""), blinkOn(), paintWith(theme)));
+		return (_args: unknown, theme: Theme, context: { toolCallId?: string }) => dynamic((width) => fallbackCall(context.toolCallId ?? "", width, brushWith(theme)));
 	};
 	proto.getResultRenderer = function (this: Slot) {
 		if (rendersItself(this)) return resultOf.call(this);
@@ -72,7 +72,7 @@ export function patchGenericTools(prototype: object): void {
 			if (id !== "" && context.invalidate) watch(id, context.invalidate);
 			const broken = result?.isError === true || context.isError === true || failed.has(id);
 			const error = broken ? (textOf(result).split("\n")[0] ?? "") : "";
-			return dynamic(() => (view.isPartial ? [] : fallbackResult(name, summaryFor(id, theme.bold), error, paintWith(theme))));
+			return dynamic(() => (view.isPartial || summaryFor(id) !== null ? [] : fallbackResult(name, null, error, paintWith(theme))));
 		};
 	};
 	proto[PATCHED] = true;
@@ -86,14 +86,17 @@ if (process.env.CLAUDE_FALLBACK_SELFTEST) {
 	};
 	const plain: Paint = (_role, text) => text;
 	const tagged: Paint = (role, text) => `<${role}>${text}</${role}>`;
+	const brush: Brush = { fg: plain, bold: (text) => text };
 
-	check(fallbackCall("mcp", false, true, plain) .join("") === "● Running mcp", "a running unknown tool names itself behind the blinking dot");
-	check(fallbackCall("mcp", false, false, plain)[0] === "  Running mcp", "blink off keeps the column");
-	check(fallbackCall("mcp", true, true, plain).length === 0, "a finished one draws nothing — the group sentence covers it");
+	join("gx1", "mcp");
+	check(/^(● |  )Calling 1 tool…$/.test(fallbackCall("gx1", 80, brush).join("|")), "a running unknown tool draws its active group, Claude's \"Calling 1 tool…\" behind the blinking dot");
+	finished.add("gx1");
+	check(fallbackCall("gx1", 80, brush).join("|") === "  Called 1 tool", "once finished and the turn is idle it is the grey past sentence");
+	check(fallbackCall("gx-unplaced", 80, brush).length === 0, "a call that never started executing draws nothing");
 	check(fallbackResult("mcp", "", "", plain).length === 0, "a hidden group member draws nothing");
 	check(fallbackResult("mcp", "Read 1 file, called 1 tool", "", tagged)[0] === "<muted>Read 1 file, called 1 tool</muted>", "the last member draws the sentence");
 	check(fallbackResult("mcp", null, "", plain)[0] === "Ran mcp", "outside a group it falls back to naming the tool");
-	check(fallbackResult("mcp", null, "boom", tagged)[0] === "<muted>  ⎿  </muted><error>boom</error>", "an error outside a group stays visible under the elbow, with no ✗");
+	check(fallbackResult("mcp", null, "boom", tagged)[0] === "<muted>  ⎿  </muted><error>boom</error>", "an error outside a group stays visible under the elbow, with no ✗");
 	check(fallbackResult("mcp", "  Called 1 tool", "boom", plain).join("|") === "  Called 1 tool", "a failed call inside a group folds into the sentence like Claude 2.1.280");
 	check(fallbackResult("mcp", "", "boom", plain).length === 0, "a failed hidden member draws nothing");
 	const fake = () => ({
@@ -125,7 +128,8 @@ if (process.env.CLAUDE_FALLBACK_SELFTEST) {
 		"a registered tool with no renderers of its own (pi 0.85.1 counts it as having a definition) is taken over too",
 	);
 	const theme = { fg: (_role: never, text: string) => text, bold: (text: string) => text };
-	check(JSON.stringify(proto.getCallRenderer.call(orphan)({}, theme, { toolCallId: "zz" }).render(80)).includes("Running mcp"), "the taken-over call row names the tool");
+	check(proto.getCallRenderer.call(orphan)({}, theme, { toolCallId: "gx1" }).render(80).join("|") === "  Called 1 tool", "the taken-over call row draws the tool's group");
+	check(proto.getResultRenderer.call(orphan)({ content: [] }, { isPartial: false }, theme, { toolCallId: "gx1" }).render(80).length === 0, "and its result row draws nothing, so the group is not drawn twice");
 	const bare = fake();
 	delete bare.getCallRenderer;
 	patchGenericTools(bare);

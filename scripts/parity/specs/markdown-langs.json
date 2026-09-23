@@ -1,0 +1,10 @@
+{
+  "turns": [
+    {
+      "prompt": "Show the markdown langs sample.",
+      "steps": [
+        {"assistant": [{"type": "text", "text": "```python\ndef greet(name):\n    \"\"\"Say hi.\"\"\"\n    return f\"Hi, {name}! Total: {1 + 2}\"\n```\n\n```json\n{\n  \"name\": \"pi\",\n  \"count\": 3,\n  \"ok\": true,\n  \"tags\": [\"a\", \"b\"],\n  \"meta\": null\n}\n```\n\n```bash\n#!/bin/bash\nfor f in *.txt; do\n  echo \"file: $f\" # list it\ndone\n```\n\n```\nplain fenced text\n  with an indented line\n```\n\n```not-a-real-language\nraw content in an unknown language\n```"}], "gap": 2}
+      ]
+    }
+  ]
+}

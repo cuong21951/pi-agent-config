@@ -1,0 +1,4 @@
+{
+  "prompt": "Search the web for \"example domain iana\" with your web_search tool. Then fetch https://httpbin.org/html with your fetch_content tool. Then reply with exactly: done. No other text.",
+  "steps": []
+}

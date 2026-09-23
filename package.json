@@ -2,6 +2,10 @@
   "name": "pi-agent-config",
   "private": true,
   "description": "Cuong's pi harness plus the Kuha business pack (research, finance, Vietnamese law, documents, meeting minutes)",
+  "dependencies": {
+    "highlight.js": "11.12.0",
+    "fuse.js": "7.0.0"
+  },
   "pi": {
     "skills": [
       "./kuha/skills"
@@ -25,7 +29,8 @@
       "./extensions/claude-skills",
       "./extensions/claude-effort",
       "./extensions/claude-help",
-      "./extensions/claude-keys"
+      "./extensions/claude-keys",
+      "./extensions/claude-slash-menu"
     ]
   }
 }

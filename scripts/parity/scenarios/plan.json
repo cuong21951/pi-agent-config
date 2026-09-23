@@ -1,0 +1,68 @@
+{
+ "prompt": "",
+ "pi_args": "--thinking high",
+ "steps": [
+  {
+   "keys": "\u001b[Z"
+  },
+  {
+   "sleep": 0.8
+  },
+  {
+   "keys": "\u001b[Z"
+  },
+  {
+   "sleep": 0.8
+  },
+  {
+   "keys": "\u001b[Z"
+  },
+  {
+   "sleep": 0.8
+  },
+  {
+   "keys": "\u001b[Z"
+  },
+  {
+   "sleep": 0.8
+  },
+  {
+   "sleep": 0.6
+  },
+  {
+   "snap": "planmode"
+  },
+  {
+   "keys": "Plan how to rename src/util.ts to src/helpers.ts and update its import. Keep the plan to three bullet points."
+  },
+  {
+   "sleep": 1.5
+  },
+  {
+   "keys": "\r"
+  },
+  {
+   "until": "Would you like to proceed",
+   "timeout": 240
+  },
+  {
+   "sleep": 2
+  },
+  {
+   "snap": "dialog"
+  },
+  {
+   "keys": "\r"
+  },
+  {
+   "until": "✻ \\S+ for [^\\n]*· done",
+   "timeout": 240
+  },
+  {
+   "sleep": 2
+  }
+ ],
+ "end": ".",
+ "pi_model": "github-copilot/claude-sonnet-5",
+ "claude_model": "sonnet[1m]"
+}

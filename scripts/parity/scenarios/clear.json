@@ -1,0 +1,31 @@
+{
+ "prompt": "Reply with exactly: first. No other text.",
+ "steps": [
+  {
+   "until": "✻ \\S+ for [^\\n]*· done",
+   "timeout": 90
+  },
+  {
+   "sleep": 1.5
+  },
+  {
+   "keys": "/clear"
+  },
+  {
+   "sleep": 1.5
+  },
+  {
+   "snap": "typed"
+  },
+  {
+   "keys": "\r"
+  },
+  {
+   "sleep": 4
+  },
+  {
+   "snap": "cleared"
+  }
+ ],
+ "end": "."
+}

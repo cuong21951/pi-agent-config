@@ -1,0 +1,7 @@
+{
+  "start": "2026-09-15T12:40:00+00:00",
+  "turns": [
+    {"prompt": "First old turn.", "at": "2026-09-15T12:48:00+00:00", "steps": [{"assistant": [{"type": "text", "text": "Eight days ago."}], "gap": 3}]},
+    {"prompt": "Second old turn.", "at": "2026-09-18T11:52:00+00:00", "steps": [{"assistant": [{"type": "text", "text": "Five days ago."}], "gap": 3}]}
+  ]
+}
