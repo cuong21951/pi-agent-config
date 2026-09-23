@@ -15,6 +15,7 @@ REPLAYED = {
     "error.jsonl": "Error sample.",
     "error-width.jsonl": "Error width sample.",
     "wrap.jsonl": "Wrap sample.",
+    "shell-credit.jsonl": "Shell credit sample.",
 }
 
 ap = argparse.ArgumentParser(description="Run every parity scenario (live pi on Copilot, Claude replaying it) and every replay fixture, diff each, exit 0 only when all are clean.")

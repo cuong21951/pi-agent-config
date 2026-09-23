@@ -1,0 +1,19 @@
+{
+  "turns": [
+    {
+      "prompt": "Shell credit sample.",
+      "steps": [
+        {"assistant": [{"type": "text", "text": "Case A."}, {"type": "toolCall", "name": "bash", "arguments": {"command": "ls -la", "description": "List files"}}, {"type": "toolCall", "name": "bash", "arguments": {"command": "git status", "description": "Show status"}}], "results": [{"text": "a\nb"}, {"text": "clean"}], "gap": 2},
+        {"assistant": [{"type": "text", "text": "Case B."}, {"type": "toolCall", "name": "bash", "arguments": {"command": "git status", "description": "Show status"}}, {"type": "toolCall", "name": "bash", "arguments": {"command": "ls -la", "description": "List files"}}], "results": [{"text": "clean"}, {"text": "a\nb"}], "gap": 2},
+        {"assistant": [{"type": "text", "text": "Case C."}, {"type": "toolCall", "name": "bash", "arguments": {"command": "git status", "description": "Show status"}}], "results": [{"text": "clean"}], "gap": 2},
+        {"assistant": [{"type": "toolCall", "name": "bash", "arguments": {"command": "cat notes.txt", "description": "Show notes"}}], "results": [{"text": "alpha"}], "gap": 2},
+        {"assistant": [{"type": "text", "text": "Case D."}, {"type": "toolCall", "name": "grep", "arguments": {"pattern": "alpha"}}], "results": [{"text": "notes.txt:1:alpha"}], "gap": 2},
+        {"assistant": [{"type": "toolCall", "name": "bash", "arguments": {"command": "ls src", "description": "List source"}}], "results": [{"text": "app.ts"}], "gap": 2},
+        {"assistant": [{"type": "toolCall", "name": "bash", "arguments": {"command": "cat notes.txt", "description": "Show notes"}}], "results": [{"text": "alpha"}], "gap": 2},
+        {"assistant": [{"type": "text", "text": "Case E."}, {"type": "toolCall", "name": "bash", "arguments": {"command": "git status", "description": "Show status"}}], "results": [{"text": "clean"}], "gap": 2},
+        {"assistant": [{"type": "toolCall", "name": "ls", "arguments": {"path": "src"}}], "results": [{"text": "app.ts"}], "gap": 2},
+        {"assistant": [{"type": "text", "text": "Done."}], "gap": 2}
+      ]
+    }
+  ]
+}

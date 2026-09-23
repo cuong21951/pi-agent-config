@@ -7,7 +7,7 @@ a = ap.parse_args()
 VOLATILE = [
     (re.compile(r"✻ \S+ for .*?· done .*$"), "✻ <verb> for <time> · done <clock>"),
     (re.compile(r"^[·✢*✶✻✽] \S+…"), "<spinner> <verb>…"),
-    (re.compile(r"\b(?:\d+d )?(?:\d+h )?(?:\d+m )?\d+(?:\.\d+)?s\b"), "<n>s"),
+    (DURATION := re.compile(r"\b(?:\d+d )?(?:\d+h )?(?:\d+m )?\d+(?:\.\d+)?s\b"), "<n>s"),
     (re.compile(r"↓ \d+(?:\.\d+)?k? tokens"), "↓ <n> tokens"),
     (re.compile(r"^(<spinner> <verb>…)(?: \(.*\))?$"), r"\1 <status>"),
 ]
@@ -20,6 +20,8 @@ EXCEPTIONS = [
      re.compile(r" · ← \d+ agents?$"), None),
     ("retry cap: Claude's built-in 10 vs Cuong's settings.json retry.maxRetries 3",
      re.compile(r"(?<=· attempt \d)/10$"), re.compile(r"(?<=· attempt \d)/3$")),
+    ("plugin update notice: Claude's marketplace auto-update toast; pi has no plugin marketplace",
+     re.compile(r"^ +Plugin updated: .* · Run /reload-plugins to apply$"), None),
 ]
 
 ANYWHERE = [
@@ -97,13 +99,13 @@ def regions(lines):
 
 
 def styles(line):
-    out = []
+    chars = []
     for fg, bg, bold, text, *flags in line["runs"]:
         italic, dim = (flags + [False, False])[:2]
-        for ch in text:
-            if ch.strip():
-                out.append((ch, fg, bg, bool(bold), bool(italic), bool(dim)))
-    return out
+        chars += [(ch, fg, bg, bool(bold), bool(italic), bool(dim)) for ch in text]
+    raw = "".join(c[0] for c in chars)
+    folded = {i for m in DURATION.finditer(raw) for i in range(m.start() + 1, m.end())}
+    return [c for i, c in enumerate(chars) if c[0].strip() and i not in folded]
 
 
 def describe(style):

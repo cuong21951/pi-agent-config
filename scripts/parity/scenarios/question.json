@@ -15,7 +15,8 @@
    "keys": "\r"
   },
   {
-   "sleep": 2
+   "until": "(?s)User answered Claude's questions.*ctx \\d+%",
+   "timeout": 15
   },
   {
    "snap": "picked"

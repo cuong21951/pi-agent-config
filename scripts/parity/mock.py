@@ -12,7 +12,7 @@ ap.add_argument("--dump", default=None, help="write every main-loop request body
 a = ap.parse_args()
 
 LOG = open(a.log, "a", encoding="utf-8") if a.log else None
-PACE_CAP_MS = 60_000
+PACE_CAP_MS = 180_000
 
 
 def log(record):
@@ -282,12 +282,14 @@ class Handler(BaseHTTPRequestHandler):
         if entry["message"] is None:
             error = entry["errors"][-1]
             log({"kind": "final-error", "step": step, "message": error.get("errorMessage")})
+            self.pace_error(error)
             status, _, text = (error.get("errorMessage") or "Bad request").partition(" ")
             status, text = (int(status), text) if status.isdigit() else (400, error.get("errorMessage") or "Bad request")
             return self.send_json(status, {"type": "error", "error": {"type": "invalid_request_error", "message": text}})
         if served < len(entry["errors"]):
             error = entry["errors"][served]
             log({"kind": "error", "step": step, "message": error.get("errorMessage")})
+            self.pace_error(error)
             return self.send_json(529, {"type": "error", "error": {"type": "overloaded_error", "message": error.get("errorMessage") or "Overloaded"}})
         reply = entry["message"]
         blocks = blocks_for_claude(reply, tools, plan_file_of(body)) or [{"type": "text", "text": ""}]
@@ -297,6 +299,9 @@ class Handler(BaseHTTPRequestHandler):
         self.gap = max(0.01, pace * 0.7 / event_count(blocks))
         stop = "tool_use" if any(b["type"] == "tool_use" for b in blocks) else "end_turn"
         self.stream(body, blocks, stop, reply.get("usage"), hang=reply.get("stopReason") == "aborted")
+
+    def pace_error(self, error):
+        time.sleep(0 if a.no_pace else min(error.get("_duration_ms", 0), PACE_CAP_MS) / 1000)
 
     def stream(self, body, blocks, stop, usage=None, hang=False):
         usage = usage or {}

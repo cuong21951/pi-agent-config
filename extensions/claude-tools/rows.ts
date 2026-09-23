@@ -5,6 +5,7 @@ type Args = Record<string, unknown>;
 export type Brush = { fg: (role: string, text: string) => string; bold: (text: string) => string };
 export type Describe = (args: Args) => { activity?: string; hint?: string };
 type Execute = (id: string, params: any, ...rest: any[]) => any;
+type Task = { text: string; at: number; call?: { name: string; args: Args } };
 
 const shared = ((globalThis as any).__claudeRows ??= {}) as Record<string, any>;
 const slot = <T>(key: string, make: () => T): T => (shared[key] ??= make()) as T;
@@ -183,10 +184,12 @@ export function wrapWords(text: string, room: number): string[] {
 	if (room < 1 || words.length === 0) return [text];
 	const lines: string[] = [];
 	let line = "";
+	let limit = room;
 	for (const word of words) {
 		const next = line === "" ? word : `${line} ${word}`;
-		if (next.length > room && line !== "") {
+		if (next.length > limit && line !== "") {
 			lines.push(line);
+			limit = line.length >= limit ? room - 1 : room;
 			line = word;
 		} else line = next;
 	}
@@ -236,7 +239,7 @@ function kindFor(id: string, toolName: string, args: Args): Kind {
 export function join(id: string, toolName: string, args: Args = {}, now = Date.now()): void {
 	if (kinds.has(id)) return;
 	tools.set(id, toolName);
-	inputs.set(id, args);
+	if (!inputs.has(id)) inputs.set(id, args);
 	place(id, kindFor(id, toolName, args), born.get(id) ?? now);
 	live.add(id);
 	startedAt.set(id, now);
@@ -310,10 +313,21 @@ function thoughtTime(group: string[], active: boolean, now: number): number {
 	return base + Math.min(THOUGHT_CAP_MS, Math.max(0, now - Math.max(since, last)));
 }
 
+function shellCount(group: string[], unclassified: (member: string) => boolean, classified: (member: string) => boolean): number {
+	let before = 0;
+	let peak = 0;
+	for (let i = 0; i < group.length; i++) {
+		if (i > 0 && classified(group[i])) peak = Math.max(peak, before + 1);
+		if (unclassified(group[i])) before++;
+	}
+	return Math.max(peak, before);
+}
+
 function sentence(group: string[], active: boolean, bold: (text: string) => string, now: number): string {
 	const bashReadonly = (member: string): Kind | undefined =>
 		kinds.get(member) === "bash" ? bashReadonlyKind(String(inputs.get(member)?.command ?? "")) : undefined;
-	const bashRuns = (member: string): boolean => kinds.get(member) === "bash" && (group.length > 1 || bashReadonly(member) === undefined);
+	const unclassifiedBash = (member: string): boolean => kinds.get(member) === "bash" && bashReadonly(member) === undefined;
+	const classifiedShell = (member: string): boolean => bashReadonly(member) !== undefined || tools.get(member) === "ls";
 	const count = (kind: Kind) =>
 		group.filter((member) => kinds.get(member) === kind).length +
 		(kind === "search" || kind === "read" || kind === "list" ? group.filter((member) => bashReadonly(member) === kind).length : 0);
@@ -331,7 +345,7 @@ function sentence(group: string[], active: boolean, bold: (text: string) => stri
 	const others = count("other");
 	if (others > 0) called.push(`${call} ${bold(String(others))} ${others === 1 ? "tool" : "tools"}`);
 	const thinking = count("thought") > 0 ? [`${active ? "thinking" : "thought"} for ${bold(duration(Math.max(1000, thoughtTime(group, active, now))))}`] : [];
-	const bashCount = group.filter(bashRuns).length;
+	const bashCount = shellCount(group, unclassifiedBash, classifiedShell);
 	const bash = bashCount > 0 ? [`${active ? "running" : "ran"} ${bold(String(bashCount))} ${bashCount === 1 ? "shell command" : "shell commands"}`] : [];
 	return [...thinking, ...clauses(LEADING), ...called, ...bash].join(", ").replace(/^./, (first) => first.toUpperCase());
 }
@@ -361,7 +375,7 @@ export function taskOf(toolName: string, args: Args): string {
 }
 
 function taskFor(group: string[]): string | undefined {
-	const task = shared.task as { text: string; at: number } | undefined;
+	const task = shared.task as Task | undefined;
 	return task !== undefined && task.at >= (joinedAt.get(group[0]) ?? Number.POSITIVE_INFINITY) ? task.text : undefined;
 }
 
@@ -375,11 +389,18 @@ function thoughtHint(group: string[], now: number): string | undefined {
 	while (at >= 0 && kinds.get(group[at]) !== "thought") at--;
 	if (at < 0) return undefined;
 	const held = now - (joinedAt.get(group[at]) ?? 0) < THOUGHT_HINT_HOLD_MS;
-	return at === group.length - 1 || held ? thoughts.get(group[at]) : undefined;
+	return (at === group.length - 1 && pendingHint(group) === undefined) || held ? thoughts.get(group[at]) : undefined;
+}
+
+function pendingHint(group: string[]): string | undefined {
+	const task = shared.task as Task | undefined;
+	const last = group[group.length - 1];
+	if (task?.call === undefined || kinds.get(last) !== "thought" || task.at < (joinedAt.get(last) ?? Number.POSITIVE_INFINITY)) return undefined;
+	return describers.get(task.call.name)?.(task.call.args).hint || undefined;
 }
 
 function displayHint(group: string[], now: number): string | undefined {
-	let hint: string | undefined;
+	let hint = pendingHint(group);
 	for (let i = group.length - 1; i >= 0 && hint === undefined; i--) hint = described(group[i]).hint || undefined;
 	const shown = shownHints.get(group[0]);
 	if (shown === undefined) shownHints.set(group[0], { text: hint, at: 0 });
@@ -574,7 +595,7 @@ export function track(pi: { on: (event: string, handler: (event: any, ctx: any) 
 				for (const call of calls) born.set(call.id!, now);
 				const last = calls[calls.length - 1];
 				const text = last ? taskOf(last.name ?? "", (last.arguments ?? {}) as Args) : "";
-				if (last) shared.task = text === "" ? undefined : { text, at: now };
+				if (last) shared.task = text === "" ? undefined : ({ text, at: now, call: { name: last.name ?? "", args: (last.arguments ?? {}) as Args } } satisfies Task);
 			}
 		}
 		boundary = now;
@@ -633,15 +654,15 @@ if (process.env.CLAUDE_ROWS_SELFTEST) {
 	run("e", "bash", { command: "ls -la" }, "a\nb");
 	run("f", "bash", { command: "git status" }, "ok");
 	check(summaryFor("d") === "  Searched for 1 pattern, read 2 files", "assistant text closes the group the moment the text block ends");
-	check(summaryFor("e") === "" && summaryFor("f") === "  Listed 1 directory, ran 2 shell commands", "a bash call always counts as a shell command even when it also classifies as a listing (Claude 2.1.280)");
+	check(summaryFor("e") === "" && summaryFor("f") === "  Listed 1 directory, ran 1 shell command", "a classified bash call that opens its group earns no shell-command credit (shell-credit replay case A, Claude 2.1.280)");
 	run("g", "bash", { command: "false" }, "Command exited with code 1");
-	check(failed.has("g") && summaryFor("f") === "" && summaryFor("g") === "  Listed 1 directory, ran 3 shell commands", "a non-zero exit folds into the group like Claude 2.1.280");
+	check(failed.has("g") && summaryFor("f") === "" && summaryFor("g") === "  Listed 1 directory, ran 2 shell commands", "a non-zero exit folds into the group like Claude 2.1.280");
 	calls.agent_start({}, {});
 	run("gitmv", "bash", { command: "git -C . mv src/util.ts src/helpers.ts 2>&1 || mv src/util.ts src/helpers.ts" }, "fatal: not a git repository");
 	run("lssrc", "ls", { path: "src" }, "app.ts\nhelpers.ts");
 	check(
-		summaryFor("lssrc") === "  Listed 1 directory, ran 1 shell command",
-		"a bash call is always exactly 1 shell command no matter how many || / ; / && segments it chains, and a plain ls alongside it still gets its own listed clause (Claude 2.1.280)",
+		summaryFor("lssrc") === "  Listed 1 directory, ran 2 shell commands",
+		"a bash call is exactly 1 shell command no matter how many || / ; / && segments it chains, and pi's ls tool (Bash `ls` to Claude) joining after it peaks the count at 2 (shell-credit replay case E, Claude 2.1.280)",
 	);
 	calls.agent_start({}, {});
 	run("buildcheck", "bash", { command: "ls; cat package.json 2>/dev/null; npx tsc --noEmit 2>&1 | head -30" }, "no errors");
@@ -668,6 +689,11 @@ if (process.env.CLAUDE_ROWS_SELFTEST) {
 	calls.agent_start({}, {});
 	run("rtkgrep", "bash", { command: 'rtk grep -rn x src; echo "---"; ls src' }, "src/util.ts:1:x");
 	check(summaryFor("rtkgrep") === "  Ran 1 shell command", "rtk is not a recognized word, so the whole call stays unclassified and always carries the shell-command credit, alone or not (Claude 2.1.280)");
+	calls.agent_start({}, {});
+	calls.tool_execution_start({ toolCallId: "rtkls", toolName: "bash", args: { command: "ls src" } }, {});
+	joinOnExecute("bash", (id: string) => id)("rtkls", { command: "rtk ls src" });
+	calls.tool_execution_end({ toolCallId: "rtkls", toolName: "bash", result: { content: [{ type: "text", text: "app.ts" }] } }, {});
+	check(summaryFor("rtkls") === "  Listed 1 directory", "the model's own command is classified, not the copy rtk-bash rewrote to `rtk ls src` before execute");
 	run("h", "edit");
 	run("i", "read");
 	check(summaryFor("h") === null && summaryFor("i") === "  Read 1 file", "an edit breaks the group");
@@ -774,11 +800,12 @@ if (process.env.CLAUDE_ROWS_SELFTEST) {
 	calls.message_end({ message: toolReply }, {});
 	calls.tool_execution_start({ toolCallId: "p1", toolName: "bash", args: { command: "sleep 8 && echo ok", description: "Pause a few seconds" } }, {});
 	const t1 = Date.now();
+	describeTool("bash", (args) => ({ activity: `Running ${clip(String(args.command ?? ""))}`, hint: `$ ${args.command}` }));
+	check(bare(groupRow(thoughtId(toolReply), 80, tagged, t1 + 1000)[1]) === "<muted>  ⎿  </muted>Run the timer now.", "while the call waits for permission the thought hint holds for its 3 s");
 	const asking = groupRow(thoughtId(toolReply), 80, tagged, on(t1 + 4000));
 	check(bare(asking[0]) === "<muted>● </muted>Pause a few seconds", "while the call waits for permission the thought's group shows the task summary with no elapsed and no ellipsis, as Claude 2.1.280 measured");
-	check(bare(asking[1]) === "<muted>  ⎿  </muted>Run the timer now.", "and keeps the thought hint past 3 s, because the call has not joined the group");
+	check(bare(asking[1]) === "<muted>  ⎿  $ sleep 8 && echo ok</muted>", "and past the 3 s hold the waiting call's command takes the hint row, as Claude 2.1.280 draws it under its permission prompt (suite-run1 permission capture)");
 	check(groupRow("p1", 80, plain).length === 0, "the waiting call draws nothing itself");
-	describeTool("bash", (args) => ({ activity: `Running ${clip(String(args.command ?? ""))}`, hint: `$ ${args.command}` }));
 	const execute = joinOnExecute("bash", (id: string) => id);
 	calls.tool_call({ toolCallId: "p1", toolName: "bash", input: {} }, {});
 	check(groupRow("p1", 80, plain).length === 0, "a tool whose execute is wrapped does not join at tool_call, which pi fires before the permission prompt");
@@ -855,5 +882,6 @@ if (process.env.CLAUDE_ROWS_SELFTEST) {
 	calls.agent_end({}, {});
 	check(thoughtText("Run `ls` now.").includes("\x1b[38;2;153;204;255mls\x1b[39m") && bare(thoughtText("Run `ls` now.")) === "Run ls now.", "inline code in a thought is 99ccff with no backticks, like Claude 2.1.280's raw output");
 	check(wrapWords("a bb ccc", 3).join("|") === "a|bb|ccc" && wrapWords("aaaa", 3).join("|") === "aaaa", "wrapWords breaks at spaces and never cuts a single word that overruns the room");
+	check(wrapWords("aaaa b cc", 4).join("|") === "aaaa|b|cc" && wrapWords("aaa b cc", 4).join("|") === "aaa|b cc", "a row after an exactly full row holds one column less, Ink's wrap-ansi trim:false (slow-search thought hint: `preamble. The` at 127 of 127 after a full row)");
 	console.log("ok - claude-tools rows");
 }
