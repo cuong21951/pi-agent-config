@@ -1,7 +1,7 @@
 import { createBashTool, type BashToolDetails, type ExtensionAPI } from "@earendil-works/pi-coding-agent";
 import { truncateToWidth } from "@earendil-works/pi-tui";
 import { blinkOn, dynamic, failed, finished, summaryFor, watch } from "../claude-tools/rows.ts";
-import { commandBody, commandLine, doneLine, resultLines, runningLine } from "./render.ts";
+import { commandBody, commandLine, DEFAULT_TIMEOUT_SECONDS, doneLine, resultLines, runningLine, withDefaultTimeout } from "./render.ts";
 
 // ponytail: map is only a fallback when the model omits `description`.
 // Claude's real mechanism is a model-supplied `description` field per bash call.
@@ -69,18 +69,20 @@ export default function (pi: ExtensionAPI) {
 		label: "bash",
 		description:
 			originalBash.description +
-			"\nWhen you call bash, also provide a short `description` field stating in plain language what the command does (e.g. \"Check git status\"). The transcript shows this as the label.",
+			"\nWhen you call bash, also provide a short `description` field stating in plain language what the command does (e.g. \"Check git status\"). The transcript shows this as the label." +
+			`\nA command is stopped after ${DEFAULT_TIMEOUT_SECONDS} seconds unless you pass a longer \`timeout\` (seconds) — do that for builds, test suites and other known-slow work.`,
 		renderShell: "self",
 		parameters: {
 			...params,
 			properties: {
 				...(params.properties ?? {}),
 				description: { type: "string", description: "Short human-readable label of what the command does." },
+				timeout: { type: "number", description: `Timeout in seconds (default ${DEFAULT_TIMEOUT_SECONDS}).` },
 			},
 		},
 
 		async execute(toolCallId, params, signal, onUpdate) {
-			return originalBash.execute(toolCallId, params, signal, onUpdate);
+			return originalBash.execute(toolCallId, withDefaultTimeout(params), signal, onUpdate);
 		},
 
 		renderCall(args, theme, context) {

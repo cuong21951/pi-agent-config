@@ -6,6 +6,12 @@ const ELBOW = "  ⎿  ";
 const INDENT = "    ";
 const EXPANDED_MAX = 20;
 
+export const DEFAULT_TIMEOUT_SECONDS = 120;
+
+export function withDefaultTimeout<T extends { timeout?: number }>(params: T): T {
+	return params.timeout === undefined ? { ...params, timeout: DEFAULT_TIMEOUT_SECONDS } : params;
+}
+
 const SHELL_WRAPPER = /^\s*(?:rtk\s+)?(?:(?:powershell|pwsh)(?:\.exe)?(?:\s+-(?!c(?:ommand)?\s)\S+)*\s+-c(?:ommand)?|(?:ba|z)?sh(?:\s+-l)?\s+-l?c)\s+/i;
 
 export function commandBody(raw: string): string {
@@ -48,6 +54,8 @@ if (process.env.INTENT_TOOLS_SELFTEST) {
 	check(commandBody('pwsh -NoProfile -c "Get-Date"') === "Get-Date", "a one-line pwsh -c loses its wrapper and quotes");
 	check(commandBody("bash -lc 'ls -la /tmp'") === "ls -la /tmp", "bash -lc is unwrapped too");
 	check(commandBody("git status") === "git status" && commandBody('echo "a"') === 'echo "a"', "a plain command is left alone, quotes and all");
+	check(withDefaultTimeout({ command: "grep -r x ." }).timeout === 120, "a command without a timeout gets Claude Code's two minutes instead of running forever");
+	check(withDefaultTimeout({ command: "dotnet test", timeout: 900 }).timeout === 900, "an explicit timeout is kept");
 	check(runningLine("Check git status", false, plain) === "  Check git status", "blink off keeps the column");
 	check(doneLine("Check git status", tagged) === "<muted>Ran Check git status</muted>", "finished command is one grey line");
 	check(commandLine("git status\nmore", tagged) === "<muted>  ⎿  $ git status</muted>", "command shown under the elbow while running");
