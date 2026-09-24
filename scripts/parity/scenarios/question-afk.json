@@ -1,22 +1,40 @@
 {
  "prompt": "Use your ask_user_question tool to ask me exactly one question, \"Which colour do you prefer?\", header \"Colour\", options \"Red\" (description \"Warm\") and \"Blue\" (description \"Cool\"). After I answer, reply with exactly: noted. No other text.",
+ "claude_env": [
+  "CLAUDE_AFK_TIMEOUT_MS=12000",
+  "CLAUDE_AFK_COUNTDOWN_MS=8000"
+ ],
+ "pi_env": [
+  "CLAUDE_AFK_TIMEOUT_MS=12000",
+  "CLAUDE_AFK_COUNTDOWN_MS=8000"
+ ],
  "steps": [
   {
    "until": "Type something",
    "timeout": 90
   },
   {
-   "sleep": 1.5
+   "sleep": 1
   },
   {
    "snap": "asking"
   },
   {
-   "keys": "\r"
+   "sleep": 5
   },
   {
-   "until": "✻ \\S+ for [^\\n]*· done|noted",
-   "timeout": 20
+   "snap": "countdown"
+  },
+  {
+   "until": "(?s)No response after.*ctx \\d+%",
+   "timeout": 30
+  },
+  {
+   "snap": "afk"
+  },
+  {
+   "until": "✻ \\S+ for [^\\n]*· done",
+   "timeout": 30
   },
   {
    "sleep": 1

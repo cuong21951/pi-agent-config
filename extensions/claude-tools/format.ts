@@ -85,9 +85,24 @@ export function isPlanFile(path: unknown): boolean {
 	return typeof path === "string" && PLAN_FILE.test(path);
 }
 
-export function writeCallLine(tool: string, args: Record<string, unknown>, s: Style): string {
-	if (isPlanFile(args.path)) return s.fg("borderAccent", "● ") + s.bold("Updated plan");
-	return s.fg("borderAccent", "● ") + s.bold(LABEL[tool] ?? tool) + `(${shortPath(args.path, s)})`;
+export function editCreation(args: Record<string, unknown>): { path: string; content: string } | undefined {
+	const edits = Array.isArray(args.edits) ? (args.edits as Array<{ oldText?: unknown; newText?: unknown }>) : [];
+	if (edits.length !== 1 || edits[0]?.oldText !== "" || typeof args.path !== "string") return undefined;
+	return { path: args.path, content: String(edits[0].newText ?? "") };
+}
+
+function callLabel(tool: string, args: Record<string, unknown>): string {
+	return tool === "edit" && editCreation(args) ? "Create" : (LABEL[tool] ?? tool);
+}
+
+export function writeCallLine(tool: string, args: Record<string, unknown>, s: Style, failed = false): string {
+	const dot = s.fg(failed ? "error" : "borderAccent", "● ");
+	if (isPlanFile(args.path)) return dot + s.bold("Updated plan");
+	return dot + s.bold(callLabel(tool, args)) + `(${shortPath(args.path, s)})`;
+}
+
+function editErrorText(text: string): string {
+	return /Error code: ENOENT/.test(text) ? "File not found" : "Error editing file";
 }
 
 function lineCount(text: string): number {
@@ -513,6 +528,7 @@ export function resultRows(tool: string, args: Record<string, unknown>, outcome:
 	const elbow = s.fg("muted", RESULT_ELBOW);
 	if (outcome.isError && isAbort(outcome.text)) return null;
 	if (!write && !view.expanded) return null;
+	if (outcome.isError && tool === "edit" && !view.expanded) return { head: elbow + s.fg("error", editErrorText(outcome.text)), rows: [], indent: 0 };
 	if (outcome.isError) {
 		const [first, ...rest] = outcome.text.split("\n");
 		const rows = view.expanded ? rest.map((line) => ({ kind: "muted" as RowKind, text: `    ${s.fg("error", line)}` })) : [];
@@ -557,7 +573,15 @@ if (process.env.CLAUDE_TOOLS_SELFTEST) {
 	check(resultRows("write", { path: "a" }, ok(""), { ...view(), isPartial: true }, plain)!.head === "  ⎿  …", "a running write keeps its own elbow row");
 	check(resultRows("read", {}, { text: "ENOENT\nmore", isError: true, details: undefined }, view(), tagged) === null, "a failed read folds into the group like any other call; its row draws nothing");
 	check(resultRows("read", {}, { text: "ENOENT\nmore", isError: true, details: undefined }, view(true), tagged)!.head === "<muted>  ⎿ \u00a0</muted><error>ENOENT</error>", "ctrl+o shows the error red under the elbow, with no glyph of its own");
-	check(resultRows("edit", { path: "x.ts" }, { text: "String not found", isError: true, details: undefined }, view(), plain)!.head === "  ⎿ \u00a0String not found", "a failed edit keeps its own error row");
+	check(resultRows("edit", { path: "x.ts" }, { text: "String not found", isError: true, details: undefined }, view(), plain)!.head === "  ⎿ \u00a0Error editing file", "a failed edit keeps its own row with Claude's Edit error text (ie: any tool_use_error that is not a missing file)");
+	check(resultRows("edit", { path: "x.ts" }, { text: "Cannot create new file - file already exists.", isError: true }, view(), tagged)!.head === "<muted>  ⎿ \u00a0</muted><error>Error editing file</error>", "Create over a file with content: Claude's red Error editing file (measured, replays/edit-create)");
+	check(resultRows("edit", { path: "x.ts" }, { text: "Could not edit file: x.ts. Error code: ENOENT.", isError: true }, view(), plain)!.head === "  ⎿ \u00a0File not found", "a missing file is Claude's File not found");
+	check(resultRows("edit", { path: "x.ts" }, { text: "String not found\nmore", isError: true }, view(true), plain)!.head === "  ⎿ \u00a0String not found", "ctrl+o still shows pi's own error text");
+	const creation = { path: "todo.md", edits: [{ oldText: "", newText: "# Todo\n" }] };
+	check(writeCallLine("edit", creation, plain) === "● Create(todo.md)", "a single edit with an empty old text is Claude's Create (_le)");
+	check(writeCallLine("edit", { path: "todo.md", edits: [{ oldText: "", newText: "a" }, { oldText: "b", newText: "c" }] }, plain) === "● Update(todo.md)", "several edits stay Update, like Claude's edits[] form");
+	check(editCreation(creation)?.content === "# Todo\n" && editCreation({ path: "a", edits: [{ oldText: "x", newText: "y" }] }) === undefined, "only an empty old text is a creation");
+	check(writeCallLine("edit", creation, tagged, true) === "<error>● </error><b>Create</b>(todo.md)", "a failed call paints its dot in the error colour (measured: Claude ff6666 on the refused Create)");
 
 	const wrote = resultRows("write", { path: "/home/me/n.ts", content: "a\nb" }, ok("Successfully wrote"), view(), tagged)!;
 	check(wrote.head === "<muted>  ⎿ \u00a0</muted>Wrote <b>2</b> lines to <b>~/n.ts</b>", "write summary bolds the count and the path");

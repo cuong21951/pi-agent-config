@@ -442,4 +442,85 @@ console.log("PASS: nothing drawn while the questionnaire is open");
   console.log("PASS: decline row lists per-question options, matching Claude");
 }
 
+{
+  const { resolveAfk, focusOf, schemaRejectedRows } = mod;
+  const { afkStep, afkRow } = await jiti.import(path.join(pkgDir, "state/questionnaire-session.ts"));
+  assert.equal(resolveAfk({}, undefined), undefined, "askUserQuestionTimeout unset: no auto-continue (Claude's default is never)");
+  assert.equal(resolveAfk({}, "never"), undefined, "never: no auto-continue");
+  assert.equal(resolveAfk({}, "toString"), undefined, "only Claude's four enum values count");
+  assert.deepEqual(resolveAfk({}, "60s"), { timeoutMs: 60_000, countdownMs: 20_000 }, "60s: Claude's Q2n 60000 with the NYt 20000 countdown");
+  assert.deepEqual(resolveAfk({}, "5m"), { timeoutMs: 300_000, countdownMs: 20_000 }, "5m");
+  assert.deepEqual(
+    resolveAfk({ CLAUDE_AFK_TIMEOUT_MS: "12000", CLAUDE_AFK_COUNTDOWN_MS: "8000" }, undefined),
+    { timeoutMs: 12_000, countdownMs: 8_000 },
+    "Claude's own env knobs turn it on and set both times",
+  );
+  assert.deepEqual(resolveAfk({ CLAUDE_AFK_TIMEOUT_MS: "5000" }, "60s"), { timeoutMs: 5_000, countdownMs: 5_000 }, "the countdown never exceeds the timeout");
+  console.log("PASS: auto-continue timeout resolves like Claude 2.1.280 (askUserQuestionTimeout, CLAUDE_AFK_*)");
+
+  const afk = { timeoutMs: 12_000, countdownMs: 8_000 };
+  assert.deepEqual(afkStep(afk, 0, 3_000, 0, undefined), { start: 0, remainingSeconds: 12, fire: false }, "before the countdown window the full timeout shows");
+  assert.deepEqual(afkStep(afk, 0, 6_000, 0, undefined), { start: 0, remainingSeconds: 6, fire: false }, "inside it the seconds left count down (measured: auto-continue in 6s at 6 s of 12)");
+  assert.deepEqual(afkStep(afk, 0, 12_000, 0, undefined), { start: 0, remainingSeconds: 0, fire: true }, "at the timeout it fires");
+  assert.deepEqual(afkStep(afk, 0, 12_000, 10_000, undefined), { start: 0, remainingSeconds: 12, fire: false }, "a key pressed since restarts the idle time");
+  assert.deepEqual(afkStep(afk, 0, 20_000, 0, true), { start: 20_000, remainingSeconds: 12, fire: false }, "a focused terminal holds the clock at zero");
+  assert.deepEqual(afkStep(afk, 0, 20_000, 0, false), { start: 0, remainingSeconds: 0, fire: true }, "an unfocused terminal lets it run");
+  assert.equal(afkRow(afk, 12, 132, (t) => t), "", "no countdown text outside the window, the row stays blank");
+  const row = afkRow(afk, 6, 132, (t) => `<muted>${t}</muted>`);
+  assert.equal(row, `${" ".repeat(95)}<muted>auto-continue in 6s · any key to stay</muted>`, "right-aligned to the last column, as measured at 132 columns");
+  console.log("PASS: AFK countdown follows Claude's Gue hook");
+
+  const questions = [{ question: "Which colour do you prefer?", header: "Colour", multiSelect: false, options: [{ label: "Red" }, { label: "Blue" }] }];
+  assert.deepEqual(
+    answeredRows({ answers: [], cancelled: false, afkTimeoutMs: 12_000 }, tagged, questions),
+    [
+      "<muted>● </muted>Claude asked:",
+      "<muted>  ⎿  · Which colour do you prefer? (Red / Blue)</muted>",
+      "     <muted>● No response after 12s — continued without an answer</muted>",
+    ],
+    "AFK with nothing picked matches the measured Claude rows",
+  );
+  const fruits = { questionIndex: 1, question: "Which fruits do you like?", kind: "multi", answer: null, selected: ["Apple"] };
+  assert.deepEqual(
+    answeredRows({ answers: [fruits], cancelled: false, afkTimeoutMs: 60_000 }, plain, questions),
+    ["● Claude asked:", "  ⎿  · Which fruits do you like? → Apple", "     ● No response after 60s — continued with the answers selected so far"],
+    "AFK with a checked box lists it, as Claude did with Apple checked",
+  );
+  const nothing = buildQuestionnaireResponse({ answers: [], cancelled: false, afkTimeoutMs: 60_000 }, { questions });
+  assert.equal(
+    nothing.content[0].text,
+    "No response after 60s — the user may be away from keyboard. Proceed using your best judgment based on the context so far; you can re-ask this question later if it's still relevant.",
+    "the model reads Claude's own AFK text",
+  );
+  const some = buildQuestionnaireResponse({ answers: [fruits], cancelled: false, afkTimeoutMs: 60_000 }, { questions });
+  assert.ok(some.content[0].text.endsWith('\nBefore going idle the user had selected: "Which fruits do you like?"="Apple".'), "and the picks made before going idle");
+
+  const multi = [questions[0], { question: "Which fruits do you like?", header: "Fruits", multiSelect: true, options: [{ label: "Apple" }, { label: "Banana" }] }];
+  const state = {
+    currentTab: 1, optionIndex: 0, inputMode: false, notesVisible: false, answers: new Map(), multiSelectChecked: new Set([0]),
+    customDraftsByTab: new Map(), notesByTab: new Map(), submitChoiceIndex: 0, notesDraft: "", collapsed: false,
+  };
+  const timedOut = reduce(state, { kind: "afk_timeout", timeoutMs: 60_000 }, { questions: multi, itemsByTab: [[], []] });
+  assert.deepEqual(timedOut.effects[0].result.answers.map((a) => a.selected), [["Apple"]], "a checked but unconfirmed box counts as selected so far");
+  assert.equal(timedOut.effects[0].result.afkTimeoutMs, 60_000);
+  assert.equal(timedOut.effects[0].result.cancelled, false);
+
+  assert.equal(focusOf("\x1b[I"), true);
+  assert.equal(focusOf("\x1b[O"), false);
+  assert.equal(focusOf("a"), undefined, "other input leaves the focus state alone");
+  console.log("PASS: AFK result rows, model text and reducer match Claude");
+
+  assert.deepEqual(schemaRejectedRows(tagged), ["<muted>  ⎿  </muted><error>Invalid tool parameters</error>"], "Claude's wp: an InputValidationError reads Invalid tool parameters, ff6666 under a 999999 elbow");
+  const rejected = render(
+    tool.renderResult(
+      { content: [{ type: "text", text: 'Validation failed for tool "ask_user_question":\n  - questions.1.options.0.description: must have required properties description' }], details: {} },
+      { expanded: false, isPartial: false },
+      plain,
+      { args: { questions }, isError: true },
+    ),
+  );
+  assert.equal(rejected, "  ⎿  Invalid tool parameters", "a schema-rejected call draws Claude's row, not the decline rows");
+  console.log("PASS: schema rejection renders like Claude's InputValidationError");
+}
+
 console.log("ok - rpiv-ask-user-question rows");

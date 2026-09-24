@@ -1,0 +1,32 @@
+{
+ "turns": [
+  {
+   "prompt": "Question invalid sample.",
+   "steps": [
+    {
+     "assistant": [
+      {"type": "thinking", "thinking": "I will ask the two questions the user described, using the ask_user_question tool."},
+      {
+       "type": "toolCall",
+       "name": "ask_user_question",
+       "arguments": {
+        "questions": [
+         {"question": "Which colour do you prefer?", "header": "Colour", "options": [{"label": "Red", "description": "Warm"}, {"label": "Blue", "description": "Cool"}]},
+         {"question": "Which fruits do you like?", "header": "Fruits", "multiSelect": true, "options": [{"label": "Apple"}, {"label": "Banana"}, {"label": "Cherry"}]}
+        ]
+       }
+      }
+     ],
+     "results": [
+      {
+       "text": "Validation failed for tool \"ask_user_question\":\n  - questions.1.options.0.description: must have required properties description\n  - questions.1.options.1.description: must have required properties description\n  - questions.1.options.2.description: must have required properties description",
+       "isError": true
+      }
+     ],
+     "gap": 9
+    },
+    {"assistant": [{"type": "text", "text": "The tool needs a description on every option."}], "gap": 1}
+   ]
+  }
+ ]
+}

@@ -7,7 +7,7 @@ DIFF = os.path.join(HERE, "diff.py")
 REPLAYS = os.path.join(HERE, "replays")
 
 LIVE = ["task", "interrupt", "mcp", "skill", "question", "question-multi", "question-chat", "permission", "clear", "web", "agent", "modes", "modes-default", "retry-live", "plan",
-        "spinner-states", "bash-no-thinking", "group-second-running", "parallel-calls", "slow-search", "stream-lines", "highlight", "slash-colour"]
+        "spinner-states", "bash-no-thinking", "group-second-running", "parallel-calls", "slow-search", "stream-lines", "highlight", "slash-colour", "question-afk"]
 REPLAYED = {
     "thinking.jsonl": "Thinking sample.",
     "markdown.jsonl": "Show the markdown sample.",
@@ -16,6 +16,8 @@ REPLAYED = {
     "error-width.jsonl": "Error width sample.",
     "wrap.jsonl": "Wrap sample.",
     "shell-credit.jsonl": "Shell credit sample.",
+    "edit-create.jsonl": "Edit create sample.",
+    "question-invalid.jsonl": "Question invalid sample.",
 }
 
 ap = argparse.ArgumentParser(description="Run every parity scenario (live pi on Copilot, Claude replaying it) and every replay fixture, diff each, exit 0 only when all are clean.")

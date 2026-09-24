@@ -376,6 +376,7 @@ export default function claudeWorking(pi: ExtensionAPI) {
 			if (Math.abs(target - thinkingIntensity) < 0.02) thinkingIntensity = target;
 			const effort = supportsEffort(ctx.model?.id) ? (ctx.thinkingLevel ?? "") : "";
 			current = line(verb, { ...state(now), effort });
+			requestRender();
 		};
 		paint();
 		timer = setInterval(paint, TICK_MS);
@@ -533,7 +534,8 @@ if (process.env.CLAUDE_WORKING_SELFTEST) {
 	};
 	handlers.session_start({}, ctx);
 	handlers.agent_start({}, ctx);
-	const widget = (widgets["claude-working"] as unknown as (tui: unknown, theme: unknown) => { render: (width: number) => string[] })({ requestRender() {} }, { fg: (_role: string, text: string) => text });
+	let renders = 0;
+	const widget = (widgets["claude-working"] as unknown as (tui: unknown, theme: unknown) => { render: (width: number) => string[] })({ requestRender: () => renders++ }, { fg: (_role: string, text: string) => text });
 	const firstPaint = widget.render(132);
 	check(firstPaint.length === 2 && firstPaint[1] === "", "no effort row at startup: real Claude 2.1.280 on Sonnet 5 (\"with high effort\") showed none at 2 s and 13 s");
 	handlers.thinking_level_select({ level: "xhigh", previousLevel: "high" }, ctx);
@@ -553,7 +555,9 @@ if (process.env.CLAUDE_WORKING_SELFTEST) {
 	check(workingVisible.join("|") === "false|true", "a permission or question dialog hides the built-in working loader row so it leaves no blank line of its own; a select/input dialog (unpatched editor slot) does not touch it");
 	check(!firstPaint[0]?.includes("("), "a fresh turn's first paint has no kind, no tokens and elapsedMs 0: no parenthesised status at all, matching Claude (measured: 1.5 s in Claude showed the bare verb, pi showed '(esc to interrupt)')");
 	handlers.agent_end({ messages: [{ role: "assistant", stopReason: "error", errorMessage: "Request timed out." }] }, ctx);
+	const rendersBefore = renders;
 	handlers.agent_start({}, ctx);
+	check(renders > rendersBefore, "every spinner paint requests its own repaint: the frames:[\"\"] loader has no timer, so without it the glyph only moved when a token or tool event redrew the screen (measured: slow, jumpy ✻ on Copilot)");
 	handlers.agent_end({ messages: [{ role: "assistant", stopReason: "stop" }] }, ctx);
 	check(done.length === 0, "no done line while pi may still retry the run");
 	handlers.agent_settled({}, ctx);

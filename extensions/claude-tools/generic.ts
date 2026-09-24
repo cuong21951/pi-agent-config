@@ -1,4 +1,4 @@
-import { truncateToWidth } from "@earendil-works/pi-tui";
+import { stripTerminalSequences, truncateToWidth } from "@earendil-works/pi-tui";
 import { type Brush, dynamic, failed, finished, groupRow, join, summaryFor, watch } from "./rows.ts";
 
 export type Paint = (role: string, text: string) => string;
@@ -78,6 +78,22 @@ export function patchGenericTools(prototype: object): void {
 	proto[PATCHED] = true;
 }
 
+const ELBOW_HUNG = Symbol.for("claude-tools:elbow-hung");
+
+export function hangElbow(lines: string[]): string[] {
+	return lines[0] === "" && stripTerminalSequences(lines[1] ?? "").startsWith("  ⎿") ? lines.slice(1) : lines;
+}
+
+export function hangElbowRows(prototype: object): void {
+	const proto = prototype as Record<string, unknown> & { [ELBOW_HUNG]?: boolean };
+	if (proto[ELBOW_HUNG] || typeof proto.render !== "function") return;
+	const render = proto.render as (this: unknown, width: number) => string[];
+	proto.render = function (this: unknown, width: number) {
+		return hangElbow(render.call(this, width));
+	};
+	proto[ELBOW_HUNG] = true;
+}
+
 
 if (process.env.CLAUDE_FALLBACK_SELFTEST) {
 	const check = (ok: boolean, msg: string) => {
@@ -134,6 +150,15 @@ if (process.env.CLAUDE_FALLBACK_SELFTEST) {
 	delete bare.getCallRenderer;
 	patchGenericTools(bare);
 	check(bare.getRenderShell.call(orphan) === "default", "a pi that renamed a method keeps its own rendering instead of losing the row");
+
+	const grey = (text: string) => `\x1b[38;2;153;153;153m${text}\x1b[39m`;
+	check(hangElbow(["", grey("  ⎿  ") + "Invalid tool parameters"]).length === 1, "a tool whose first row is an elbow hangs from the row above, like Claude's null tool-use row (Thought for 9s / ⎿ Invalid tool parameters, no gap)");
+	check(hangElbow(["", "● Update(a.ts)", "  ⎿  Added 1 line"]).length === 3, "a tool that opens with its own ● row keeps the gap above it");
+	check(hangElbow([]).length === 0 && hangElbow(["  ⎿  x"]).length === 1, "nothing to hang: unchanged");
+	const component = { render: (_width: number) => ["", "  ⎿  x"] };
+	hangElbowRows(component);
+	hangElbowRows(component);
+	check(component.render(80).join("|") === "  ⎿  x", "the component patch applies once");
 
 	console.log("All claude-tools fallback checks passed.");
 }

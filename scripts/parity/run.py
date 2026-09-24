@@ -132,7 +132,7 @@ if a.only in (None, "claude"):
     try:
         wait_port(a.port)
         capture("claude", ["--cmd", f'"{slash(a.claude)}" --model {a.claude_model} {permission} {scenario.get("claude_args", "")}'],
-                [f"ANTHROPIC_BASE_URL=http://127.0.0.1:{a.port}", "ANTHROPIC_AUTH_TOKEN=parity-mock", "ENABLE_CLAUDEAI_MCP_SERVERS=false", "CLAUDE_CODE_ALWAYS_ENABLE_EFFORT=1"],
+                [f"ANTHROPIC_BASE_URL=http://127.0.0.1:{a.port}", "ANTHROPIC_AUTH_TOKEN=parity-mock", "ENABLE_CLAUDEAI_MCP_SERVERS=false", "CLAUDE_CODE_ALWAYS_ENABLE_EFFORT=1", *scenario.get("claude_env", [])],
                 steps=steps_for("claude"))
     finally:
         mock.terminate()

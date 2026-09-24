@@ -1,0 +1,68 @@
+{
+ "turns": [
+  {
+   "prompt": "Edit create sample.",
+   "steps": [
+    {
+     "assistant": [
+      {
+       "type": "toolCall",
+       "name": "edit",
+       "arguments": {
+        "path": "todo.md",
+        "edits": [
+         {
+          "oldText": "",
+          "newText": "# Todo\n\n- rename util\n- update import\n"
+         }
+        ]
+       }
+      }
+     ],
+     "results": [
+      {
+       "text": "Successfully wrote 42 bytes to todo.md",
+       "details": {
+        "diff": "+1 # Todo\n+2 \n+3 - rename util\n+4 - update import"
+       }
+      }
+     ],
+     "gap": 2
+    },
+    {
+     "assistant": [
+      {
+       "type": "toolCall",
+       "name": "edit",
+       "arguments": {
+        "path": "notes.txt",
+        "edits": [
+         {
+          "oldText": "",
+          "newText": "overwrite\n"
+         }
+        ]
+       }
+      }
+     ],
+     "results": [
+      {
+       "text": "Cannot create new file - file already exists.",
+       "isError": true
+      }
+     ],
+     "gap": 2
+    },
+    {
+     "assistant": [
+      {
+       "type": "text",
+       "text": "Done."
+      }
+     ],
+     "gap": 1
+    }
+   ]
+  }
+ ]
+}

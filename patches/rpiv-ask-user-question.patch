@@ -1,6 +1,13 @@
 --- a/ask-user-question.ts
 +++ b/ask-user-question.ts
-@@ -19,7 +19,8 @@
+@@ -1,3 +1,6 @@
++import { readFileSync } from "node:fs";
++import { homedir } from "node:os";
++import { join } from "node:path";
+ import type { ExtensionAPI, ExtensionContext, Theme } from "@earendil-works/pi-coding-agent";
+ import { isKeyRelease, isKeyRepeat, matchesKey, type OverlayHandle, type TUI } from "@earendil-works/pi-tui";
+ import {
+@@ -19,7 +22,8 @@
  import { displayLabel, t } from "./state/i18n-bridge.js";
  import { sentinelsToAppend } from "./state/row-intent.js";
  import { normalizeQuestionParams } from "./tool/normalize-params.js";
@@ -10,7 +17,70 @@
  import {
  	MAX_OPTIONS,
  	MAX_QUESTIONS,
-@@ -184,16 +185,33 @@
+@@ -32,6 +36,62 @@
+ } from "./tool/types.js";
+ import { validateQuestionnaire } from "./tool/validate-questionnaire.js";
+ import type { WrappingSelectItem } from "./view/components/wrapping-select.js";
++import type { AfkConfig } from "./state/questionnaire-session.js";
++
++const AFK_SETTING_MS = new Map([
++	["60s", 60_000],
++	["5m", 300_000],
++	["10m", 600_000],
++]);
++const AFK_COUNTDOWN_MS = 20_000;
++const FOCUS_IN = "\x1b[I";
++const FOCUS_OUT = "\x1b[O";
++const terminalFocus: { current: boolean | undefined; reporting: boolean } = { current: undefined, reporting: false };
++
++function positiveMs(value: string | undefined): number | undefined {
++	const ms = Number(value);
++	return value !== undefined && Number.isFinite(ms) && ms > 0 ? ms : undefined;
++}
++
++function claudeSetting(key: string): unknown {
++	try {
++		return JSON.parse(readFileSync(join(homedir(), ".claude", "settings.json"), "utf8"))[key];
++	} catch {
++		return undefined;
++	}
++}
++
++export function resolveAfk(env: NodeJS.ProcessEnv, setting: unknown): AfkConfig | undefined {
++	const timeoutMs = positiveMs(env.CLAUDE_AFK_TIMEOUT_MS) ?? (typeof setting === "string" ? AFK_SETTING_MS.get(setting) : undefined);
++	if (timeoutMs === undefined) return undefined;
++	return { timeoutMs, countdownMs: Math.min(positiveMs(env.CLAUDE_AFK_COUNTDOWN_MS) ?? AFK_COUNTDOWN_MS, timeoutMs) };
++}
++
++function configuredAfk(): AfkConfig | undefined {
++	return resolveAfk(process.env, claudeSetting("askUserQuestionTimeout"));
++}
++
++export function focusOf(data: string): boolean | undefined {
++	if (data === FOCUS_IN) return true;
++	if (data === FOCUS_OUT) return false;
++	return undefined;
++}
++
++function enableFocusReporting(): void {
++	if (terminalFocus.reporting) return;
++	terminalFocus.reporting = true;
++	process.stdout.write("\x1b[?1004h");
++	process.once("exit", () => process.stdout.write("\x1b[?1004l"));
++}
++
++function trackTerminalFocus(ctx: ExtensionContext): void {
++	if (!ctx.hasUI || !configuredAfk()) return;
++	enableFocusReporting();
++	ctx.ui.onTerminalInput((data) => {
++		terminalFocus.current = focusOf(data) ?? terminalFocus.current;
++		return undefined;
++	});
++}
+ 
+ function emitAskUserPromptEvent(pi: ExtensionAPI, params: QuestionParams): void {
+ 	const payload: AskUserPromptEventPayload = {
+@@ -184,16 +244,34 @@
   * `sessionRef`) and exposes its component. `editInput` keeps its two dynamic imports —
   * they must stay lazy per-invocation.
   */
@@ -38,22 +108,26 @@
  	canReopenWhileHidden: boolean;
  	sessionRef: SessionRef;
  	Session: SessionModule["QuestionnaireSession"];
++	afk: AfkConfig | undefined;
  }) {
 -	const { ctx, typed, itemsByTab, collapseKey, canReopenWhileHidden, sessionRef, Session } = config;
-+	const { ctx, typed, itemsByTab, collapseKey, externalEditorLabel, canReopenWhileHidden, sessionRef, Session } =
++	const { ctx, typed, itemsByTab, collapseKey, externalEditorLabel, canReopenWhileHidden, sessionRef, Session, afk } =
 +		config;
  	return (
  		tui: TUI,
  		theme: Theme,
-@@ -225,6 +243,7 @@
+@@ -225,7 +303,10 @@
  				}
  			},
  			collapseKey,
 +			externalEditorLabel,
  			canReopenWhileHidden,
++			afk,
++			terminalFocused: () => terminalFocus.current,
  		});
  		sessionRef.current = session;
-@@ -300,6 +319,46 @@
+ 		return session.component;
+@@ -300,7 +381,67 @@
  
  Preview content is rendered as markdown in a monospace box. Multi-line text with newlines is supported. When any option has a preview, the UI switches to a side-by-side layout with a vertical option list on the left and preview on the right. Do not use previews for simple preference questions where labels and descriptions suffice. Note: previews are only supported for single-select questions (not multiSelect).`;
  
@@ -78,11 +152,30 @@
 +	);
 +}
 +
++function afkRows(details: QuestionnaireResult, timeoutMs: number, theme: Pick<Theme, "fg">, questions: readonly QuestionData[]): string[] {
++	const answered = details.answers.length > 0;
++	const outcome = answered ? "continued with the answers selected so far" : "continued without an answer";
++	return [
++		theme.fg("muted", "● ") + "Claude asked:",
++		...(answered ? formatAnsweredRows(details.answers, theme) : formatDeclinedRows(questions, theme)),
++		`     ${theme.fg("muted", `● No response after ${Math.round(timeoutMs / 1000)}s — ${outcome}`)}`,
++	];
++}
++
++export function schemaRejectedRows(theme: Pick<Theme, "fg">): string[] {
++	return [theme.fg("muted", "  ⎿  ") + theme.fg("error", "Invalid tool parameters")];
++}
++
++function isSchemaRejection(result: { content?: Array<{ type: string; text?: string }> }): boolean {
++	return (result.content ?? []).some((block) => block.type === "text" && (block.text ?? "").startsWith("Validation failed for tool"));
++}
++
 +export function answeredRows(
 +	details: QuestionnaireResult | undefined,
 +	theme: Pick<Theme, "fg">,
 +	questions?: readonly QuestionData[],
 +): string[] {
++	if (details?.afkTimeoutMs) return afkRows(details, details.afkTimeoutMs, theme, questions ?? []);
 +	const answers = details?.answers ?? [];
 +	if (!details || details.cancelled || answers.length === 0) {
 +		return [
@@ -98,9 +191,11 @@
 +
 +
  export function registerAskUserQuestionTool(pi: ExtensionAPI): void {
++	pi.on("session_start", (_event, ctx) => trackTerminalFocus(ctx));
  	const guidance = validateGuidanceFields(loadConfig().guidance);
  	pi.registerTool({
-@@ -310,6 +369,21 @@
+ 		name: ASK_USER_QUESTION_TOOL_NAME,
+@@ -310,6 +451,22 @@
  		promptGuidelines: guidance.promptGuidelines ?? DEFAULT_PROMPT_GUIDELINES,
  		parameters: QuestionParamsSchema,
  
@@ -114,6 +209,7 @@
 +
 +		renderResult(result, { isPartial }, theme, context) {
 +			if (isPartial) return claudeRow(() => []);
++			if (context.isError && isSchemaRejection(result)) return claudeRow(() => schemaRejectedRows(theme));
 +			return claudeRow(() =>
 +				answeredRows(result.details as QuestionnaireResult | undefined, theme, context.args?.questions),
 +			);
@@ -122,7 +218,7 @@
  		async execute(_toolCallId, params, _signal, _onUpdate, ctx) {
  			// Line-terminator normalization runs once here, ahead of validation, so
  			// every downstream consumer — validator, TUI, RPC walker, envelope, prompt
-@@ -348,22 +422,12 @@
+@@ -348,22 +505,12 @@
  				return buildToolResult(sessionLoad.message, { answers: [], cancelled: true, error: sessionLoad.error });
  			}
  			const { QuestionnaireSession } = sessionLoad.module;
@@ -148,7 +244,7 @@
  			const canReopenWhileHidden = removeOverlayInputListener !== undefined;
  
  			emitAskUserBlockedEvent(pi, true);
-@@ -375,23 +439,11 @@
+@@ -375,23 +522,12 @@
  						typed,
  						itemsByTab,
  						collapseKey,
@@ -156,6 +252,7 @@
  						canReopenWhileHidden,
  						sessionRef,
  						Session: QuestionnaireSession,
++						afk: configuredAfk(),
  					}),
 -					{
 -						overlay: true,
@@ -273,7 +370,7 @@
 +}
 --- a/state/key-router.ts
 +++ b/state/key-router.ts
-@@ -31,6 +31,7 @@
+@@ -31,9 +31,11 @@
  	| { kind: "notes_exit" }
  	| { kind: "submit" }
  	| { kind: "submit_nav"; nextIndex: 0 | 1 }
@@ -281,7 +378,11 @@
  	| { kind: "notes_forward"; data: string }
  	/** Flip `state.collapsed`. Always available, regardless of inner mode (see top intercept in `routeKey`). */
  	| { kind: "toggle_collapsed" }
-@@ -245,6 +246,7 @@
++	| { kind: "afk_timeout"; timeoutMs: number }
+ 	| { kind: "ignore" };
+ 
+ export interface QuestionnaireKeybindings {
+@@ -245,6 +247,7 @@
  		// (→ confirm kind:"custom"). Defensive: never enter the toggle/multi_confirm
  		// path for an inputMode-activating row.
  		if (focusedMeta?.activatesInputMode) return { kind: "ignore" };
@@ -289,7 +390,7 @@
  		// Enter on a regular row toggles (matching Space) — committing the question is now
  		// gated behind explicit focus on a row whose META declares `autoSubmitsInMulti`
  		// (the Next sentinel), so Enter on options is a no-cost way to flip checkboxes
-@@ -271,6 +273,7 @@
+@@ -271,6 +274,7 @@
  	runtime: QuestionnaireRuntime,
  ): QuestionnaireAction {
  	if (isConfirm(kb, data)) {
@@ -308,23 +409,72 @@
  	/**
  	 * True iff `execute()` registered the raw `ctx.ui.onTerminalInput` listener — the only
  	 * path that can reach a hidden overlay. Gates the `set_overlay_hidden` effect: a host
-@@ -73,6 +75,7 @@
+@@ -30,6 +32,36 @@
+ 	 * would hide the overlay into a state nothing can reopen.
+ 	 */
+ 	canReopenWhileHidden: boolean;
++	afk?: AfkConfig;
++	terminalFocused?: () => boolean | undefined;
++}
++
++export interface AfkConfig {
++	timeoutMs: number;
++	countdownMs: number;
++}
++
++export interface AfkStep {
++	start: number;
++	remainingSeconds: number;
++	fire: boolean;
++}
++
++const FOCUS_EVENT = /^\x1b\[[IO]$/;
++const AFK_TICK_MS = 1000;
++
++export function afkStep(afk: AfkConfig, start: number, now: number, lastInteraction: number, focused: boolean | undefined): AfkStep {
++	const since = focused === true ? now : start;
++	const idle = now - Math.max(lastInteraction, since);
++	const remainingSeconds =
++		idle >= afk.timeoutMs - afk.countdownMs ? Math.max(0, Math.ceil((afk.timeoutMs - idle) / 1000)) : Math.ceil(afk.timeoutMs / 1000);
++	return { start: since, remainingSeconds, fire: idle >= afk.timeoutMs };
++}
++
++export function afkRow(afk: AfkConfig, remainingSeconds: number, width: number, paint: (text: string) => string): string {
++	if (remainingSeconds * 1000 > afk.countdownMs) return "";
++	const text = `auto-continue in ${remainingSeconds}s · any key to stay`;
++	return " ".repeat(Math.max(0, width - text.length)) + paint(text);
+ }
+ 
+ export interface QuestionnaireSessionComponent {
+@@ -73,8 +105,16 @@
  	private readonly keybindings: QuestionnaireRuntime["keybindings"];
  	private readonly editInput: QuestionnaireSessionConfig["editInput"];
  	private readonly collapseKey: string;
 +	private readonly externalEditorLabel: string | undefined;
  	private readonly canReopenWhileHidden: boolean;
  	private inputEditorOpen = false;
++	private readonly afk: AfkConfig | undefined;
++	private readonly terminalFocused: () => boolean | undefined;
++	private afkStart = Date.now();
++	private lastInteraction = 0;
++	private afkRemainingSeconds = 0;
++	private afkTimer: ReturnType<typeof setInterval> | undefined;
++	private finished = false;
  
-@@ -96,6 +99,7 @@
+ 	/**
+ 	 * Overlay handle captured by `ctx.ui.custom`'s `onHandle` callback. Lets the session
+@@ -96,7 +136,10 @@
  		this.keybindings = config.keybindings;
  		this.editInput = config.editInput;
  		this.collapseKey = config.collapseKey;
 +		this.externalEditorLabel = config.externalEditorLabel;
  		this.canReopenWhileHidden = config.canReopenWhileHidden;
++		this.afk = config.afk;
++		this.terminalFocused = config.terminalFocused ?? (() => undefined);
  
  		const built = buildQuestionnaire({
-@@ -107,6 +111,7 @@
+ 			tui: this.tui,
+@@ -107,6 +150,7 @@
  			initialState: this.state,
  			getCurrentTab: () => this.state.currentTab,
  			collapseKey: this.collapseKey,
@@ -332,6 +482,71 @@
  		});
  
  		this.notesInput = built.notesInput;
+@@ -115,12 +159,45 @@
+ 
+ 		this.component = this.assembleComponent(built, config.theme);
+ 		this.viewAdapter.apply(this.state);
++		this.startAfkClock();
++	}
++
++	private startAfkClock(): void {
++		if (!this.afk) return;
++		this.afkRemainingSeconds = Math.ceil(this.afk.timeoutMs / 1000);
++		this.afkTimer = setInterval(() => this.afkTick(), AFK_TICK_MS);
++		this.afkTimer.unref?.();
++	}
++
++	private afkTick(): void {
++		if (!this.afk || this.finished) return;
++		const now = Date.now();
++		const step = afkStep(this.afk, this.afkStart, now, this.lastInteraction, this.terminalFocused());
++		if (step.fire && this.inputEditorOpen) {
++			this.afkStart = now;
++			this.showAfkRemaining(Math.ceil(this.afk.timeoutMs / 1000));
++			return;
++		}
++		this.afkStart = step.start;
++		this.showAfkRemaining(step.remainingSeconds);
++		if (step.fire) this.commit({ kind: "afk_timeout", timeoutMs: this.afk.timeoutMs });
++	}
++
++	private showAfkRemaining(seconds: number): void {
++		if (seconds === this.afkRemainingSeconds) return;
++		this.afkRemainingSeconds = seconds;
++		this.tui.requestRender();
++	}
++
++	private withAfkRow(lines: string[], width: number, theme: Theme): string[] {
++		if (!this.afk) return lines;
++		return [...lines, afkRow(this.afk, this.afkRemainingSeconds, width, (text) => theme.fg("muted", text))];
+ 	}
+ 
+ 	private assembleComponent(built: QuestionnaireBuilt, theme: Theme): QuestionnaireSessionComponent {
+ 		const collapsedRender = this.buildCollapsedRender(theme);
+ 		return {
+-			render: (width) => (this.state.collapsed ? collapsedRender(width) : built.render(width)),
++			render: (width) => (this.state.collapsed ? collapsedRender(width) : this.withAfkRow(built.render(width), width, theme)),
+ 			invalidate: built.invalidate,
+ 			handleInput: (data) => this.dispatch(data),
+ 		};
+@@ -148,6 +225,7 @@
+ 	}
+ 
+ 	dispatch(data: string): void {
++		if (!FOCUS_EVENT.test(data)) this.lastInteraction = Date.now();
+ 		if (this.inputEditorOpen) return;
+ 		const action = routeKey(data, this.state, this.runtime());
+ 		if (action.kind === "ignore") {
+@@ -201,6 +279,9 @@
+ 				if (this.canReopenWhileHidden) this.overlayHandle?.setHidden(effect.hidden);
+ 				return;
+ 			case "done":
++				if (this.finished) return;
++				this.finished = true;
++				clearInterval(this.afkTimer);
+ 				this.done(effect.result);
+ 				return;
+ 		}
 --- a/state/row-intent.ts
 +++ b/state/row-intent.ts
 @@ -15,7 +15,7 @@
@@ -397,7 +612,23 @@
  const submitHandler: Handler<"submit"> = (s, _a, c) => doneFor(s, c, false);
  const submitNavHandler: Handler<"submit_nav"> = (s, a, _c) => ({
  	state: { ...s, submitChoiceIndex: a.nextIndex },
-@@ -321,6 +333,7 @@
+@@ -303,6 +315,15 @@
+ 	state: { ...s, collapsed: !s.collapsed },
+ 	effects: [{ kind: "set_overlay_hidden", hidden: !s.collapsed }],
+ });
++const afkTimeoutHandler: Handler<"afk_timeout"> = (s, a, c) => {
++	const settled: QuestionnaireState = { ...s, answers: persistMultiSelectAnswer(s, c) };
++	const result: QuestionnaireResult = {
++		answers: orderedAnswers(settled, c.questions),
++		cancelled: false,
++		afkTimeoutMs: a.timeoutMs,
++	};
++	return { state: settled, effects: [{ kind: "done", result }] };
++};
+ const ignoreHandler: Handler<"ignore"> = (s, _a, _c) => ({ state: s, effects: [] });
+ 
+ /**
+@@ -321,12 +342,14 @@
  	toggle: toggleHandler,
  	multi_confirm: multiConfirmHandler,
  	cancel: cancelHandler,
@@ -405,6 +636,13 @@
  	notes_enter: notesEnterHandler,
  	notes_exit: notesExitHandler,
  	notes_forward: notesForwardHandler,
+ 	submit: submitHandler,
+ 	submit_nav: submitNavHandler,
+ 	toggle_collapsed: toggleCollapsedHandler,
++	afk_timeout: afkTimeoutHandler,
+ 	ignore: ignoreHandler,
+ };
+ 
 --- a/tool/response-envelope.ts
 +++ b/tool/response-envelope.ts
 @@ -4,6 +4,8 @@
@@ -416,15 +654,16 @@
  
  /**
   * Map a `QuestionnaireResult` (or null/cancelled) to the LLM-facing tool envelope.
-@@ -14,6 +16,7 @@
+@@ -14,6 +16,8 @@
   * still yields the answered envelope.
   */
  export function buildQuestionnaireResponse(result: QuestionnaireResult | null | undefined, params: QuestionParams) {
++	if (result?.afkTimeoutMs) return buildAfkResult(result, result.afkTimeoutMs);
 +	if (result?.followUp) return buildFollowUpResult(result);
  	if (!result || result.cancelled) {
  		// Decline text stays canonical even when a global note rides the cancelled result;
  		// the note survives in `details` (like partial `answers`) for replay consumers.
-@@ -50,6 +53,22 @@
+@@ -50,6 +54,32 @@
  	return `${parts.join(". ")}.`;
  }
  
@@ -444,16 +683,27 @@
 +	return buildToolResult(text, result);
 +}
 +
++export function afkMessage(timeoutMs: number): string {
++	return `No response after ${Math.round(timeoutMs / 1000)}s — the user may be away from keyboard. Proceed using your best judgment based on the context so far; you can re-ask this question later if it's still relevant.`;
++}
++
++function buildAfkResult(result: QuestionnaireResult, timeoutMs: number) {
++	const selected = result.answers.map(buildFollowUpFragment).join(", ");
++	const text = selected.length > 0 ? `${afkMessage(timeoutMs)}\nBefore going idle the user had selected: ${selected}.` : afkMessage(timeoutMs);
++	return buildToolResult(text, result);
++}
++
  export function buildToolResult(text: string, details: QuestionnaireResult) {
  	return {
  		content: [{ type: "text" as const, text }],
 --- a/tool/types.ts
 +++ b/tool/types.ts
-@@ -147,6 +147,7 @@
+@@ -147,6 +147,8 @@
  	 */
  	globalNote?: string;
  	error?: QuestionnaireError;
 +	followUp?: boolean;
++	afkTimeoutMs?: number;
  }
  
  export function isQuestionnaireResult(value: unknown): value is QuestionnaireResult {

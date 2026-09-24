@@ -1,4 +1,6 @@
+import { readFile } from "node:fs/promises";
 import * as os from "node:os";
+import { resolve } from "node:path";
 import {
 	AssistantMessageComponent,
 	createEditToolDefinition,
@@ -8,13 +10,14 @@ import {
 	createReadToolDefinition,
 	createWriteToolDefinition,
 	type ExtensionAPI,
+	generateDiffString,
 	getLanguageFromPath,
 	keyHint,
 	ToolExecutionComponent,
 } from "@earendil-works/pi-coding-agent";
 import { stripTerminalSequences, truncateToWidth, visibleWidth } from "@earendil-works/pi-tui";
-import { doneLine, paint, resultRows, type Roots, type Row, type Style, target, WRITE_TOOLS, wrapRow, writeCallLine } from "./format.ts";
-import { patchGenericTools } from "./generic.ts";
+import { doneLine, editCreation, paint, resultRows, type Roots, type Row, type Style, target, WRITE_TOOLS, wrapRow, writeCallLine } from "./format.ts";
+import { hangElbowRows, patchGenericTools } from "./generic.ts";
 import { highlightClaudeStyle } from "./highlight.ts";
 import "./markdown-highlight.ts";
 import { clip, describeTool, dynamic, failed, finished, groupRow, hasThought, joinOnExecute, retried, shownContent, thoughtId, track, watch } from "./rows.ts";
@@ -74,6 +77,21 @@ function describe(tool: string, args: Record<string, unknown>, roots: Roots): { 
 	}
 }
 
+type Execute = (id: string, params: any, signal?: AbortSignal, onUpdate?: unknown, ctx?: { cwd?: string }) => Promise<any>;
+
+export const FILE_EXISTS = "Cannot create new file - file already exists.";
+
+function editOrCreate(edit: Execute, write: Execute): Execute {
+	return async (id, params, signal, onUpdate, ctx) => {
+		const creation = editCreation(params ?? {});
+		if (!creation) return edit(id, params, signal, onUpdate, ctx);
+		const existing = await readFile(resolve(ctx?.cwd ?? process.cwd(), creation.path), "utf8").catch(() => "");
+		if (existing.trim() !== "") throw new Error(FILE_EXISTS);
+		const written = await write(id, creation, signal, onUpdate, ctx);
+		return { ...written, details: { diff: generateDiffString(existing, creation.content).diff } };
+	};
+}
+
 type Reply = { contentContainer: { children: unknown[]; clear(): void }; hideThinkingBlock?: boolean; isStreaming?: boolean };
 type ReplyMessage = { stopReason?: string; timestamp?: number; content?: Array<{ type: string; thinking?: string }> };
 
@@ -105,6 +123,7 @@ function patchThoughts(proto: Record<string, unknown>): void {
 export default function (pi: ExtensionAPI) {
 	track(pi);
 	patchGenericTools(ToolExecutionComponent.prototype);
+	hangElbowRows(ToolExecutionComponent.prototype);
 	patchThoughts(AssistantMessageComponent.prototype as unknown as Record<string, unknown>);
 	pi.on("session_start", (_event, ctx) => {
 		if (ctx.hasUI) thoughts.theme = ctx.ui.theme as unknown as Theme;
@@ -112,14 +131,16 @@ export default function (pi: ExtensionAPI) {
 	const roots: Roots = { home: os.homedir(), cwd: process.cwd() };
 	for (const [tool, create] of Object.entries(DEFINITIONS)) {
 		const original = create(process.cwd()) as any;
+		const execute = original.execute.bind(original);
+		const writer = createWriteToolDefinition(process.cwd()) as any;
 		describeTool(tool, (args) => describe(tool, args, roots));
 		pi.registerTool({
 			...original,
-			execute: joinOnExecute(tool, original.execute.bind(original)),
+			execute: joinOnExecute(tool, tool === "edit" ? editOrCreate(execute, writer.execute.bind(writer)) : execute),
 			renderShell: "self",
 			renderCall(args: Record<string, unknown>, theme: Theme, context: { toolCallId?: string; expanded?: boolean; invalidate?: () => void }) {
 				const s = style(theme);
-				if (WRITE_TOOLS.has(tool)) return dynamic((width) => [truncateToWidth(writeCallLine(tool, args, s), width)]);
+				if (WRITE_TOOLS.has(tool)) return dynamic((width) => [truncateToWidth(writeCallLine(tool, args, s, failed.has(context.toolCallId ?? "")), width)]);
 				const id = context.toolCallId ?? "";
 				if (id !== "" && context.invalidate) watch(id, context.invalidate);
 				return dynamic((width) => (context.expanded && finished.has(id) ? [] : groupRow(id, width, s).map((line) => truncateToWidth(line, width))));
@@ -147,4 +168,29 @@ export default function (pi: ExtensionAPI) {
 			},
 		});
 	}
+}
+
+if (process.env.CLAUDE_EDIT_CREATE_SELFTEST) {
+	const { mkdtempSync, writeFileSync } = await import("node:fs");
+	const check = (ok: boolean, msg: string) => {
+		if (!ok) throw new Error(`FAIL: ${msg}`);
+		console.log(`ok - ${msg}`);
+	};
+	const cwd = mkdtempSync(resolve(os.tmpdir(), "edit-create-"));
+	writeFileSync(resolve(cwd, "full.txt"), "alpha: 1\n");
+	writeFileSync(resolve(cwd, "blank.txt"), "\n");
+	const calls: string[] = [];
+	const edit: Execute = async (_id, params) => (calls.push(`edit:${params.path}`), { content: [{ type: "text", text: "edited" }], details: { diff: "" } });
+	const write: Execute = async (_id, params) => (calls.push(`write:${params.path}:${params.content}`), { content: [{ type: "text", text: "wrote" }] });
+	const run = editOrCreate(edit, write);
+	const created = await run("1", { path: "todo.md", edits: [{ oldText: "", newText: "# Todo\n- a\n" }] }, undefined, undefined, { cwd });
+	check(calls.at(-1) === "write:todo.md:# Todo\n- a\n", "an empty old text on a missing file writes the new text, like Claude's Create");
+	check(String(created.details.diff).split("\n").filter((line: string) => line.startsWith("+")).length === 2, "and carries an all-added diff so the row reads Added 2 lines");
+	await run("2", { path: "blank.txt", edits: [{ oldText: "", newText: "x\n" }] }, undefined, undefined, { cwd });
+	check(calls.at(-1) === "write:blank.txt:x\n", "a whitespace-only file is filled too (Claude: ke.trim() === \"\")");
+	const refused = await run("3", { path: "full.txt", edits: [{ oldText: "", newText: "x" }] }, undefined, undefined, { cwd }).then(() => "", (error: Error) => error.message);
+	check(refused === FILE_EXISTS && !calls.some((c) => c.startsWith("write:full.txt")), "a file with content is refused with Claude's own message and left alone");
+	await run("4", { path: "full.txt", edits: [{ oldText: "alpha", newText: "beta" }] }, undefined, undefined, { cwd });
+	check(calls.at(-1) === "edit:full.txt", "any other edit goes to pi's edit unchanged");
+	console.log("All claude-tools edit-create checks passed.");
 }
