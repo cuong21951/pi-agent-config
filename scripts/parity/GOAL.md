@@ -2,6 +2,8 @@
 
 Run this session with `C:\Users\cuong\.pi\agent` as the working directory, not `C:\TimeBlock`: the TimeBlock project hooks (push gate, ticket folders) do not belong here. Cuong has approved committing and pushing to `origin main` for this goal.
 
+In a cloud session (README § Cloud sessions) the working directory is the fresh clone and there is no Windows terminal: do the measuring from Claude's bundle and the pi-side changes with their self-checks, push a `claude/*` branch instead of `main`, and leave criteria 1 and 3 (the suite and the flicker run) to the Windows machine; say which runs are still owed when you report.
+
 You are working in `C:\Users\cuong\.pi\agent` (git `github.com/cuong21951/pi-agent-config`, branch `main`). It is Cuong's pi harness: extensions, package patches and a theme whose only purpose is to make pi indistinguishable from Claude Code in the terminal. Every element matters — layout, columns, blank lines, glyphs, wording, colours, animation, timing lines, footer, prompt box, notices, errors. Do not stop at "close enough".
 
 ## Read first

@@ -105,6 +105,12 @@ Traps worth knowing:
 - Never write debug code into an installed pi bundle; every running pi loads it. Change it only through the patch script.
 - Claude's own PreToolUse hooks (Cuong's settings) delay its tool starts; snapshots that show a bash's `(Ns)` wait for it on both sides. `disableAllHooks` is no way out: it also removes the custom status line.
 
+## Cloud sessions
+
+Claude Code cloud sessions (`claude --cloud`, or claude.ai/code on `cuong21951/pi-agent-config`) run on a fresh Ubuntu VM that clones this repo. Set the environment's setup script to `bash scripts/cloud-setup.sh`: it moves Node to 24 when the VM has less (the `.ts` self-checks run through Node's type stripping), installs pi 0.85.1 globally and the patched packages at the versions the patches were made against into `npm/`, then runs `patches/apply.mjs`. `scripts/pi-installs.mjs` finds pi there (`/usr/local/lib/node_modules`, else `npm root -g`, or `PI_CODING_AGENT_DIR`), the same finder the Windows side uses for Volta and the npm prefix. The default Trusted network covers npm and GitHub; if the Node download is blocked, add `nodejs.org` to a Custom allowlist.
+
+What a cloud session can do: read Claude Code's bundle (grep the binary of the version Cuong runs, see `claude --version` on his machine), change extensions and patches, regenerate patch diffs, run `python3 scripts/selfchecks.py`, and push a `claude/*` branch. What it cannot: `scripts/pty-capture.py`, `run.py` and `suite.py` drive a Windows pseudo-console through pywinpty, compare Windows rendering (backslash paths, ConPTY), and need pi's GitHub Copilot login for the live side, so the suite stays on the Windows machine: fetch the branch, `node patches/apply.mjs`, `py -3.12 scripts/selfchecks.py`, then `py -3.12 scripts/parity/suite.py` twice. The suite spends no Claude usage (Claude answers from `mock.py`, pi uses Copilot Haiku).
+
 ## Updating pi without losing the patches
 
 `pi update` (pi itself or `--extensions`) reinstalls the packages clean, and every patch in `patches/` is gone with them: tool rows fall back to raw `server_tool {json} → {` rows, hidden thinking blocks leave three blank lines, subagents get their padded boxes back. `patches/apply.mjs` puts them back: a diff that is already applied is skipped, one that still applies is applied, and one whose package moved under it is reported as `NEEDS PORT` (exit 1) instead of half-applied; then the self-checks run.

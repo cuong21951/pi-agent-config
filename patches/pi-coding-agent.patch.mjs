@@ -92,11 +92,9 @@
 //   node patches/pi-coding-agent.patch.mjs --check  exit 1 unless every edit is present everywhere
 import { existsSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
 import path from "node:path";
+import { piInstalls } from "../scripts/pi-installs.mjs";
 
-const INSTALLS = [
-	path.join(process.env.APPDATA ?? "", "npm/node_modules/@earendil-works/pi-coding-agent"),
-	path.join(process.env.LOCALAPPDATA ?? "", "Volta/tools/image/packages/@earendil-works/pi-coding-agent/node_modules/@earendil-works/pi-coding-agent"),
-];
+const INSTALLS = piInstalls();
 const MARKER = "let thinkingRunIndex=0;";
 
 const EDITS = [

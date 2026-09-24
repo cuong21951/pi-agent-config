@@ -7,6 +7,7 @@ import { spawnSync } from "node:child_process";
 import { existsSync, readFileSync, statSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import { piInstalls } from "../scripts/pi-installs.mjs";
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const agentDir = path.resolve(here, "..");
@@ -21,10 +22,7 @@ const DIFFS = [
 	["@dietrichgebert/ponytail", "ponytail.patch", "ponytail.selftest.ts"],
 ];
 
-const PI_INSTALLS = [
-	path.join(process.env.APPDATA ?? "", "npm/node_modules/@earendil-works/pi-coding-agent"),
-	path.join(process.env.LOCALAPPDATA ?? "", "Volta/tools/image/packages/@earendil-works/pi-coding-agent/node_modules/@earendil-works/pi-coding-agent"),
-];
+const PI_INSTALLS = piInstalls();
 
 const packageDir = (name) => path.join(agentDir, "npm/node_modules", name);
 

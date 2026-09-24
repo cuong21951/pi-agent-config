@@ -1,8 +1,9 @@
 import { registerHooks } from "node:module";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
+import { PI_DIR } from "./pi-installs.mjs";
 
-const PI = path.join(process.env.LOCALAPPDATA ?? "", "Volta/tools/image/packages/@earendil-works/pi-coding-agent/node_modules/@earendil-works/pi-coding-agent");
+const PI = PI_DIR;
 const ALIASES = { "@sinclair/typebox": "typebox" };
 const HOSTS = [path.join(PI, "package.json"), path.join(PI, "node_modules", ".keep")].map((file) => pathToFileURL(file).href);
 
