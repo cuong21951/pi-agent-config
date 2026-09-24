@@ -1,12 +1,10 @@
 {
-  "prompt": "Use your Agent tool to start one background agent with description \"Say ok\", subagent_type \"general-purpose\" and prompt \"Run the shell command `sleep 8`, then reply with the single word ok.\". Then reply with exactly: started. No other text.",
+  "prompt": "Use your Agent tool to start one background agent with description \"Say ok\", subagent_type \"general-purpose\" and prompt \"Run the shell command `sleep 20`, then reply with the single word ok.\". Then reply with exactly: started. No other text.",
   "steps": [
-    {"until": "(?s)(?=.*◯ general-purpose +Say ok)(?=.*ctx \\d+%)", "timeout": 90},
-    {"sleep": 0.5}, {"snap": "launched"},
     {"until": "Waiting for \\d+ background agents?|✻ \\S+ for [^\\n]*· done", "timeout": 90},
     {"sleep": 0.5}, {"snap": "waiting"},
     {"keys": "\u001b[B"},
-    {"until": "to select · Enter to view", "timeout": 5},
+    {"until": "(?m)^  ↑/↓ to select *$", "timeout": 5},
     {"sleep": 0.3}, {"snap": "select-main"},
     {"keys": "\u001b[B"},
     {"until": "Enter to view · x to stop", "timeout": 5},

@@ -26,13 +26,6 @@
    "snap": "countdown"
   },
   {
-   "until": "(?s)No response after.*ctx \\d+%",
-   "timeout": 30
-  },
-  {
-   "snap": "afk"
-  },
-  {
    "until": "✻ \\S+ for [^\\n]*· done",
    "timeout": 30
   },

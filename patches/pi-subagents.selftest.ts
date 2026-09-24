@@ -73,7 +73,7 @@ const DOWN = "\x1b[B";
   assert.ok(shown[3].startsWith("  ◯ general-purpose  agent failed") && shown[3].endsWith(" 2s"));
   assert.equal(fleet.hint(plain), undefined);
   assert.deepEqual(handler(DOWN), { consume: true });
-  assert.equal(fleet.hint(plain), "↑/↓ to select · Enter to view");
+  assert.equal(fleet.hint(plain), "↑/↓ to select");
   assert.equal(fleet.lines(100, plain)[1], "❯ ● main");
   handler(DOWN);
   assert.equal(fleet.hint(plain), "Enter to view · x to stop");
@@ -88,5 +88,5 @@ const DOWN = "\x1b[B";
   handler("\x1b");
   assert.equal(fleet.hint(plain), undefined);
   fleet.dispose();
-  console.log("PASS: the list holds running agents and failed background ones for 30s, never completed or foreground-finished ones; ↓ focuses main with \"↑/↓ to select · Enter to view\", then \"Enter to view · x to stop|clear\"; x stops or clears; Esc leaves");
+  console.log("PASS: the list holds running agents and failed background ones for 30s, never completed or foreground-finished ones; ↓ focuses main with \"↑/↓ to select\" (Claude 2.1.281 dropped Enter to view on main), then \"Enter to view · x to stop|clear\"; x stops or clears; Esc leaves");
 }

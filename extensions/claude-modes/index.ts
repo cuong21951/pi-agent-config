@@ -36,7 +36,7 @@ import {
 	MODE_LINE,
 	noticeLine,
 	planReminder,
-	planSlug,
+	freshPlanSlug,
 	rejectedResult,
 	RESET,
 	type Mode,
@@ -344,7 +344,8 @@ export default function (pi: ExtensionAPI) {
 	function ensurePlanFile(): string {
 		if (planFile === undefined) {
 			mkdirSync(PLANS_DIR, { recursive: true });
-			planFile = join(PLANS_DIR, `${planSlug(lastPrompt, (count) => Math.floor(Math.random() * count))}.md`);
+			const slug = freshPlanSlug(lastPrompt, (count) => Math.floor(Math.random() * count), (taken) => existsSync(join(PLANS_DIR, `${taken}.md`)));
+			planFile = join(PLANS_DIR, `${slug}.md`);
 		}
 		return planFile;
 	}

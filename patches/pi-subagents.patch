@@ -454,7 +454,7 @@
 +    const entry = this.roster()[this.selectedIndex];
 +    if (entry?.kind === "agent") return theme.fg("muted", `Enter to view · x to ${isLive(entry.record) ? "stop" : "clear"}`);
 +    if (entry?.kind === "workflow") return theme.fg("muted", "Enter to view");
-+    return theme.fg("muted", "↑/↓ to select · Enter to view");
++    return theme.fg("muted", "↑/↓ to select");
    }
  
 -  private bullet(rosterIndex: number, sel: number, theme: Theme): string {

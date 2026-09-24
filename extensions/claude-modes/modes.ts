@@ -74,6 +74,14 @@ export function planSlug(prompt: string, pick: Pick): string {
 	return [words, ...tail].filter(Boolean).join("-");
 }
 
+const PLAN_SLUG_TRIES = 10;
+
+export function freshPlanSlug(prompt: string, pick: Pick, taken: (slug: string) => boolean): string {
+	let slug = planSlug(prompt, pick);
+	for (let tries = 1; tries < PLAN_SLUG_TRIES && taken(slug); tries++) slug = planSlug(prompt, pick);
+	return slug;
+}
+
 const EDITOR_NAMES: Record<string, string> = { code: "VS Code", cursor: "Cursor", vi: "Vim", vim: "Vim", nano: "nano", notepad: "Notepad", emacs: "Emacs", subl: "Sublime Text", atom: "Atom" };
 
 export function editorName(command: string): string {
@@ -287,6 +295,12 @@ if (process.env.CLAUDE_MODES_SELFTEST) {
 	const first = () => 0;
 	check(planSlug("Plan how to rename src/util.ts to src/helpers.ts", first) === "plan-how-to-rename-logical-cosmos", "plan slug is the prompt's first four words plus an adjective and a noun");
 	check(planSlug("", first) === "logical-tumbling-cosmos", "with no prompt the slug is adjective-verb-noun");
+	const rolls = [0, 0, 0, 1, 1, 1];
+	const rolling = () => rolls.shift() ?? 2;
+	const takenOnce = new Set(["plan-how-to-rename-logical-cosmos"]);
+	check(freshPlanSlug("Plan how to rename x", rolling, (slug) => takenOnce.has(slug)) !== "plan-how-to-rename-logical-cosmos", "a slug whose plan file already exists is drawn again (Claude's getPlanSlug checks the plans listing)");
+	let draws = 0;
+	check(freshPlanSlug("Plan how", () => (draws++, 0), () => true) === "plan-how-logical-cosmos" && draws === 20, "after ten taken draws the last one is used, as Claude gives up after oe = 10");
 	check(planSlug("Fix: the  Login!! flow now please", first) === "fix-the-login-flow-logical-cosmos", "punctuation and runs of spaces collapse to single dashes");
 	check(planSlug("x".repeat(60), first) === `${"x".repeat(40)}-logical-cosmos`, "the prompt part is cut at 40 characters");
 

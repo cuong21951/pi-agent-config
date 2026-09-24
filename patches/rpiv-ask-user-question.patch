@@ -17,7 +17,7 @@
  import {
  	MAX_OPTIONS,
  	MAX_QUESTIONS,
-@@ -32,6 +36,62 @@
+@@ -32,6 +36,61 @@
  } from "./tool/types.js";
  import { validateQuestionnaire } from "./tool/validate-questionnaire.js";
  import type { WrappingSelectItem } from "./view/components/wrapping-select.js";
@@ -71,7 +71,6 @@
 +
 +function trackTerminalFocus(ctx: ExtensionContext): void {
 +	if (!ctx.hasUI || !configuredAfk()) return;
-+	enableFocusReporting();
 +	ctx.ui.onTerminalInput((data) => {
 +		terminalFocus.current = focusOf(data) ?? terminalFocus.current;
 +		return undefined;
@@ -80,7 +79,7 @@
  
  function emitAskUserPromptEvent(pi: ExtensionAPI, params: QuestionParams): void {
  	const payload: AskUserPromptEventPayload = {
-@@ -184,16 +244,34 @@
+@@ -184,16 +243,34 @@
   * `sessionRef`) and exposes its component. `editInput` keeps its two dynamic imports —
   * they must stay lazy per-invocation.
   */
@@ -116,7 +115,7 @@
  	return (
  		tui: TUI,
  		theme: Theme,
-@@ -225,7 +303,10 @@
+@@ -225,7 +302,10 @@
  				}
  			},
  			collapseKey,
@@ -127,7 +126,7 @@
  		});
  		sessionRef.current = session;
  		return session.component;
-@@ -300,7 +381,67 @@
+@@ -300,7 +380,70 @@
  
  Preview content is rendered as markdown in a monospace box. Multi-line text with newlines is supported. When any option has a preview, the UI switches to a side-by-side layout with a vertical option list on the left and preview on the right. Do not use previews for simple preference questions where labels and descriptions suffice. Note: previews are only supported for single-select questions (not multiSelect).`;
  
@@ -192,10 +191,13 @@
 +
  export function registerAskUserQuestionTool(pi: ExtensionAPI): void {
 +	pi.on("session_start", (_event, ctx) => trackTerminalFocus(ctx));
++	pi.on("agent_start", (_event, ctx) => {
++		if (ctx.hasUI && configuredAfk()) enableFocusReporting();
++	});
  	const guidance = validateGuidanceFields(loadConfig().guidance);
  	pi.registerTool({
  		name: ASK_USER_QUESTION_TOOL_NAME,
-@@ -310,6 +451,22 @@
+@@ -310,6 +453,22 @@
  		promptGuidelines: guidance.promptGuidelines ?? DEFAULT_PROMPT_GUIDELINES,
  		parameters: QuestionParamsSchema,
  
@@ -218,7 +220,7 @@
  		async execute(_toolCallId, params, _signal, _onUpdate, ctx) {
  			// Line-terminator normalization runs once here, ahead of validation, so
  			// every downstream consumer — validator, TUI, RPC walker, envelope, prompt
-@@ -348,22 +505,12 @@
+@@ -348,22 +507,12 @@
  				return buildToolResult(sessionLoad.message, { answers: [], cancelled: true, error: sessionLoad.error });
  			}
  			const { QuestionnaireSession } = sessionLoad.module;
@@ -244,7 +246,7 @@
  			const canReopenWhileHidden = removeOverlayInputListener !== undefined;
  
  			emitAskUserBlockedEvent(pi, true);
-@@ -375,23 +522,12 @@
+@@ -375,23 +524,12 @@
  						typed,
  						itemsByTab,
  						collapseKey,
