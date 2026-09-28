@@ -31,6 +31,8 @@ EXCEPTIONS = [
 ANYWHERE = [
     ("plan file: each harness keeps its plans in its own folder with a random name (Claude ~/.claude/plans, pi ~/.pi/agent/plans)",
      re.compile(r"[^\s(]*(?:\.claude|claude-config)[\\/]plans[\\/][\w.-]+\.md"), re.compile(r"[^\s(]*\.pi[\\/](?:sandbox[\\/])?agent[\\/]plans[\\/][\w.-]+\.md")),
+    ("plugin update notice: Claude's marketplace auto-update toast; pi has no plugin marketplace",
+     re.compile(r"(?<=▔) Plugin updated: [^▔]* · Run /reload-plugins to apply (?=▔)"), None),
 ]
 
 
@@ -93,9 +95,9 @@ def normalise(text):
 
 def regions(lines):
     texts = [line["text"].rstrip() for line in lines]
-    prompt_rows = [i for i, t in enumerate(texts) if t.strip() == "❯" or PLACEHOLDER.match(t)]
-    prompt = max(prompt_rows, default=len(texts))
-    start = next((i for i, t in enumerate(texts[:prompt]) if re.match(r"^❯ \S", t)), prompt if prompt_rows else 0)
+    boxed = any(t.startswith("❯") and i > 0 and texts[i - 1].startswith("─") for i, t in enumerate(texts))
+    prompt = max((i for i, t in enumerate(texts) if t.strip() == "❯" or PLACEHOLDER.match(t)), default=len(texts))
+    start = next((i for i, t in enumerate(texts[:prompt]) if re.match(r"^❯ \S", t)), prompt if boxed else 0)
     start = max((i for i, t in enumerate(texts[:prompt]) if t.startswith("▔")), default=start)
     rule = prompt - 1 if prompt > 0 and texts[prompt - 1].startswith("─") else prompt
     above = max(start, rule - 2)
@@ -143,7 +145,7 @@ def excepted(texts, side, applied, exceptions=EXCEPTIONS):
         for name, claude_pattern, pi_pattern in exceptions:
             pattern = claude_pattern if side == "claude" else pi_pattern
             if pattern and pattern.search(text):
-                text = pattern.sub("", text)
+                text = pattern.sub(lambda m: "▔" * len(m.group(0)) if m.string[m.start() - 1:m.start()] == "▔" else "", text)
                 applied.add(name)
         out.append(text)
     return out
@@ -152,7 +154,9 @@ def excepted(texts, side, applied, exceptions=EXCEPTIONS):
 def compare(claude, pi, applied, footer=False):
     ct = [normalise(l["text"]) for l in claude]
     pt = [normalise(l["text"]) for l in pi]
+    before = ct
     ct, pt = excepted(ct, "claude", applied, ANYWHERE), excepted(pt, "pi", applied, ANYWHERE)
+    rewritten = {i for i, (x, y) in enumerate(zip(before, ct)) if x != y}
     if footer:
         ct, pt = excepted(ct, "claude", applied), excepted(pt, "pi", applied)
     text_diffs, colour_diffs = [], []
@@ -161,7 +165,7 @@ def compare(claude, pi, applied, footer=False):
         if op == "equal":
             for k in range(i2 - i1):
                 kept = len(ct[i1 + k].replace(" ", "")) if footer else None
-                d = colour_diff(claude[i1 + k], pi[j1 + k], kept)
+                d = None if i1 + k in rewritten else colour_diff(claude[i1 + k], pi[j1 + k], kept)
                 if d and ct[i1 + k].strip():
                     colour_diffs.append(f"`{ct[i1 + k][:90]}` — {d}")
         else:
