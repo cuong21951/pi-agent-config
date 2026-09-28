@@ -1,3 +1,5 @@
+import { dirname, join, resolve } from "node:path";
+import { getAgentDir } from "@earendil-works/pi-coding-agent";
 import { isAbort, thoughtText } from "./rows.ts";
 
 export type Paint = (role: string, text: string) => string;
@@ -81,8 +83,10 @@ export function doneLine(tool: string, args: Record<string, unknown>, s: Style):
 
 const PLAN_FILE = /[\\/]\.pi[\\/]agent[\\/]plans[\\/][^\\/]+\.md$/;
 
-export function isPlanFile(path: unknown): boolean {
-	return typeof path === "string" && PLAN_FILE.test(path);
+const sameFolder = (a: string, b: string) => resolve(a).toLowerCase() === resolve(b).toLowerCase();
+
+export function isPlanFile(path: unknown, plansDir: string = join(getAgentDir(), "plans")): boolean {
+	return typeof path === "string" && path.endsWith(".md") && (PLAN_FILE.test(path) || sameFolder(dirname(path), plansDir));
 }
 
 export function editCreation(args: Record<string, unknown>): { path: string; content: string } | undefined {
@@ -741,5 +745,6 @@ if (process.env.CLAUDE_TOOLS_SELFTEST) {
 	check(writeCallLine("edit", { path: plan }, plain) === "● Updated plan", "an edit to the plan file too");
 	check(resultRows("write", { path: plan, content: "a\nb" }, ok("done"), view(), tagged)!.head === "<muted>  ⎿ \u00a0/plan to preview</muted>", "the plan file result is \"⎿ /plan to preview\", no content");
 	check(!isPlanFile("/home/me/plans/a.md") && isPlanFile("/home/me/.pi/agent/plans/a.md"), "only pi's own plans folder counts");
+	check(isPlanFile("C:\\sandbox\\agent\\plans\\a.md", "C:/sandbox/agent/plans") && !isPlanFile("C:\\sandbox\\agent\\a.md", "C:/sandbox/agent/plans"), "a PI_CODING_AGENT_DIR elsewhere keeps its own plans folder");
 	console.log("\nAll claude-tools checks passed.");
 }
