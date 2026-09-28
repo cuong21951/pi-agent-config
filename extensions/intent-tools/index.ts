@@ -321,6 +321,8 @@ export default function (pi: ExtensionAPI) {
 		async execute(_toolCallId, params) {
 			const key = (params as { task_id?: string; shell_id?: string }).task_id ?? (params as { shell_id?: string }).shell_id;
 			if (!key) throw new Error("Missing required parameter: task_id");
+			const claudeTasks = (globalThis as { __claudeTasks?: { stop(id: string): boolean } }).__claudeTasks;
+			if (claudeTasks?.stop(key)) return { content: [{ type: "text", text: `Updated task #${key} deleted` }], details: {} };
 			const shell = registry.shells.get(key);
 			if (!shell) throw new Error(`No task found with ID: ${key}`);
 			if (shell.status !== "running") throw new Error(`Task ${key} is not running (status: ${shell.status})`);

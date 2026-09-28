@@ -287,10 +287,9 @@ export default function (pi: ExtensionAPI) {
 		renderCall() {
 			return new Text("", 0, 0);
 		},
-		renderResult(result, _options, theme, context) {
+		renderResult(_result, _options, _theme, context) {
 			invalidators.add(context.invalidate);
-			const details = result.details as { tasks?: Task[] } | undefined;
-			return new Text(renderTasks(details?.tasks ?? [], expanded, theme), 0, 0);
+			return new Text("", 0, 0);
 		},
 	});
 
@@ -400,10 +399,9 @@ export default function (pi: ExtensionAPI) {
 		renderCall() {
 			return new Text("", 0, 0);
 		},
-		renderResult(result, _options, theme, context) {
+		renderResult(_result, _options, _theme, context) {
 			invalidators.add(context.invalidate);
-			const details = result.details as { tasks?: Task[] } | undefined;
-			return new Text(renderTasks(details?.tasks ?? [], expanded, theme), 0, 0);
+			return new Text("", 0, 0);
 		},
 	});
 
