@@ -118,6 +118,9 @@ const id = (t: string) => t;
 	start([]);
 	handlers.input({ text: "hi", source: "interactive" });
 	assert.equal(row().trim(), "❯", "after the first submit no example again, even in a new session (Claude's submitCount outlives /clear)");
+	install({ on: (n: string, fn: any) => { handlers[n] = fn; }, getCommands: () => [] });
+	start([]);
+	assert.equal(row().trim(), "❯", "a reloaded extension (pi's /clear starts a fresh runtime) still knows a prompt was sent");
 }
 
 console.log("claude-input selftest: all assertions passed");

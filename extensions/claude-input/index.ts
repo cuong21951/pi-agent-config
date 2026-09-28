@@ -106,16 +106,17 @@ export function promptLines(lines: string[], paint: Paint, promptMark: string = 
 	return [...menu, ...box];
 }
 
+const prompted = ((globalThis as { __claudeInputPrompted?: { submitted: boolean } }).__claudeInputPrompted ??= { submitted: false });
+
 export default function (pi: ExtensionAPI) {
 	let busy = false;
-	let submitted = false;
 	pi.on("input", () => {
-		submitted = true;
+		prompted.submitted = true;
 		return { action: "continue" as const };
 	});
 	pi.on("agent_start", () => {
 		busy = true;
-		submitted = true;
+		prompted.submitted = true;
 	});
 	pi.on("agent_settled", () => {
 		busy = false;
@@ -134,7 +135,7 @@ export default function (pi: ExtensionAPI) {
 			const muted: Paint = (text) => ctx.ui.theme.fg("muted" as never, text);
 			const inner = (width: number) => {
 				const lines = render(width);
-				return editor.getText() === "" && !submitted && !hasMessages ? withPlaceholder(lines, placeholder) : lines;
+				return editor.getText() === "" && !prompted.submitted && !hasMessages ? withPlaceholder(lines, placeholder) : lines;
 			};
 			editor.render = (width: number) => promptLines(inner(width - PROMPT.length), paint, busy ? mutedPrompt : PROMPT, command, noMatchRow(editor.getText(), muted, command.names));
 			return editor;
