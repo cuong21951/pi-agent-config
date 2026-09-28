@@ -38,6 +38,8 @@ end = scenario.get("end", DONE)
 fixture = os.path.join(HERE, scenario.get("fixture", "fixture"))
 a.pi_model = scenario.get("pi_model", a.pi_model)
 a.claude_model = scenario.get("claude_model", a.claude_model)
+a.rows = scenario.get("rows", a.rows)
+a.cols = scenario.get("cols", a.cols)
 
 
 def fresh_workdir():

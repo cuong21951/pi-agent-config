@@ -1,4 +1,5 @@
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
+import { truncateToWidth } from "@earendil-works/pi-tui";
 
 const ANSI = /\x1b\[[0-9;]*m/g;
 const SEPARATOR = " · ";
@@ -40,29 +41,19 @@ export function displayName(model: string): string {
 }
 
 export function composeFooter(f: FooterFacts, _paint: Paint, maxWidth?: number): string {
-	let parts = f.ponytail ? [sgr("38;5;108", f.ponytail)] : [];
+	const parts = f.ponytail ? [sgr("38;5;108", f.ponytail)] : [];
 	parts.push(sgr("38;5;110", displayName(f.model)));
 	if (f.contextPercent !== null) parts.push(sgr(contextCode(f.contextPercent), `ctx ${Math.round(f.contextPercent)}%`));
 	parts.push(...f.statuses);
-	if (maxWidth !== undefined) {
-		const kept: string[] = [];
-		let used = 0;
-		for (const part of parts) {
-			const width = plainWidth(part) + (kept.length ? SEPARATOR.length : 0);
-			if (used + width > maxWidth) break;
-			kept.push(part);
-			used += width;
-		}
-		parts = kept;
-	}
-	return parts.join(sgr("38;5;240", SEPARATOR));
+	const line = parts.join(sgr("38;5;240", SEPARATOR));
+	return maxWidth === undefined ? line : truncateToWidth(line, maxWidth, "…");
 }
 
 export function composeModeRow(mode: string, width: number, voice?: string, tasksHint?: string): string {
 	const left = tasksHint ? `${mode}${sgr("38;2;153;153;153", SEPARATOR)}${tasksHint}` : mode;
-	if (!voice) return left;
+	if (!voice) return truncateToWidth(left, width, "…");
 	const gap = width - plainWidth(left) - plainWidth(voice);
-	return gap < 1 ? left : `${left}${" ".repeat(gap)}${voice}`;
+	return gap < 1 ? truncateToWidth(left, width, "…") : `${left}${" ".repeat(gap)}${voice}`;
 }
 
 export function visibleStatuses(statuses: Map<string, string>, _paint: Paint): string[] {
@@ -169,10 +160,12 @@ if (process.env.CLAUDE_FOOTER_SELFTEST) {
 	check(composeFooter(base, plain) === composeFooter(base, plain, 1000), "no overflow = unchanged");
 	const crowded = { ...base, statuses: ["deepseek $24.57", "openrouter $20.38"], model: "DeepSeek V4 Flash Vision Exp" };
 	const at60 = bare(composeFooter(crowded, plain, 60));
-	check(at60.includes("ctx 22%") && !at60.includes("openrouter") && at60.length <= 60, "overflow drops the trailing balances first");
-	check(bare(composeFooter(base, plain, 25)) === "[PONYTAIL] · Haiku 4.5", "overflow drops whole parts");
+	check(at60.includes("ctx 22%") && !at60.includes("openrouter") && at60.length === 60 && at60.endsWith("…"), "overflow hard-truncates the tail (Claude's Ink wrap=\"truncate\"), which happens to cut the trailing balance off first here");
+	const at25 = composeFooter(base, plain, 25);
+	check(bare(at25).endsWith("…") && plainWidth(at25) === 25, "overflow truncates character by character with a trailing …, not by dropping whole parts");
 	check(!/\x1b\[[0-9;]*$/.test(composeFooter(base, plain, 20)), "no cut escape sequence at line end");
-	check(bare(composeFooter({ ...base, statuses: ["x".repeat(60)] }, plain, 40)) === "[PONYTAIL] · Haiku 4.5 · ctx 22%", "a status too wide to fit is dropped, not sliced");
+	const at40 = composeFooter({ ...base, statuses: ["x".repeat(60)] }, plain, 40);
+	check(bare(at40).endsWith("…") && plainWidth(at40) === 40, "a status too wide to fit is truncated with …, not dropped whole");
 	const statuses = new Map([
 		["modes", "⏵⏵ accept edits on"],
 		["pi-permission-system", "yolo"],

@@ -1,0 +1,35 @@
+{
+ "prompt": "Use your Grep tool exactly once to search the current directory recursively for the pattern needle-token. Do not write any text before the tool call.",
+ "steps": [
+  {
+   "until": "(?ms)^● Searching for needle-token[^\n]*\n  ⎿  \"needle-token\".*ctx \\d+%",
+   "timeout": 90
+  },
+  {
+   "keys": "second message"
+  },
+  {
+   "sleep": 0.5
+  },
+  {
+   "keys": "\r"
+  },
+  {
+   "sleep": 1
+  },
+  {
+   "snap": "queued"
+  },
+  {
+   "until": "✻ \\S+ for [^\\n]*· done",
+   "timeout": 60
+  },
+  {
+   "sleep": 1
+  },
+  {
+   "snap": "finished"
+  }
+ ],
+ "search_data": 12000
+}

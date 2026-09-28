@@ -29,6 +29,7 @@
       "./extensions/claude-skills",
       "./extensions/claude-effort",
       "./extensions/claude-help",
+      "./extensions/claude-commands",
       "./extensions/claude-keys",
       "./extensions/claude-slash-menu"
     ]
