@@ -1,0 +1,32 @@
+{
+ "prompt": "",
+ "rows": 30,
+ "pi_args": "--thinking high",
+ "steps": [
+  {"keys": "\u001b[Z"},
+  {"sleep": 0.8},
+  {"keys": "\u001b[Z"},
+  {"sleep": 0.8},
+  {"keys": "\u001b[Z"},
+  {"sleep": 0.8},
+  {"keys": "\u001b[Z"},
+  {"sleep": 0.8},
+  {"sleep": 0.6},
+  {"snap": "planmode"},
+  {"keys": "Plan how to rename src/util.ts to src/helpers.ts and update its import. Write the plan as exactly 30 short numbered steps, each on its own line, even if some steps are trivial or repeat a check."},
+  {"sleep": 1.5},
+  {"keys": "\r"},
+  {"until": "Would you like to proceed", "timeout": 240},
+  {"sleep": 2},
+  {"snap": "dialog"},
+  {"keys": {"pi": "\u001b[6~", "claude": "\u001b[6~"}},
+  {"sleep": 1},
+  {"snap": "scrolled"},
+  {"keys": "\r"},
+  {"until": "✻ \\S+ for [^\\n]*· done", "timeout": 240},
+  {"sleep": 2}
+ ],
+ "end": ".",
+ "pi_model": "github-copilot/claude-sonnet-5",
+ "claude_model": "sonnet[1m]"
+}
