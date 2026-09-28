@@ -1,0 +1,10 @@
+{
+  "bypass": true,
+  "prompt": "Run exactly these two shell commands as two separate Bash tool calls, in order: (1) `python -c \"for i in range(5000): print(i)\"` and (2) `printf '\\033[31mred\\033[0m plain\\n'`. Do not summarize the output. After both finish, reply with exactly: done.",
+  "steps": [
+    {"until": "✻ \\S+ for [^\\n]*· done", "timeout": 90},
+    {"sleep": 1},
+    {"keys": "\u000f"},
+    {"sleep": 1}
+  ]
+}
