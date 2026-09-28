@@ -1,8 +1,29 @@
-import { createBashTool, type ExtensionAPI } from "@earendil-works/pi-coding-agent";
-import { truncateToWidth } from "@earendil-works/pi-tui";
+import { createBashTool, createLocalBashOperations, type ExtensionAPI } from "@earendil-works/pi-coding-agent";
+import { matchesKey, truncateToWidth } from "@earendil-works/pi-tui";
 import { closeSync, openSync, readSync } from "node:fs";
+import { Type } from "typebox";
 import { describeTool, dynamic, failed, finished, groupRow, joinOnExecute, watch } from "../claude-tools/rows.ts";
-import { CLAUDE_BASH_MAX_CHARS, DEFAULT_TIMEOUT_SECONDS, describeBash, displayOutput, rejectedLines, resultLines, verboseCallLine, withDefaultTimeout } from "./render.ts";
+import { backgroundLines, CLAUDE_BASH_MAX_CHARS, DEFAULT_TIMEOUT_SECONDS, describeBash, displayOutput, exitCodeOf, rejectedLines, resultLines, stopCallLine, stopResultLine, timedOutError, verboseCallLine, withDefaultTimeout } from "./render.ts";
+import {
+	adopt,
+	autoBackgrounds,
+	BACKGROUND_HINT_AFTER_MS,
+	BASH_BACKGROUND_GUIDANCE,
+	backgroundNotice,
+	completionSummary,
+	outputPath,
+	type Reason,
+	RUN_IN_BACKGROUND_DESCRIPTION,
+	registry,
+	type Run,
+	type Shell,
+	STOP_DESCRIPTION,
+	STOP_TOOL,
+	startRun,
+	stopResult,
+	taskId,
+	taskNotification,
+} from "./shells.ts";
 
 const heads = new Map<string, string | undefined>();
 
@@ -25,11 +46,132 @@ function readFileHead(path: string): string | undefined {
 	}
 }
 
+type BashParams = { command: string; description?: string; timeout?: number; run_in_background?: boolean };
+type Result = { content: Array<{ type: "text"; text: string }>; details: { backgroundTaskId: string } };
+type Foreground = { run?: Run; move: (reason: Reason, timeoutMs?: number) => boolean };
+
+const NOTIFICATION = "bash-notification";
+const SHELL_STATUS = "shells";
+const SEND_NOW_CHORD_MS = 1500;
+
 export default function (pi: ExtensionAPI) {
-	const originalBash = createBashTool(process.cwd());
+	const cwd = process.cwd();
+	const originalBash = createBashTool(cwd);
+	const exec = createLocalBashOperations().exec;
 	const params = originalBash.parameters as Record<string, any>;
-	const run = joinOnExecute("bash", (toolCallId: string, params: any, signal?: AbortSignal, onUpdate?: any) => originalBash.execute(toolCallId, withDefaultTimeout(params), signal, onUpdate));
+	const foreground = new Map<string, Foreground>();
+	let sessionId = "session";
+	let refreshStatus = () => {};
+
+	const notify = (shell: Shell) => {
+		refreshStatus();
+		if (shell.stoppedByModel) return;
+		pi.sendMessage(
+			{ customType: NOTIFICATION, content: taskNotification(shell), display: true, details: { summary: completionSummary(shell.description, shell.status, shell.exitCode) } },
+			{ deliverAs: "followUp", triggerTurn: true },
+		);
+	};
+
+	const background = (run: Run, toolCallId: string, p: BashParams, reason: Reason, timeoutMs?: number): Result => {
+		const id = taskId();
+		const path = outputPath(cwd, sessionId, id);
+		adopt(run, { id, command: p.command, description: p.description || p.command, toolCallId, path }, notify);
+		refreshStatus();
+		return { content: [{ type: "text", text: backgroundNotice(id, path, reason, timeoutMs) }], details: { backgroundTaskId: id } };
+	};
+
+	const runForeground = (toolCallId: string, p: BashParams, signal?: AbortSignal, onUpdate?: any) => {
+		let moved: (result: Result) => void = () => {};
+		const movedResult = new Promise<Result>((resolve) => (moved = resolve));
+		const call: Foreground = {
+			move(reason, timeoutMs) {
+				if (!call.run || call.run.backgrounded) return false;
+				moved(background(call.run, toolCallId, p, reason, timeoutMs));
+				return true;
+			},
+		};
+		foreground.set(toolCallId, call);
+		const operations = {
+			exec: (command: string, execCwd: string, options: { onData: (data: Buffer) => void; signal?: AbortSignal; timeout?: number; env?: NodeJS.ProcessEnv }) => {
+				const run = startRun(exec, command, execCwd, options.env);
+				run.sink = options.onData;
+				call.run = run;
+				let timedOut = false;
+				const onAbort = () => {
+					if (!run.backgrounded) run.abort();
+				};
+				options.signal?.addEventListener("abort", onAbort, { once: true });
+				const timeoutMs = options.timeout ? options.timeout * 1000 : undefined;
+				const timer =
+					timeoutMs === undefined
+						? undefined
+						: setTimeout(() => {
+								if (run.backgrounded) return;
+								if (autoBackgrounds(command)) call.move("timeout", timeoutMs);
+								else {
+									timedOut = true;
+									run.abort();
+								}
+							}, timeoutMs);
+				return run.done
+					.finally(() => {
+						if (timer) clearTimeout(timer);
+						options.signal?.removeEventListener("abort", onAbort);
+						foreground.delete(toolCallId);
+					})
+					.then((result) => {
+						if (result === "aborted") throw new Error(timedOut ? `timeout:${options.timeout}` : "aborted");
+						return result;
+					});
+			},
+		};
+		const running = createBashTool(cwd, { operations }).execute(toolCallId, withDefaultTimeout(p), signal, onUpdate).catch((error: Error) => {
+			throw timedOutError(error);
+		});
+		running.catch(() => {});
+		return Promise.race([running, movedResult]);
+	};
+
+	const run = joinOnExecute("bash", (toolCallId: string, p: BashParams, signal?: AbortSignal, onUpdate?: any) => {
+		if (p.run_in_background === true) return Promise.resolve(background(startRun(exec, p.command, cwd), toolCallId, p, "run"));
+		return runForeground(toolCallId, p, signal, onUpdate);
+	});
 	describeTool("bash", describeBash);
+
+	const moveAll = (reason: Reason): boolean => {
+		let movedAny = false;
+		for (const call of foreground.values()) {
+			if (call.run && Date.now() - call.run.startedAt >= (reason === "user" ? BACKGROUND_HINT_AFTER_MS : 0)) movedAny = call.move(reason) || movedAny;
+		}
+		return movedAny;
+	};
+
+	pi.on("session_start", (_event, ctx) => {
+		sessionId = ctx.sessionManager.getSessionId();
+		if (!ctx.hasUI) return;
+		refreshStatus = () => {
+			const count = registry.runningCount();
+			ctx.ui.setStatus(SHELL_STATUS, count === 0 ? undefined : count === 1 ? "1 shell" : `${count} shells`);
+		};
+		refreshStatus();
+		let chordAt = 0;
+		ctx.ui.onTerminalInput((data: string) => {
+			if (matchesKey(data, "ctrl+b")) return moveAll("user") ? { consume: true } : undefined;
+			if (matchesKey(data, "ctrl+x")) {
+				chordAt = Date.now();
+				return foreground.size > 0 ? { consume: true } : undefined;
+			}
+			const sendNow = matchesKey(data, "ctrl+enter") || (matchesKey(data, "ctrl+s") && Date.now() - chordAt < SEND_NOW_CHORD_MS);
+			chordAt = 0;
+			if (sendNow && ctx.hasPendingMessages()) return moveAll("message") ? { consume: true } : undefined;
+			return undefined;
+		});
+	});
+
+	pi.registerMessageRenderer<{ summary?: string }>(NOTIFICATION, (message, _options, theme) => {
+		const summary = message.details?.summary ?? "";
+		return dynamic((width) => [truncateToWidth(theme.fg("borderAccent", "● ") + summary, width)]);
+	});
 
 	pi.registerTool({
 		name: "bash",
@@ -37,7 +179,8 @@ export default function (pi: ExtensionAPI) {
 		description:
 			originalBash.description +
 			"\nWhen you call bash, also provide a short `description` field stating in plain language what the command does (e.g. \"Check git status\"). The transcript shows this as the label." +
-			`\nA command is stopped after ${DEFAULT_TIMEOUT_SECONDS} seconds unless you pass a longer \`timeout\` (seconds) — do that for builds, test suites and other known-slow work.`,
+			`\nA command is stopped after ${DEFAULT_TIMEOUT_SECONDS} seconds unless you pass a longer \`timeout\` (seconds) — do that for builds, test suites and other known-slow work.` +
+			BASH_BACKGROUND_GUIDANCE,
 		renderShell: "self",
 		parameters: {
 			...params,
@@ -45,11 +188,12 @@ export default function (pi: ExtensionAPI) {
 				...(params.properties ?? {}),
 				description: { type: "string", description: "Short human-readable label of what the command does." },
 				timeout: { type: "number", description: `Timeout in seconds (default ${DEFAULT_TIMEOUT_SECONDS}).` },
+				run_in_background: { type: "boolean", description: RUN_IN_BACKGROUND_DESCRIPTION },
 			},
 		},
 
 		async execute(toolCallId, params, signal, onUpdate) {
-			return run(toolCallId, params, signal, onUpdate);
+			return run(toolCallId, params as BashParams, signal, onUpdate);
 		},
 
 		renderCall(_args, theme, context) {
@@ -68,12 +212,46 @@ export default function (pi: ExtensionAPI) {
 			if (isPartial || !expanded) return dynamic(() => []);
 			const args = (context as { args?: { command?: unknown; description?: unknown } })?.args ?? {};
 			const command = String(args.command ?? "");
-			const exitMatch = output.match(/exit(?:ed with)? code:? (\d+)/);
+			if ((result.details as { backgroundTaskId?: string } | undefined)?.backgroundTaskId) return dynamic((width) => backgroundLines(command, theme).map((line) => truncateToWidth(line, width)));
 			const id = (context as { toolCallId?: string })?.toolCallId ?? "";
-			const exitCode = exitMatch ? parseInt(exitMatch[1], 10) : failed.has(id) ? 1 : null;
+			const exitCode = exitCodeOf(output) ?? (failed.has(id) ? 1 : null);
 			const lines = resultLines(displayOutput(output, readHead), exitCode, expanded, theme);
 			const failedCall = exitCode !== 0 && exitCode !== null;
 			return dynamic((width) => [verboseCallLine(command, failedCall, theme), ...(lines ?? [])].map((line) => truncateToWidth(line, width)));
+		},
+	});
+
+	pi.registerTool({
+		name: STOP_TOOL,
+		label: STOP_TOOL,
+		description: STOP_DESCRIPTION,
+		renderShell: "self",
+		parameters: Type.Object({
+			task_id: Type.Optional(Type.String({ description: "The ID of the background task to stop." })),
+			shell_id: Type.Optional(Type.String({ description: "Deprecated: use task_id instead" })),
+		}),
+
+		async execute(_toolCallId, params) {
+			const key = (params as { task_id?: string; shell_id?: string }).task_id ?? (params as { shell_id?: string }).shell_id;
+			if (!key) throw new Error("Missing required parameter: task_id");
+			const shell = registry.shells.get(key);
+			if (!shell) throw new Error(`No task found with ID: ${key}`);
+			if (shell.status !== "running") throw new Error(`Task ${key} is not running (status: ${shell.status})`);
+			shell.stoppedByModel = true;
+			shell.stop();
+			return { content: [{ type: "text", text: stopResult(shell) }], details: { command: shell.command } };
+		},
+
+		renderCall(_args, theme) {
+			return dynamic((width) => [truncateToWidth(stopCallLine(theme), width)]);
+		},
+
+		renderResult(result, { isPartial }, theme, context) {
+			if (isPartial) return dynamic(() => []);
+			const command = (result.details as { command?: string } | undefined)?.command;
+			const content = result.content[0];
+			const error = (context as { isError?: boolean })?.isError === true ? (content?.type === "text" ? content.text : "") : undefined;
+			return dynamic((width) => [truncateToWidth(stopResultLine(command, error, theme), width)]);
 		},
 	});
 }

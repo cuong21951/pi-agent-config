@@ -41,8 +41,6 @@ ROWS = [
      re.compile(r"^  ⎿[  ]{2}Tip: "), None, False),
     ("out-of-scope model warning: the harness pins Haiku 4.5, which is outside Cuong's enabledModels",
      None, re.compile(r"^ Warning: Agent \".*\" using out-of-scope model "), re.compile(r"^\s*$")),
-    ("background hint: Claude offers (ctrl+b to run in background) under a running bash; pi cannot move a running tool to the background",
-     re.compile(r"^ +\(ctrl\+b to run in background\)$"), None, None),
     ("slash-menu inventory: Claude's built-ins (/code-review, /doctor) vs Cuong's pi skills fuzzy-matching the same query",
      re.compile(r"^  /(?:code-review|doctor) "), re.compile(r"^  /skill:\S+ "), re.compile(r"^ {32}\S")),
     ("session-start notice: each harness's own SessionStart line (Claude's agents-md hook, pi's Ponytail loader), drawn after the history on a resume",

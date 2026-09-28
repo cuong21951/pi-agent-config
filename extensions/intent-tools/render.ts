@@ -1,4 +1,5 @@
 import { clip, isAbort, isRejected } from "../claude-tools/rows.ts";
+import { RUNNING_IN_BACKGROUND } from "./shells.ts";
 
 export type Style = { fg: (role: string, text: string) => string; bold: (text: string) => string };
 
@@ -32,12 +33,39 @@ export function verboseCallLine(command: string, failed: boolean, s: Style): str
 	return s.fg(failed ? "error" : "borderAccent", "● ") + s.bold("Bash") + `(${command})`;
 }
 
+export function backgroundLines(command: string, s: Style): string[] {
+	return [verboseCallLine(command, false, s), s.fg("muted", `${RESULT_ELBOW}${RUNNING_IN_BACKGROUND}`)];
+}
+
+export function stopCallLine(s: Style): string {
+	return s.fg("borderAccent", "● ") + s.bold("Stop Task");
+}
+
+export function stopResultLine(command: string | undefined, error: string | undefined, s: Style): string {
+	return s.fg("muted", RESULT_ELBOW) + (error !== undefined ? s.fg("error", error) : `${command ?? ""} · stopped`);
+}
+
+const TIMED_OUT = /(?:\n\n)?Command timed out after (\d+) seconds$/;
+const LEADING_EXIT = /^Exit code (\d+)\n/;
+
+export function timedOutError(error: Error): Error {
+	const found = error?.message?.match(TIMED_OUT);
+	if (!found) return error;
+	const output = error.message.slice(0, found.index);
+	return new Error(`Exit code 143\n${output ? `${output}\n` : ""}Command timed out after ${found[1]}s`);
+}
+
+export function exitCodeOf(output: string): number | null {
+	const found = output.match(LEADING_EXIT) ?? output.match(/exit(?:ed with)? code:? (\d+)/);
+	return found ? parseInt(found[1], 10) : null;
+}
+
 const EXIT_STATUS = /(?:^\(no output\))?\s*Command exited with code \d+$/;
 const FULL_OUTPUT_NOTE = /\s*\[Showing [^\]\n]*Full output: ([^\]\n]+)\]$/;
 export const CLAUDE_BASH_MAX_CHARS = 30000;
 
 export function displayOutput(output: string, readHead: (path: string) => string | undefined): string {
-	const body = output.replace(EXIT_STATUS, "");
+	const body = output.replace(LEADING_EXIT, "").replace(EXIT_STATUS, "");
 	const note = body.match(FULL_OUTPUT_NOTE);
 	if (!note) return body === "(no output)" ? "(No output)" : body;
 	return (readHead(note[1]) ?? body.slice(0, note.index)).slice(0, CLAUDE_BASH_MAX_CHARS);
@@ -90,4 +118,10 @@ if (process.env.INTENT_TOOLS_SELFTEST) {
 	check(displayOutput(tail, () => undefined) === "8000\r\n9999","a missing full output file falls back to pi's kept tail without its bracket");
 	check(displayOutput("x\n\n[Showing lines 1-1 of 1. Full output: f]", () => "y".repeat(40000)).length === CLAUDE_BASH_MAX_CHARS, "the head stops at Claude's 30000-character bash cut");
 	check(displayOutput("a\n\n[Showing lines 2-3 of 3. Full output: f]\n\nCommand exited with code 1", () => "z\n").startsWith("z"), "a failed cut output reads the head too");
+	const timedOut = timedOutError(new Error("Command timed out after 2 seconds")).message;
+	check(timedOut === "Exit code 143\nCommand timed out after 2s", "a killed timeout tells the model Claude's words (m6a-measure-timeout request dump: Exit code 143 / Command timed out after 2s)");
+	check(timedOutError(new Error("part\n\nCommand timed out after 5 seconds")).message === "Exit code 143\npart\nCommand timed out after 5s" && timedOutError(new Error("boom")).message === "boom", "output before the timeout stays; other errors pass through");
+	check(exitCodeOf(timedOut) === 143 && resultLines(displayOutput(timedOut, () => undefined), 143, true, tagged)!.join("|") === `<muted>${RESULT_ELBOW}</muted><error>Error: Exit code 143</error>|     <error>Command timed out after 2s</error>`, "ctrl+o draws it as Claude does: red Error: Exit code 143, then the timeout line");
+	check(backgroundLines("sleep 9", tagged).join("|") === `<borderAccent>● </borderAccent>Bash(sleep 9)|<muted>${RESULT_ELBOW}Running in the background (↓ to manage)</muted>`, "ctrl+o on a backgrounded call: blue dot, then Claude's grey Running in the background (↓ to manage)");
+	check(stopCallLine(tagged) === "<borderAccent>● </borderAccent>Stop Task" && stopResultLine("python x", undefined, tagged) === `<muted>${RESULT_ELBOW}</muted>python x · stopped`, "TaskStop draws Claude's Stop Task block, command · stopped under the elbow (m6a-measure-stop)");
 }

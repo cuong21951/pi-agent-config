@@ -89,7 +89,28 @@ def load_subagent_wait(path):
     return min(max(durations), PACE_CAP_MS) / 1000 if durations else 0
 
 
+TASK_ID = re.compile(r"(?:with ID: |\(ID: )(\w+)")
+
+
+def load_task_ids(path):
+    entries = [json.loads(line) for line in open(path, encoding="utf-8") if line.strip()]
+    return [found for entry in leaf_path(entries) if (entry.get("message") or {}).get("role") == "toolResult"
+            for found in TASK_ID.findall(text_of(entry["message"]))]
+
+
+def claude_task_ids(body):
+    return [found for message in body.get("messages", []) if isinstance(message.get("content"), list)
+            for block in message["content"] if block.get("type") == "tool_result"
+            for found in TASK_ID.findall(json.dumps(block.get("content"), ensure_ascii=False))]
+
+
+def with_claude_task_id(args, body):
+    ids = dict(zip(PI_TASK_IDS, claude_task_ids(body)))
+    return {k: ids.get(v, v) if k == "task_id" else v for k, v in args.items()}
+
+
 TURNS = load_turns(a.session)
+PI_TASK_IDS = load_task_ids(a.session)
 SEARCHES = load_searches(a.session)
 SUBAGENT_WAIT_S = load_subagent_wait(a.session)
 
@@ -145,7 +166,7 @@ def to_claude(name, args, claude_tools, plan_file=None):
         return [("Bash", {"command": f"ls {target}", "description": f"List {target}"})]
     if name == "bash":
         timeout = args.get("timeout")
-        return [("Bash", compact({"command": args["command"], "description": args.get("description"), "timeout": timeout * 1000 if timeout else None}))]
+        return [("Bash", compact({"command": args["command"], "description": args.get("description"), "timeout": timeout * 1000 if timeout else None, "run_in_background": args.get("run_in_background")}))]
     if name == "edit":
         return [("Edit", {"file_path": plan_or_absolute(args["path"], plan_file), "old_string": e["oldText"], "new_string": e["newText"]}) for e in args.get("edits", [])]
     if name == "write":
@@ -293,6 +314,7 @@ class Handler(BaseHTTPRequestHandler):
             return self.send_json(529, {"type": "error", "error": {"type": "overloaded_error", "message": error.get("errorMessage") or "Overloaded"}})
         reply = entry["message"]
         blocks = blocks_for_claude(reply, tools, plan_file_of(body)) or [{"type": "text", "text": ""}]
+        blocks = [dict(b, input=with_claude_task_id(b["input"], body)) if b.get("name") == "TaskStop" else b for b in blocks]
         log({"kind": "reply", "step": step, "blocks": [b["type"] + (":" + b["name"] if b["type"] == "tool_use" else "") for b in blocks]})
         pace = 0 if a.no_pace else min(reply.get("_duration_ms", 0), PACE_CAP_MS) / 1000
         time.sleep(pace * 0.3)

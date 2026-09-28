@@ -208,8 +208,14 @@ export function doneWhen(at: Date, now: Date): string {
 	return `${new Intl.DateTimeFormat("en-US", { weekday: "long", month: "short", day: "numeric" }).format(at)}, ${time}`;
 }
 
-export function doneLine(verb: string, ms: number, at: Date, now: Date = new Date()): string {
-	return `${fg(STATUS_GREY)}✻ ${pastTense(verb)} for ${elapsed(ms)} · done ${doneWhen(at, now)}${RESET_FG}`;
+export function doneLine(verb: string, ms: number, at: Date, now: Date = new Date(), shells = 0): string {
+	const running = shells === 0 ? "" : ` · ${shells === 1 ? "1 shell" : `${shells} shells`} still running`;
+	return `${fg(STATUS_GREY)}✻ ${pastTense(verb)} for ${elapsed(ms)} · done ${doneWhen(at, now)}${running}${RESET_FG}`;
+}
+
+export function runningShells(): number {
+	const registry = (globalThis as Record<symbol, unknown>)[Symbol.for("pi-shells:manager")] as { runningCount?: () => number } | undefined;
+	return typeof registry?.runningCount === "function" ? registry.runningCount() : 0;
 }
 
 export function waitingLine(n: number): string {
@@ -426,9 +432,11 @@ export default function claudeWorking(pi: ExtensionAPI) {
 		}
 	});
 
+	let latestDone = 0;
 	pi.registerEntryRenderer("claude-working-done", (entry, _options, theme) => {
 		const data = entry.data as { verb: string; ms: number; at: number };
-		return dynamic(() => [doneLine(data.verb, data.ms, new Date(data.at))]);
+		latestDone = Math.max(latestDone, data.at);
+		return dynamic(() => [doneLine(data.verb, data.ms, new Date(data.at), new Date(), data.at === latestDone ? runningShells() : 0)]);
 	});
 
 	pi.registerEntryRenderer("claude-working-waiting", (entry, _options, theme) => {
@@ -496,6 +504,8 @@ if (process.env.CLAUDE_WORKING_SELFTEST) {
 	check(thinkingColor(3000, 0).r === 169 && thinkingColor(3000, 0).g === 169 && thinkingColor(3000, 0).b === 169, "thinking grey pulse uses the bundle's literal 999999/b9b9b9, not the old screen-guessed 9e9e9e/b2b2b2");
 	check(pastTense("Churning") === "Churned" && pastTense("Baking") === "Baked" && pastTense("Thinking") === "Thought" && pastTense("Shimmying") === "Shimmied", "past tense of the spinner verb");
 	check(visible(doneLine("Churning", 13_400, new Date(2026, 8, 5, 0, 58), new Date(2026, 8, 5, 23, 0))) === "✻ Churned for 13s · done 12:58 AM", "end-of-turn line matches Claude");
+	check(visible(doneLine("Crunching", 20_000, new Date(2026, 8, 5, 22, 35), new Date(2026, 8, 5, 23, 0), 1)) === "✻ Crunched for 20s · done 10:35 PM · 1 shell still running" && visible(doneLine("Crunching", 20_000, new Date(2026, 8, 5, 22, 35), new Date(2026, 8, 5, 23, 0), 2)).endsWith(" · 2 shells still running"), "the newest done line says how many background shells still run, like Claude (m6a-measure-timeout)");
+	check(runningShells() === 0, "no intent-tools shell registry reads as zero shells");
 	check(doneWhen(new Date(2026, 8, 5, 0, 58), new Date(2026, 8, 5, 23, 0)) === "12:58 AM", "done-line date bucket: same calendar day shows time only");
 	check(doneWhen(new Date(2026, 8, 5, 18, 52), new Date(2026, 8, 10, 9, 0)) === "Saturday 6:52 PM", "done-line date bucket: 1-6 calendar days back shows weekday + time");
 	check(doneWhen(new Date(2026, 8, 15, 19, 48), new Date(2026, 8, 23, 9, 0)) === "Tuesday, Sep 15, 7:48 PM", "done-line date bucket: 7+ calendar days back shows weekday, month day, time (measured Claude example)");

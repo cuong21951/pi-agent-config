@@ -43,6 +43,8 @@ const THOUGHT_HINT_HOLD_MS = 3000;
 const HINT_THROTTLE_MS = 700;
 const ELAPSED_SHOWN_AFTER_MS = 2000;
 const PROGRESS_SHOWN_AFTER_MS = 3000;
+const BACKGROUND_HINT_AFTER_MS = 2000;
+const BACKGROUND_HINT = "(ctrl+b to run in background)";
 const ACTIVITY_CHARS = 50;
 const THOUGHT_HINT_LINES = 10;
 const ELBOW = "  ⎿  ";
@@ -70,6 +72,7 @@ const KIND: Record<string, Kind> = {
 	web_search: "own",
 	exit_plan_mode: "own",
 	enter_plan_mode: "own",
+	TaskStop: "own",
 };
 const OWN_ROW: ReadonlySet<Kind> = new Set(["write", "own"]);
 const CLASSIFY_SEPARATOR = /\|\||&&|[;\n|]/;
@@ -440,7 +443,12 @@ function hintRows(group: string[], width: number, brush: Brush, now: number): st
 	const thought = thoughtHint(group, now);
 	if (thought !== undefined) return thoughtLines(thought, room).map((line, i) => (i === 0 ? brush.fg("muted", ELBOW) : HANG) + thoughtText(line));
 	if (display === undefined) return [];
-	return wrapWords(display + progress(group, now), room).map((line, i) => brush.fg("muted", (i === 0 ? ELBOW : HANG) + line));
+	const hint = backgroundable(group, now) ? [brush.fg("muted", HANG + BACKGROUND_HINT)] : [];
+	return [...wrapWords(display + progress(group, now), room).map((line, i) => brush.fg("muted", (i === 0 ? ELBOW : HANG) + line)), ...hint];
+}
+
+function backgroundable(group: string[], now: number): boolean {
+	return group.some((id) => running(id) && tools.get(id) === "bash" && now - (startedAt.get(id) ?? now) >= BACKGROUND_HINT_AFTER_MS);
 }
 
 export function groupRow(id: string, width: number, brush: Brush, now = Date.now()): string[] {
@@ -847,7 +855,8 @@ if (process.env.CLAUDE_ROWS_SELFTEST) {
 	execute("q2", { command: "sleep 15 && echo built", description: "Wait for the build" });
 	const t4 = Date.now();
 	check(groupRow("q1", 80, plain).length === 0, "a finished call in a group with a running one draws nothing");
-	check(groupRow("q2", 80, plain, on(t4 + 3000)).join("|") === "● Waiting for the build · 3s|  ⎿  $ sleep 15 && echo built (3s)", "a later reply's running bash appends \"(Ns)\" from 3 s, Claude's first bash_progress tick");
+	check(groupRow("q2", 80, plain, on(t4 + 3000)).join("|") === "● Waiting for the build · 3s|  ⎿  $ sleep 15 && echo built (3s)|     (ctrl+b to run in background)", "a later reply's running bash appends \"(Ns)\" from 3 s, Claude's first bash_progress tick");
+	check(groupRow("q2", 80, plain, on(t4 + 1000)).length === 2 && groupRow("q2", 80, plain, on(t4 + 2000))[2] === "     (ctrl+b to run in background)", "from 2 s a running bash offers Claude's (ctrl+b to run in background) under its hint, five columns in (p3t = 2000, m6a-measure-ctrlb)");
 	calls.tool_execution_update({ toolCallId: "q2", toolName: "bash", partialResult: { content: [{ type: "text", text: "one\ntwo\n" }] } }, {});
 	check(groupRow("q2", 80, plain, t4 + 4200)[1] === "  ⎿  $ sleep 15 && echo built (4s · 2 lines)", "and counts its output lines once it has some");
 	calls.tool_execution_end({ toolCallId: "q2", toolName: "bash", isError: true, result: { content: [{ type: "text", text: "Command exited with code 1" }] } }, {});

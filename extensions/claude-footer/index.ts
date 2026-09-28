@@ -8,7 +8,9 @@ const MODE_STATUS = "modes";
 const VOICE_STATUS = "voice";
 const PONYTAIL_STATUS = "ponytail";
 const TASKS_HINT_STATUS = "tasks-hint";
-const HIDDEN_STATUSES = new Set([MODE_STATUS, VOICE_STATUS, PONYTAIL_STATUS, TASKS_HINT_STATUS, "mcp", "pi-permission-system"]);
+const SHELLS_STATUS = "shells";
+const HIDDEN_STATUSES = new Set([MODE_STATUS, VOICE_STATUS, PONYTAIL_STATUS, TASKS_HINT_STATUS, SHELLS_STATUS, "mcp", "pi-permission-system"]);
+const CYCLE_HINT = /(?:\x1b\[[0-9;]*m)* \(shift\+tab to cycle\)(?:\x1b\[[0-9;]*m)*/;
 const GUTTER = "  ";
 
 function plainWidth(text: string): number {
@@ -47,6 +49,10 @@ export function composeFooter(f: FooterFacts, _paint: Paint, maxWidth?: number):
 	parts.push(...f.statuses);
 	const line = parts.join(sgr("38;5;240", SEPARATOR));
 	return maxWidth === undefined ? line : truncateToWidth(line, maxWidth, "…");
+}
+
+export function withShells(mode: string, shells?: string): string {
+	return shells ? `${mode.replace(CYCLE_HINT, "\x1b[0m")}${sgr("38;2;153;153;153", SEPARATOR)}${sgr("38;2;0;204;204", shells)}` : mode;
 }
 
 export function composeModeRow(mode: string, width: number, voice?: string, tasksHint?: string): string {
@@ -159,7 +165,7 @@ export default function (pi: ExtensionAPI) {
 						width,
 					);
 					const mode = statuses.get(MODE_STATUS);
-					const modeRow = mode ? composeModeRow(mode, width, statuses.get(VOICE_STATUS), statuses.get(TASKS_HINT_STATUS)) : undefined;
+					const modeRow = mode ? composeModeRow(withShells(mode, statuses.get(SHELLS_STATUS)), width, statuses.get(VOICE_STATUS), statuses.get(TASKS_HINT_STATUS)) : undefined;
 					const fleet = fleetRegistry();
 					return footerRows(line, modeRow, fleet?.fleetHint?.(theme), fleet?.fleetLines?.(fullWidth, theme) ?? []);
 				},
@@ -212,6 +218,9 @@ if (process.env.CLAUDE_FOOTER_SELFTEST) {
 	check(bare(hintRow) === "⏵⏵ bypass permissions on (shift+tab to cycle) · /tasks to see subagents", "the tasks-to-see-subagents hint joins the mode with Claude's separator");
 	check(hintRow.includes("\x1b[38;2;153;153;153m \xB7 \x1b[0m"), "the separator before the hint is grey 999999, like the rest of that trailing segment in Claude 2.1.280");
 	check(composeModeRow("⏵⏵ bypass permissions on (shift+tab to cycle)", 80) === "⏵⏵ bypass permissions on (shift+tab to cycle)", "no tasks-hint status = mode row unchanged");
+	const shellRow = withShells("\x1b[38;2;255;102;102m⏵⏵ bypass permissions on\x1b[39m\x1b[38;2;153;153;153m (shift+tab to cycle)\x1b[39m", "1 shell");
+	check(bare(shellRow) === "⏵⏵ bypass permissions on · 1 shell" && shellRow.includes("\x1b[38;2;0;204;204m1 shell"), "a running background shell swaps the cycle hint for Claude's cyan 1 shell pill (m6a-measure-bg: · 1 shell in 00cccc)");
+	check(withShells("⏵⏵ bypass permissions on (shift+tab to cycle)") === "⏵⏵ bypass permissions on (shift+tab to cycle)", "no shell = mode row unchanged");
 	const hintAndVoiceRow = composeModeRow("mode", 40, "voice", "hint");
 	check(bare(hintAndVoiceRow).startsWith("mode \xB7 hint") && bare(hintAndVoiceRow).endsWith("voice") && plainWidth(hintAndVoiceRow) === 40, "the hint sits left of the mode, voice still flush right at the same width");
 	check(visibleStatuses(new Map([["tasks-hint", "/tasks to see subagents"], ["api-balance", "x $1"]]), plain).join("|") === "x $1", "tasks-hint stays out of line one, like modes and voice");
