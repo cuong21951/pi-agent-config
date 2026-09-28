@@ -1,0 +1,19 @@
+{
+  "bypass": true,
+  "prompt": "Track this with the task list: read the file, fix the bug, write a test.",
+  "steps": [
+    {"sleep": 3}, {"snap": "t03"},
+    {"sleep": 3}, {"snap": "t06"},
+    {"sleep": 3}, {"snap": "t09"},
+    {"sleep": 3}, {"snap": "t12"},
+    {"sleep": 3}, {"snap": "t15"},
+    {"sleep": 3}, {"snap": "t18"},
+    {"keys": "\u0014"},
+    {"sleep": 1}, {"snap": "t19-ctrlt"},
+    {"keys": "\u0014"},
+    {"sleep": 3}, {"snap": "t22"},
+    {"until": "✻ \\S+ for [^\\n]*· done", "timeout": 60},
+    {"sleep": 1},
+    {"snap": "after"}
+  ]
+}
