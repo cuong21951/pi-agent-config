@@ -153,7 +153,7 @@ def to_claude(name, args, claude_tools, plan_file=None):
     if name == "skill":
         return [("Skill", {"skill": args["name"]})]
     if name == "Agent":
-        return [("Agent", compact({"description": args.get("description"), "prompt": args.get("prompt"), "subagent_type": args.get("subagent_type")}))]
+        return [("Agent", compact({"description": args.get("description"), "prompt": args.get("prompt"), "subagent_type": args.get("subagent_type"), "model": args.get("model")}))]
     if name == "ask_user_question":
         return [("AskUserQuestion", {"questions": args.get("questions", [])})]
     if name == "web_search":
