@@ -1,9 +1,18 @@
 {
-  "prompt": "First, run this Bash command to create a file: python -c \"open('longline.txt','w').write('x'*400)\". Then use the Read tool to read longline.txt in full. Do not summarize the output. After both finish, reply with exactly: done.",
+  "prompt": "First, run this Bash command to create a file: python -c \"open('longline.txt','w').write('x'*400)\". Wait for it to finish; only then, in your next reply, use the Read tool to read longline.txt (relative path, in the current folder) in full. Do not summarize the output. After both finish, reply with exactly: done.",
   "steps": [
-    {"until": "✻ \\S+ for [^\\n]*· done", "timeout": 90},
-    {"sleep": 1},
-    {"keys": "\u000f"},
-    {"sleep": 1}
+    {
+      "until": "✻ \\S+ for [^\\n]*· done",
+      "timeout": 90
+    },
+    {
+      "sleep": 1
+    },
+    {
+      "keys": "\u000f"
+    },
+    {
+      "sleep": 1
+    }
   ]
 }
