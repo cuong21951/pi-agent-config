@@ -1,5 +1,6 @@
 import { dirname, join, resolve } from "node:path";
 import { getAgentDir } from "@earendil-works/pi-coding-agent";
+import { visibleWidth, wrapTextWithAnsi } from "@earendil-works/pi-tui";
 import { isAbort, thoughtText } from "./rows.ts";
 
 export type Paint = (role: string, text: string) => string;
@@ -123,10 +124,23 @@ function diffLines(details: unknown): string[] {
 	return typeof diff === "string" && diff !== "" ? diff.split("\n") : [];
 }
 
+const READ_CONTINUATION_NOTE = /\n\n\[Showing lines \d+-\d+ of \d+(?: \([^)]*\))?\. Use offset=\d+ to continue\.\]$/;
+
+function readDisplayText(text: string): string {
+	return text.replace(READ_CONTINUATION_NOTE, "");
+}
+
+function grepDisplayText(outcome: ToolOutcome): string {
+	const limit = (outcome.details as { matchLimitReached?: number } | undefined)?.matchLimitReached;
+	if (typeof limit !== "number") return outcome.text;
+	const notice = `[${limit} matches limit reached. Use limit=${limit * 2} for more, or refine pattern]`;
+	return outcome.text.includes(notice) ? outcome.text.replace(notice, "(Results are truncated. Consider using a more specific path or pattern.)") : outcome.text;
+}
+
 export function summary(tool: string, args: Record<string, unknown>, outcome: ToolOutcome, s: Style): string {
 	switch (tool) {
 		case "read":
-			return `Read ${plural(lineCount(outcome.text), "line")}`;
+			return `Read ${plural(lineCount(readDisplayText(outcome.text)), "line")}`;
 		case "write":
 			return `Wrote ${plural(lineCount(String(args.content ?? "")), "line", undefined, s.bold)} to ${s.bold(shortPath(args.path, s))}`;
 		case "edit": {
@@ -146,9 +160,9 @@ export function summary(tool: string, args: Record<string, unknown>, outcome: To
 				.replace(/^./, (first) => first.toUpperCase());
 		}
 		case "grep":
-			return `Found ${plural(lineCount(outcome.text), "line")}`;
+			return lineCount(outcome.text) === 0 ? "No matches found" : `Found ${plural(lineCount(outcome.text), "line")}`;
 		case "find":
-			return `Found ${plural(lineCount(outcome.text), "file")}`;
+			return lineCount(outcome.text) === 0 ? "No files found" : `Found ${plural(lineCount(outcome.text), "file")}`;
 		default:
 			return `Listed ${plural(lineCount(outcome.text), "entry", "entries")}`;
 	}
@@ -432,6 +446,7 @@ export function paint(row: Row, text: string, pad: number): string {
 }
 
 const ROW_GUTTER = /^( *\d+ [-+ ])/;
+const MUTED_INDENT = /^ {4}/;
 
 // ponytail: break at the last space that still fits, keeping that space at the end of the piece so no
 // character is lost and every offset after it stays where the word diff put it. A token wider than the
@@ -457,6 +472,14 @@ function wrapPoints(code: string, room: number): Span[] {
 // the right edge. Measuring in characters rather than display width is the shortcut here — a row of
 // double-width text would overhang by a column.
 export function wrapRow(row: Row, width: number): Row[] {
+	if (row.kind === "muted") {
+		if (row.text.trim() === "...") return [row];
+		const indent = row.text.match(MUTED_INDENT)?.[0] ?? "";
+		const body = row.text.slice(indent.length);
+		const room = width - indent.length;
+		if (room < 1 || visibleWidth(body) <= room) return [row];
+		return wrapTextWithAnsi(body, room).map((text) => ({ kind: "muted", text: indent + text }));
+	}
 	const m = row.kind === "code" ? row.text.match(CODE_GUTTER) : LINE_BG[row.kind] || row.kind === "context" ? row.text.match(ROW_GUTTER) : null;
 	if (!m) return [row];
 	const gutter = m[0];
@@ -542,7 +565,8 @@ export function resultRows(tool: string, args: Record<string, unknown>, outcome:
 	}
 	if (write && isPlanFile(args.path)) return { head: s.fg("muted", `${RESULT_ELBOW}/plan to preview`), rows: [], indent: 0 };
 	if (write) return { head: elbow + summary(tool, args, outcome, s), rows: writeBody(tool, args, outcome, view, s), indent: RESULT_ELBOW.length };
-	const output = tool === "read" ? convertLeadingTabs(outcome.text) : outcome.text;
+	if ((tool === "grep" || tool === "find") && lineCount(outcome.text) === 0) return { head: elbow + summary(tool, args, outcome, s), rows: [], indent: 0 };
+	const output = tool === "read" ? convertLeadingTabs(readDisplayText(outcome.text)) : tool === "grep" ? grepDisplayText(outcome) : outcome.text;
 	return { head: elbow + summary(tool, args, outcome, s), rows: outputRows(output, view.hint), indent: 0 };
 }
 
@@ -560,6 +584,25 @@ if (process.env.CLAUDE_TOOLS_SELFTEST) {
 	check(doneLine("read", { path: "/home/me/a.ts" }, tagged) === "<muted>Read ~/a.ts</muted>", "finished read is one grey line without a dot");
 	check(doneLine("ls", {}, plain) === "Listed .", "ls defaults to cwd");
 	check(doneLine("find", { pattern: "**/*.ts" }, plain) === 'Searched "**/*.ts"', "find is a search");
+	const foundFiles = resultRows("find", { pattern: "*.ts" }, ok("a.ts\nb.ts"), view(true), plain)!;
+	check(foundFiles.head === "  ⎿  Found 2 files", "an expanded Glob with matches gets Claude's \"Found N files\" header, which pi's own text never carries");
+	const noFiles = resultRows("find", { pattern: "*.xyz" }, ok("No files found matching pattern"), view(true), plain)!;
+	check(noFiles.head === "  ⎿  No files found" && noFiles.rows.length === 0, "an empty Glob drops pi's \"matching pattern\" extra words and shows no body, matching Claude's plain single line");
+	const foundLines = resultRows("grep", { pattern: "x" }, ok("a.ts:1: x\nb.ts:2: x"), view(true), plain)!;
+	check(foundLines.head === "  ⎿  Found 2 lines", "an expanded Grep with matches gets Claude's \"Found N lines\" header");
+	const noMatches = resultRows("grep", { pattern: "x" }, ok("No matches found"), view(true), plain)!;
+	check(noMatches.head === "  ⎿  No matches found" && noMatches.rows.length === 0, "an empty Grep shows no body under its already-matching \"No matches found\" line");
+	const truncated = resultRows("grep", { pattern: "x" }, ok("a.ts:1: x\n\n[20 matches limit reached. Use limit=40 for more, or refine pattern]", { matchLimitReached: 20 }), view(true), plain)!;
+	check(
+		truncated.rows.at(-1)?.text === "    (Results are truncated. Consider using a more specific path or pattern.)",
+		"pi's own \"N matches limit reached\" notice is swapped for Claude's unknown-total wording, the only variant pi's core can support since it never learns the true total",
+	);
+	const readNote = "line 1\nline 2\n\n[Showing lines 1-2 of 5000. Use offset=2 to continue.]";
+	const readCapped = resultRows("read", { path: "a" }, ok(readNote), view(true), plain)!;
+	check(readCapped.head === "  ⎿  Read 2 lines" && readCapped.rows.map((r) => r.text).join("|") === "    line 1|    line 2", "a capped Read drops pi's visible continuation bracket, like Claude's hidden system-reminder the user never sees");
+	const readByteNote = "line 1\n\n[Showing lines 1-1 of 5000 (50KB limit). Use offset=1 to continue.]";
+	check(readDisplayText(readByteNote) === "line 1", "the byte-limited variant of the continuation bracket is dropped too");
+
 	check(writeCallLine("edit", { path: "/home/me/x.ts" }, tagged) === "<borderAccent>● </borderAccent><b>Update</b>(~/x.ts)", "update call: blue dot, bold label, plain path");
 	check(writeCallLine("write", { path: "n.ts" }, plain) === "● Write(n.ts)", "write call");
 	check(writeCallLine("write", { path: "/home/me/proj/src/a.ts" }, plain) === "● Write(src/a.ts)", "a file inside the working directory is named relative to it");
@@ -708,6 +751,15 @@ if (process.env.CLAUDE_TOOLS_SELFTEST) {
 	check(wrapRow({ kind: "added", text: " 7 +short" }, 40).length === 1, "a line that fits is not split");
 	check(wrapRow({ kind: "code", text: "3 aaaa bbbb cc" }, 11).every((row) => row.text.length <= 11), "a space right at the edge stays inside the width, so no piece gets cut with an ellipsis");
 	check(wrapRow({ kind: "muted", text: "     ..." }, 4).length === 1, "the gap row is never wrapped");
+	const longOutput = wrapRow({ kind: "muted", text: `    ${"x".repeat(400)}` }, 132);
+	check(
+		longOutput.length === 4 &&
+			longOutput.every((row) => visibleWidth(row.text) <= 132) &&
+			longOutput[0].text === `    ${"x".repeat(128)}` &&
+			longOutput.map((row) => row.text.replace(MUTED_INDENT, "")).join("") === "x".repeat(400),
+		"a bash/grep/read output line longer than the terminal wraps into several rows instead of pi's old hard cut, like Claude's Bash wrap of print('x'*400) (measured live, m4c-long-line)",
+	);
+	check(wrapRow({ kind: "muted", text: "short line" }, 132).length === 1, "an output line that already fits is left alone");
 	check(
 		wrapRow({ kind: "context", text: " 7  const total = a + b;" }, 16).map((row) => row.text).join("|") === " 7  const total |    = a + b;",
 		"the break lands on a space and keeps it, so nothing shifts",
