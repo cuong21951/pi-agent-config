@@ -1,0 +1,17 @@
+{
+  "bypass": true,
+  "end": "Compacted|[Ee]rror|Nothing to compact",
+  "steps": [
+    {"keys": "/compact"},
+    {"sleep": 1},
+    {"keys": "\r"},
+    {"until": "Compacting", "timeout": 20},
+    {"sleep": 0.3},
+    {"snap": "compacting"},
+    {"until": "Compacted|[Ee]rror|Nothing to compact", "timeout": 120},
+    {"sleep": 2},
+    {"snap": "compacted"},
+    {"keys": "\u000f"},
+    {"sleep": 1.5}
+  ]
+}

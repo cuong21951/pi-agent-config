@@ -271,6 +271,14 @@ const EDITS = [
 		"let pastedLines=filteredText.split(`\n`),totalChars=filteredText.length;if(pastedLines.length>10||totalChars>1e3){this.pasteCounter++;let pasteId=this.pasteCounter;this.pastes.set(pasteId,filteredText);let marker=pastedLines.length>10?`[paste #${pasteId} +${pastedLines.length} lines]`:`[paste #${pasteId} ${totalChars} chars]`;this.insertTextAtCursorInternal(marker);return}",
 		"let pastedLines=filteredText.split(`\n`),totalChars=filteredText.length,expandId=this.claudeExpandLast,expandMarker=expandId===void 0?void 0:new RegExp(`\\\\[Pasted text #${expandId}( \\\\+\\\\d+ lines)?\\\\]`);if(expandMarker&&this.pastes.get(expandId)===filteredText&&expandMarker.test(this.getText())){this.claudeExpandUntil=0,this.claudeExpandLast=void 0,this.pastes.delete(expandId),this.setTextInternal(this.getText().replace(expandMarker,()=>filteredText));return}if(totalChars>800||pastedLines.length-1>Math.max(0,Math.min((this.tui?.terminal?.rows??24)-10,2))){this.pasteCounter++;let pasteId=this.pasteCounter;this.pastes.set(pasteId,filteredText);let marker=pastedLines.length>1?`[Pasted text #${pasteId} +${pastedLines.length-1} lines]`:`[Pasted text #${pasteId}]`;this.insertTextAtCursorInternal(marker),this.claudeExpandLast=pasteId,totalChars<=1e5&&(this.claudeExpandUntil=Date.now()+8e3,setTimeout(()=>this.tui?.requestRender?.(),8e3).unref?.());return}",
 	],
+	[
+		'let cancelHint=`(${keyText("app.interrupt")} to cancel)`,label=reason==="manual"?`Compacting context... ${cancelHint}`:`${reason==="overflow"?"Context overflow detected, ":""}Auto-compacting... ${cancelHint}`;super("compaction",ui,spinner=>theme.fg("accent",spinner),text=>theme.fg("muted",text),label)',
+		'let label="Compacting conversation\\u2026";super("compaction",ui,spinner=>theme.fg("mdCode",spinner),text=>theme.fg("mdCode",text),label)',
+	],
+	[
+		'label=theme.fg("customMessageLabel","\\x1B[1m[compaction]\\x1B[22m");if(this.addChild(new Text(label,0,0)),this.addChild(new Spacer(1)),this.expanded){',
+		'label=theme.fg("customMessageLabel","\\x1B[1m[compaction]\\x1B[22m");if(this.paddingX=this.paddingY=this.expanded?1:0,this.setBgFn(this.expanded?t=>theme.bg("customMessageBg",t):void 0),!this.expanded){this.addChild(new Text(theme.fg("muted","  \\u23BF \\u00a0")+"\\x1B[2mCompacted (ctrl+o to see full summary)\\x1B[22m",0,0));return}if(this.addChild(new Text(label,0,0)),this.addChild(new Spacer(1)),this.expanded){',
+	],
 ];
 
 const check = process.argv.includes("--check");
