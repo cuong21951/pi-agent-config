@@ -16,8 +16,8 @@ VOLATILE = [
 EXCEPTIONS = [
     ("status-line meters: Claude's subscription meters vs pi's provider balances",
      re.compile(r"(?: · [A-Z][\w .]* █+ \d+%(?: ↻ \S+)?)+$"), re.compile(r"(?: · [a-z][\w-]* \$\d+(?:\.\d+)?)+$")),
-    ("agents view count: other Claude Code sessions on this machine",
-     re.compile(r" · ← \d+ agents?$"), None),
+    ("agents view count: other Claude Code sessions on this machine (`← for agents` when there are none)",
+     re.compile(r" · ← (?:\d+ agents?|for agents)$"), None),
     ("retry cap: Claude's built-in 10 vs Cuong's settings.json retry.maxRetries 3",
      re.compile(r"(?<=· attempt \d)/10$"), re.compile(r"(?<=· attempt \d)/3$")),
     ("plugin update notice: Claude's marketplace auto-update toast; pi has no plugin marketplace",
