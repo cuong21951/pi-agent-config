@@ -35,6 +35,7 @@ export interface Row {
 	text: string;
 	hi?: Span[];
 	fg?: Tint[];
+	dim?: boolean;
 }
 
 const LABEL: Record<string, string> = { write: "Write", edit: "Update" };
@@ -493,7 +494,7 @@ export function paint(row: Row, text: string, pad: number): string {
 		if (from >= to) continue;
 		const nextBg = bg === "" ? "" : changed(from) ? word : bg;
 		const nextFg = tint(from);
-		const nextDim = from < dimEnd;
+		const nextDim = row.dim === true || from < dimEnd;
 		if (nextBg !== shownBg) out += (shownBg = nextBg);
 		if (nextFg !== shownFg) out += (shownFg = nextFg);
 		if (nextDim !== shownDim) out += (shownDim = nextDim) ? DIM : UNDIM;
@@ -580,11 +581,29 @@ function more(hidden: number, hint?: string): Row[] {
 	return hidden > 0 ? [{ kind: "muted", text: `… +${hidden} ${hidden === 1 ? "line" : "lines"}${hint ? ` (${hint})` : ""}` }] : [];
 }
 
-function writeBody(tool: string, args: Record<string, unknown>, outcome: ToolOutcome, view: ResultView, s: Style): Row[] {
+export function previewEdits(content: string, edits: ReadonlyArray<{ oldText: string; newText: string }>): string {
+	for (const edit of edits) {
+		const index = content.indexOf(edit.oldText);
+		if (index === -1) continue;
+		content = content.slice(0, index) + edit.newText + content.slice(index + edit.oldText.length);
+	}
+	return content;
+}
+
+function highlighter(args: Record<string, unknown>, s: Style): Highlight | undefined {
 	// ponytail: Claude syntax-highlights the code inside a diff row, so the file's own path picks the
 	// language; a tool without one just renders plain.
 	const path = String(args.path ?? "");
-	const highlight = s.code && path !== "" ? (code: string) => s.code!(code, path) : undefined;
+	return s.code && path !== "" ? (code: string) => s.code!(code, path) : undefined;
+}
+
+function rejectedBody(tool: string, args: Record<string, unknown>, outcome: ToolOutcome, s: Style): Row[] {
+	if (tool !== "edit" || editCreation(args)) return [];
+	return diffRows(trimDiffContext(diffLines(outcome.details)), highlighter(args, s)).map(({ hi: _changed, ...row }) => ({ ...row, dim: true }));
+}
+
+function writeBody(tool: string, args: Record<string, unknown>, outcome: ToolOutcome, view: ResultView, s: Style): Row[] {
+	const highlight = highlighter(args, s);
 	// ponytail: an edit shows its whole diff, however long - only a write truncates its preview. pi already
 	// cuts the diff down to the changed lines plus context, with a "..." row where it skipped a stretch.
 	if (tool === "edit") return diffRows(trimDiffContext(diffLines(outcome.details)), highlight);
@@ -613,7 +632,7 @@ export function resultRows(tool: string, args: Record<string, unknown>, outcome:
 	if (view.isPartial) return write ? { head: s.fg("muted", ELBOW) + s.fg("muted", "…"), rows: [], indent: 0 } : null;
 	const elbow = s.fg("muted", RESULT_ELBOW);
 	if (outcome.isError && isAbort(outcome.text)) return null;
-	if (write && outcome.isError && isRejected(outcome.text)) return { head: elbow + rejectedLine(tool, args, s), rows: [], indent: 0 };
+	if (write && outcome.isError && isRejected(outcome.text)) return { head: elbow + rejectedLine(tool, args, s), rows: rejectedBody(tool, args, outcome, s), indent: RESULT_ELBOW.length };
 	if (!write && !view.expanded) return null;
 	if (outcome.isError && tool === "edit" && !view.expanded) return { head: elbow + s.fg("error", editErrorText(outcome.text)), rows: [], indent: 0 };
 	if (outcome.isError) {
@@ -671,6 +690,15 @@ if (process.env.CLAUDE_TOOLS_SELFTEST) {
 
 	const declined = { text: "The user doesn't want to proceed with this tool use. The tool use was rejected (eg. if it was a file edit, the new_string was NOT written to the file). STOP what you are doing and wait for the user to tell you how to proceed.", isError: true };
 	check(resultRows("edit", { path: "/home/me/proj/src/app.ts", edits: [{ oldText: "a", newText: "b" }] }, declined, view(), tagged)!.head === "<muted>  ⎿ \u00a0</muted><dim>User rejected update to </dim><dim><b>src/app.ts</b></dim>", "a declined Update is Claude's grey \"User rejected update to\" + bold path, not an error row");
+	const declinedDiff = { ...declined, details: { diff: " 1 a\n-2 b\n+2 c\n 3 d" } };
+	const declinedRows = resultRows("edit", { path: "/home/me/proj/src/app.ts", edits: [{ oldText: "b", newText: "c" }] }, declinedDiff, view(), plain)!;
+	check(
+		declinedRows.indent === 5 && declinedRows.rows.length === 4 && declinedRows.rows.every((row) => row.dim === true && row.hi === undefined) && declinedRows.rows[1].text === " 2 -b",
+		"a declined Update draws the edit's diff under the rejected line, every row dim and no word highlight (Claude 2.1.283, m4d-decline-edit)",
+	);
+	check(paint(declinedRows.rows[0], declinedRows.rows[0].text, 0).startsWith("\x1b[38;2;248;248;242m\x1b[2m"), "a dim row stays dim past the gutter");
+	check(resultRows("write", { path: "/home/me/proj/n.ts", content: "x" }, declined, view(), plain)!.rows.length === 0, "a declined Write keeps no body (not measured)");
+	check(previewEdits("a b a", [{ oldText: "a", newText: "x" }, { oldText: "zz", newText: "y" }]) === "x b a", "a preview applies each edit once where its old text first appears and skips one that no longer matches");
 	check(resultRows("write", { path: "/home/me/proj/n.ts", content: "x" }, declined, view(), plain)!.head === "  ⎿ \u00a0User rejected write to n.ts" && resultRows("edit", { path: "/home/me/proj/n.ts", edits: [{ oldText: "", newText: "x" }] }, declined, view(), plain)!.head.endsWith("User rejected write to n.ts"), "a declined Write, or an Update that creates a file, says write");
 	check(resultRows("read", { path: "a" }, ok("l1\nl2\nl3\n"), view(), plain) === null, "collapsed read result draws nothing");
 	check(resultRows("read", { path: "a" }, { text: "Operation aborted", isError: true }, view(), plain) === null, "an aborted tool draws no error row (pi core prints Interrupted)");

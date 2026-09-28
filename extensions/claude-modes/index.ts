@@ -5,7 +5,7 @@ import { join, resolve } from "node:path";
 import { generateDiffString, getAgentDir, getMarkdownTheme, type ExtensionAPI, type ExtensionContext, type Theme } from "@earendil-works/pi-coding-agent";
 import { Markdown, matchesKey, stripTerminalSequences, truncateToWidth, visibleWidth, type Component, type KeybindingsManager, type TUI } from "@earendil-works/pi-tui";
 import { MODAL_EVENT } from "../claude-bottom-input/index.ts";
-import { contentRows, diffRows, paint as paintRow, trimDiffContext, wrapRow, type Row } from "../claude-tools/format.ts";
+import { contentRows, diffRows, paint as paintRow, previewEdits, trimDiffContext, wrapRow, type Row } from "../claude-tools/format.ts";
 import {
 	approvedRows,
 	bashPreviewRows,
@@ -90,16 +90,6 @@ function renderRows(rows: Row[], width: number): string[] {
 	);
 }
 
-function applyEditsPreview(oldContent: string, edits: ReadonlyArray<{ oldText: string; newText: string }>): string {
-	let content = oldContent;
-	for (const edit of edits) {
-		const index = content.indexOf(edit.oldText);
-		if (index === -1) continue;
-		content = content.slice(0, index) + edit.newText + content.slice(index + edit.oldText.length);
-	}
-	return content;
-}
-
 function readFileSafe(path: string): string {
 	try {
 		return readFileSync(path, "utf8");
@@ -127,7 +117,7 @@ function buildPreviewSpec(kind: ToolKind, input: Record<string, unknown>, cwd: s
 	if (kind === "edit") {
 		const edits = Array.isArray(input.edits) ? (input.edits as Array<{ oldText: string; newText: string }>) : [];
 		const oldContent = readFileSafe(path);
-		const newContent = applyEditsPreview(oldContent, edits);
+		const newContent = previewEdits(oldContent, edits);
 		const { diff } = generateDiffString(oldContent, newContent);
 		const lines = trimDiffContext(diff.split("\n"));
 		return { kind, title: titleFor("edit", exists), target: path, rowsFor: (width) => [pathRow, ...renderRows(diffRows(lines), width)] };

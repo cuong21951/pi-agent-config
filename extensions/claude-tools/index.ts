@@ -1,3 +1,4 @@
+import { readFileSync } from "node:fs";
 import { readFile } from "node:fs/promises";
 import * as os from "node:os";
 import { resolve } from "node:path";
@@ -16,11 +17,11 @@ import {
 	ToolExecutionComponent,
 } from "@earendil-works/pi-coding-agent";
 import { stripTerminalSequences, truncateToWidth, visibleWidth } from "@earendil-works/pi-tui";
-import { editCreation, paint, resultRows, type Roots, type Row, stampRow, type Style, target, thinkingRows, verboseCallLine, WRITE_TOOLS, wrapRow, writeCallLine } from "./format.ts";
+import { editCreation, paint, previewEdits, resultRows, type Roots, type Row, stampRow, type Style, target, thinkingRows, verboseCallLine, WRITE_TOOLS, wrapRow, writeCallLine } from "./format.ts";
 import { hangElbowRows, patchGenericTools } from "./generic.ts";
 import { highlightClaudeStyle } from "./highlight.ts";
 import "./markdown-highlight.ts";
-import { clip, describeTool, dynamic, failed, finished, groupRow, hasThought, joinOnExecute, retried, shownContent, thoughtId, track, watch } from "./rows.ts";
+import { clip, describeTool, dynamic, failed, finished, groupRow, hasThought, isRejected, joinOnExecute, retried, shownContent, thoughtId, track, watch } from "./rows.ts";
 
 // ponytail: only the render slots change; execute, schema and prompt metadata are the built-in definition's.
 const DEFINITIONS = {
@@ -92,6 +93,24 @@ function editOrCreate(edit: Execute, write: Execute): Execute {
 	};
 }
 
+const declinedDiffs = new Map<string, { diff: string }>();
+
+function declinedDiff(id: string, args: Record<string, unknown>): { diff: string } {
+	const cached = declinedDiffs.get(id);
+	if (cached) return cached;
+	const edits = Array.isArray(args.edits) ? (args.edits as Array<{ oldText: string; newText: string }>) : [];
+	const content = (() => {
+		try {
+			return readFileSync(resolve(process.cwd(), String(args.path ?? "")), "utf8");
+		} catch {
+			return "";
+		}
+	})();
+	const details = { diff: generateDiffString(content, previewEdits(content, edits)).diff };
+	declinedDiffs.set(id, details);
+	return details;
+}
+
 type Reply = { contentContainer: { children: unknown[]; clear(): void }; hideThinkingBlock?: boolean; isStreaming?: boolean };
 type ReplyMessage = { stopReason?: string; timestamp?: number; model?: string; content?: Array<{ type: string; thinking?: string }> };
 
@@ -161,7 +180,8 @@ export default function (pi: ExtensionAPI) {
 					.join("\n");
 				// ponytail: pi reports a failed tool through the render context, not on the result.
 				const isError = result.isError === true || context.isError === true || failed.has(context.toolCallId ?? "");
-				const outcome = { text, isError, details: result.details };
+				const declined = tool === "edit" && isError && result.details?.diff === undefined && isRejected(text);
+				const outcome = { text, isError, details: declined ? declinedDiff(context.toolCallId ?? "", context.args) : result.details };
 				const s = style(theme);
 				const head = !WRITE_TOOLS.has(tool) && expanded && !isPartial ? [verboseCallLine(tool, context.args, s, isError)] : [];
 				// ponytail: painted rows are already cut or wrapped to the width, so only the plain lines are truncated;
