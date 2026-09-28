@@ -89,6 +89,38 @@ def load_subagent_wait(path):
     return min(max(durations), PACE_CAP_MS) / 1000 if durations else 0
 
 
+OUTPUT_FILE = re.compile(r"<output-file>(.*?)</output-file>")
+
+
+def load_transcript(path):
+    replies, prompt = [], None
+    for line in open(path, encoding="utf-8"):
+        if not line.strip():
+            continue
+        entry = json.loads(line)
+        message = dict(entry.get("message") or {})
+        if message.get("role") == "user" and prompt is None:
+            prompt = text_of(message).strip()
+        elif message.get("role") == "assistant" and message.get("stopReason") != "error":
+            if message.get("timestamp") and entry.get("timestamp"):
+                message["_duration_ms"] = max(0, iso_ms(entry["timestamp"]) - message["timestamp"])
+            replies.append({"message": message, "errors": []})
+    return {"prompt": prompt or "", "replies": replies, "pending_errors": []}
+
+
+def load_subagents(path):
+    entries = [json.loads(line) for line in open(path, encoding="utf-8") if line.strip()]
+    files = [found for e in entries if e.get("type") == "custom_message"
+             for found in OUTPUT_FILE.findall(e["content"] if isinstance(e.get("content"), str) else json.dumps(e.get("content"), ensure_ascii=False))]
+    scripts = []
+    for f in dict.fromkeys(files):
+        try:
+            scripts.append(load_transcript(f))
+        except (OSError, ValueError, AttributeError):
+            pass
+    return scripts
+
+
 TASK_ID = re.compile(r"(?:with ID: |\(ID: )(\w+)")
 
 
@@ -113,6 +145,7 @@ TURNS = load_turns(a.session)
 PI_TASK_IDS = load_task_ids(a.session)
 SEARCHES = load_searches(a.session)
 SUBAGENT_WAIT_S = load_subagent_wait(a.session)
+SUBAGENTS = load_subagents(a.session)
 
 
 def search_for(body):
@@ -150,7 +183,12 @@ def plan_or_absolute(path, plan_file):
     return plan_file if plan_file and is_plan_file(path) else absolute(path)
 
 
-def to_claude(name, args, claude_tools, plan_file=None):
+def schema_args(args, schema):
+    known = (schema or {}).get("properties")
+    return {k: v for k, v in args.items() if v is not None and (known is None or k in known)}
+
+
+def to_claude(name, args, claude_tools, plan_file=None, schemas=None):
     if name == "exit_plan_mode":
         return [("ExitPlanMode", {})]
     if name == "enter_plan_mode":
@@ -174,7 +212,7 @@ def to_claude(name, args, claude_tools, plan_file=None):
     if name == "skill":
         return [("Skill", {"skill": args["name"]})]
     if name == "Agent":
-        return [("Agent", compact({"description": args.get("description"), "prompt": args.get("prompt"), "subagent_type": args.get("subagent_type"), "model": args.get("model")}))]
+        return [("Agent", schema_args(args, (schemas or {}).get("Agent")))]
     if name == "ask_user_question":
         return [("AskUserQuestion", {"questions": args.get("questions", [])})]
     if name == "task_create":
@@ -199,7 +237,7 @@ def to_claude(name, args, claude_tools, plan_file=None):
     return [(name, args)]
 
 
-def blocks_for_claude(reply, claude_tools, plan_file=None):
+def blocks_for_claude(reply, claude_tools, plan_file=None, schemas=None):
     blocks = []
     for c in reply.get("content", []):
         if c["type"] == "thinking" and c.get("thinking"):
@@ -207,7 +245,7 @@ def blocks_for_claude(reply, claude_tools, plan_file=None):
         elif c["type"] == "text" and c.get("text"):
             blocks.append({"type": "text", "text": c["text"]})
         elif c["type"] == "toolCall":
-            for name, args in to_claude(c["name"], c.get("arguments") or {}, claude_tools, plan_file):
+            for name, args in to_claude(c["name"], c.get("arguments") or {}, claude_tools, plan_file, schemas):
                 blocks.append({"type": "tool_use", "id": "toolu_" + uuid.uuid4().hex[:24], "name": name, "input": args})
     return blocks
 
@@ -233,6 +271,15 @@ def locate(messages):
             if turn["prompt"] and turn["prompt"] in prompt:
                 step = sum(1 for x in messages[i + 1:] if x.get("role") == "assistant")
                 return turn, step
+    return None, 0
+
+
+def locate_subagent(messages):
+    for i, m in enumerate(messages):
+        prompt = user_prompt(m) if m.get("role") == "user" else None
+        script = next((t for t in SUBAGENTS if prompt and t["prompt"] and t["prompt"] in prompt), None)
+        if script:
+            return script, sum(1 for x in messages[i + 1:] if x.get("role") == "assistant")
     return None, 0
 
 
@@ -293,10 +340,15 @@ class Handler(BaseHTTPRequestHandler):
             with lock:
                 failures["dumped"] = failures.get("dumped", 0) + 1
                 json.dump(body, open(f"{a.dump}-{failures['dumped']}.json", "w", encoding="utf-8"), indent=1)
+        if "Describe your most recent action in 3-5 words" in json.dumps((body.get("messages") or [{}])[-1].get("content"), ensure_ascii=False):
+            log({"kind": "agent-summary"})
+            return self.stream(body, [{"type": "text", "text": ""}], "end_turn")
         if "[SUGGESTION MODE:" in json.dumps((body.get("messages") or [{}])[-1].get("content"), ensure_ascii=False):
             log({"kind": "suggestion"})
             return self.stream(body, [{"type": "text", "text": ""}], "end_turn")
         turn, step = locate(body.get("messages", []))
+        if not turn:
+            turn, step = locate_subagent(body.get("messages", []))
         if not turn or step >= len(turn["replies"]):
             last = (body.get("messages") or [{}])[-1]
             log({"kind": "unscripted", "step": step, "prompt": turn and turn["prompt"][:60], "last": json.dumps(last.get("content"), ensure_ascii=False)[:300]})
@@ -321,7 +373,8 @@ class Handler(BaseHTTPRequestHandler):
             self.pace_error(error)
             return self.send_json(529, {"type": "error", "error": {"type": "overloaded_error", "message": error.get("errorMessage") or "Overloaded"}})
         reply = entry["message"]
-        blocks = blocks_for_claude(reply, tools, plan_file_of(body)) or [{"type": "text", "text": ""}]
+        schemas = {t.get("name"): t.get("input_schema") for t in body.get("tools", [])}
+        blocks = blocks_for_claude(reply, tools, plan_file_of(body), schemas) or [{"type": "text", "text": ""}]
         blocks = [dict(b, input=with_claude_task_id(b["input"], body)) if b.get("name") == "TaskStop" else b for b in blocks]
         log({"kind": "reply", "step": step, "blocks": [b["type"] + (":" + b["name"] if b["type"] == "tool_use" else "") for b in blocks]})
         pace = 0 if a.no_pace else min(reply.get("_duration_ms", 0), PACE_CAP_MS) / 1000

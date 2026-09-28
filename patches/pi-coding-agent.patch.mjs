@@ -251,6 +251,10 @@ const EDITS = [
 		"globalThis.__claudeTranscript=expanded,this.ui.requestRender()}",
 	],
 	[
+		"this.documentContainer.addChild(this.chatContainer),this.pendingMessagesContainer=new Container,",
+		"this.documentContainer.addChild(this.chatContainer),globalThis.__claudeChatView={show:messages=>{let chat=this.chatContainer,pending=this.pendingTools,view=this.claudeViewContainer??=new Container,slot=this.documentContainer.children.indexOf(chat);view.clear(),this.chatContainer=view,this.pendingTools=new Map;try{this.renderSessionItems(messages)}finally{this.chatContainer=chat,this.pendingTools=pending}view.children[0]instanceof Spacer||view.children.unshift(new Spacer(1));slot>=0&&(this.documentContainer.children[slot]=view),this.ui.requestRender()},hide:()=>{let slot=this.documentContainer.children.indexOf(this.claudeViewContainer);slot>=0&&(this.documentContainer.children[slot]=this.chatContainer),this.ui.requestRender()}},this.pendingMessagesContainer=new Container,",
+	],
+	[
 		"this.editorContainer=new Container,this.editorContainer.addChild(this.editor),",
 		"this.editorContainer=new Container,this.editorContainer.addChild(this.editor),this.editorContainer.render=(render=>width=>this.toolOutputExpanded&&this.editorContainer.children[0]===this.editor?[]:render(width))(this.editorContainer.render.bind(this.editorContainer)),",
 	],

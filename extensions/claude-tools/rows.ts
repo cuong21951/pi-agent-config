@@ -382,7 +382,13 @@ export function taskOf(toolName: string, args: Args): string {
 	return text.replace(/\s+/g, " ").trim();
 }
 
+function viewingAgent(): boolean {
+	const registry = (globalThis as Record<symbol, { agentView?: () => unknown } | undefined>)[Symbol.for("pi-subagents:manager")];
+	return registry?.agentView?.() !== undefined;
+}
+
 function taskFor(group: string[]): string | undefined {
+	if (viewingAgent()) return undefined;
 	const task = shared.task as Task | undefined;
 	return task !== undefined && task.at >= (joinedAt.get(group[0]) ?? Number.POSITIVE_INFINITY) ? task.text : undefined;
 }
@@ -448,7 +454,7 @@ function hintRows(group: string[], width: number, brush: Brush, now: number): st
 }
 
 function backgroundable(group: string[], now: number): boolean {
-	return group.some((id) => running(id) && tools.get(id) === "bash" && now - (startedAt.get(id) ?? now) >= BACKGROUND_HINT_AFTER_MS);
+	return !viewingAgent() && group.some((id) => running(id) && tools.get(id) === "bash" && now - (startedAt.get(id) ?? now) >= BACKGROUND_HINT_AFTER_MS);
 }
 
 export function groupRow(id: string, width: number, brush: Brush, now = Date.now()): string[] {

@@ -88,17 +88,34 @@
    const registryEntry = {
      waitForAll: () => manager.waitForAll(),
      hasRunning: () => manager.hasRunning(),
-@@ -743,6 +778,9 @@
+@@ -743,6 +778,14 @@
        const record = manager.getRecord(id);
        return record !== undefined && isTopLevelAgent(record) ? record : undefined;
      },
 +    backgroundRunningCount,
 +    fleetLines: (width: number, theme: Theme) => fleet.lines(width, theme),
 +    fleetHint: (theme: Theme) => fleet.hint(theme),
++    agentView: () => fleet.agentView(),
++    settledViewLeaves: () => fleet.settledViewLeaves(),
++    taskRecords: () => manager.listAgents(),
++    viewAgent: (id: string) => fleet.viewAgent(id),
++    stopAgent: (id: string) => manager.abort(id),
    };
    const ownsManagerRegistry = (globalThis as any)[MANAGER_KEY] === undefined;
    if (ownsManagerRegistry) {
-@@ -1648,25 +1686,19 @@
+@@ -1133,10 +1176,7 @@
+   function setWidgetMode(m: WidgetMode): void { widgetMode = m; widget.update(); }
+ 
+   // Claude Code-style FleetView: navigable list of main + subagents below the editor.
+-  // The last two arguments keep a conversation overlay opened here identical to
+-  // one opened from `/agents`: same setting on the way in, same persist out.
+-  const fleet = new FleetList(manager, agentActivity, isShowCostEnabled, getViewerMarkdown,
+-    (mode) => chooseViewerMarkdown(mode, currentCtx as unknown as ExtensionCommandContext | undefined));
++  const fleet = new FleetList(manager, agentActivity, isShowCostEnabled);
+   let fleetViewEnabled = true;
+   function isFleetViewEnabled(): boolean { return fleetViewEnabled; }
+   function setFleetViewEnabled(b: boolean): void { fleetViewEnabled = b; fleet.setEnabled(b); }
+@@ -1648,25 +1688,19 @@
  
      // ---- Custom rendering: Claude Code style ----
  
@@ -132,7 +149,7 @@
      },
  
      renderResult(result, { expanded, isPartial }, theme, renderContext) {
-@@ -1705,7 +1737,7 @@
+@@ -1705,7 +1739,7 @@
  
        // ---- Background agent launched ----
        if (details.status === "background") {
@@ -141,7 +158,7 @@
        }
  
        // ---- Completed / Steered ----
-@@ -1832,6 +1864,9 @@
+@@ -1832,6 +1866,9 @@
        });
        if (scopeVerdict.kind === "error") return textResult(scopeVerdict.message);
        if (scopeVerdict.kind === "warn") ctx.ui.notify(scopeVerdict.message, "warning");
@@ -151,7 +168,7 @@
  
        const thinking = resolvedConfig.thinking;
        const inheritContext = resolvedConfig.inheritContext;
-@@ -2458,6 +2493,8 @@
+@@ -2458,6 +2495,8 @@
        ),
      }),
  
@@ -160,22 +177,71 @@
      renderCall(args, theme) {
        return new Text(
          `${theme.fg("toolTitle", "▸ ")}${theme.bold(theme.fg("toolTitle", "SubagentWorkflow"))}  ${theme.fg("muted", workflowCallName(args))}`,
+@@ -3052,33 +3091,10 @@
+     if (!record) return;
+ 
+     await viewAgentConversation(ctx, record);
+-    // Back-navigation: re-show the list
+-    await showRunningAgents(ctx);
+   }
+ 
+-  async function viewAgentConversation(ctx: ExtensionCommandContext, record: AgentRecord) {
+-    if (!record.session) {
+-      ctx.ui.notify(`Agent is ${record.status === "queued" ? "queued" : "expired"} — no session available.`, "info");
+-      return;
+-    }
+-
+-    const { ConversationViewer, VIEWPORT_HEIGHT_PCT } = await import("./ui/conversation-viewer.js");
+-    const session = record.session;
+-    const activity = agentActivity.get(record.id);
+-
+-    await ctx.ui.custom<undefined>(
+-      (tui, theme, keybindings, done) => {
+-        return new ConversationViewer(tui, session, record, activity, theme, done, () => {
+-          if (manager.abort(record.id)) {
+-            ctx.ui.notify(`Stopped "${record.description}".`, "info");
+-          }
+-        }, keybindings, (message: string) => manager.steer(record.id, message), showCost, getViewerMarkdown, (mode) => chooseViewerMarkdown(mode, ctx));
+-      },
+-      {
+-        overlay: true,
+-        overlayOptions: { anchor: "center", width: "90%", maxHeight: `${VIEWPORT_HEIGHT_PCT}%` },
+-      },
+-    );
++  async function viewAgentConversation(_ctx: ExtensionCommandContext, record: AgentRecord) {
++    fleet.viewAgent(record.id);
+   }
+ 
+   async function showAgentDetail(ctx: ExtensionCommandContext, name: string) {
 --- a/src/ui/fleet-list.ts
 +++ b/src/ui/fleet-list.ts
-@@ -12,11 +12,9 @@
+@@ -3,8 +3,8 @@
+  *
+  * Shows `main` + each running/queued subagent as a navigable list. Pressing ↓ (or
+  * ←) at an empty prompt activates the list; ↑/↓ move the selection (filled ● marker),
+- * Enter opens the selected agent's live conversation overlay, Esc returns to the prompt.
+- * A viewer stays open when its agent finishes; finished agents linger briefly in the list.
++ * Enter swaps the transcript to the selected agent's conversation in place (Claude
++ * Code's agent view); Enter on `main`, or Esc once the agent has stopped, swaps back.
+  *
+  * Mechanics (see plan): the list is a `belowEditor` widget (render-only), and ALL key
+  * handling goes through `onTerminalInput` — which fires before the focused editor and
+@@ -12,21 +12,25 @@
   */
  
  import { Editor, isKeyRelease, Key, matchesKey, truncateToWidth, visibleWidth } from "@earendil-works/pi-tui";
 -import { hasAgentBadge, renderAgentName } from "../agent-color.js";
  import { type AgentManager, isTopLevelAgent } from "../agent-manager.js";
- import type { AgentRecord, ViewerMarkdownMode } from "../types.js";
+-import type { AgentRecord, ViewerMarkdownMode } from "../types.js";
 -import { getLifetimeCost, getLifetimeTotal } from "../usage.js";
 -import { type AgentActivity, formatCost, type Theme } from "./agent-widget.js";
+-import { ConversationViewer, VIEWPORT_HEIGHT_PCT } from "./conversation-viewer.js";
++import { getConfig } from "../agent-types.js";
++import type { AgentRecord } from "../types.js";
 +import type { AgentActivity, Theme } from "./agent-widget.js";
- import { ConversationViewer, VIEWPORT_HEIGHT_PCT } from "./conversation-viewer.js";
  
  /** Widget key for the below-editor fleet list. */
-@@ -24,9 +22,15 @@
+ const FLEET_KEY = "fleet";
  /** Max agent rows shown at once; extras collapse into a "↓ N more" indicator. */
  const MAX_AGENT_ROWS = 5;
  /** Re-render cadence so elapsed/token stats tick while agents run. */
@@ -194,7 +260,15 @@
  
  /** Minimal UI surface the FleetView needs from `ctx.ui` (structural subset). */
  export type FleetUICtx = {
-@@ -69,31 +73,87 @@
+@@ -37,6 +41,7 @@
+   ): void;
+   onTerminalInput(handler: (data: string) => { consume?: boolean; data?: string } | undefined): () => void;
+   getEditorText(): string;
++  setEditorText?(text: string): void;
+   notify(message: string, type?: "info" | "warning" | "error"): void;
+   custom<T>(
+     factory: (tui: any, theme: Theme, keybindings: any, done: (result: T) => void) => { render(width: number): string[]; invalidate(): void; dispose?(): void },
+@@ -69,31 +74,117 @@
  type WorkflowEntry = { kind: "workflow"; workflow: FleetWorkflow };
  type FleetEntry = MainEntry | WorkflowEntry | AgentEntry;
  
@@ -276,6 +350,36 @@
 +  return { start, end: Math.min(start + size, count) };
 +}
 +
++type ChatView = { show(messages: readonly unknown[]): void; hide(): void };
++
++function chatView(): ChatView | undefined {
++  return (globalThis as { __claudeChatView?: ChatView }).__claudeChatView;
++}
++
++const CLAUDE_AGENT_COLORS: Readonly<Record<string, string>> = {
++  red: "#ff6666", blue: "#66b2ff", green: "#66ff66", yellow: "#ffff66",
++  purple: "#b266ff", orange: "#ffb266", pink: "#ff99cc", cyan: "#66cccc",
++};
++
++export function agentViewColor(color: string | undefined): string {
++  return CLAUDE_AGENT_COLORS[(color ?? "").trim().toLowerCase()] ?? CLAUDE_AGENT_COLORS.cyan;
++}
++
++export type AgentView = {
++  id: string;
++  label: string;
++  name: string;
++  color: string;
++  running: boolean;
++  startedAt: number;
++  tokens: number;
++};
++
++export function agentViewHint(viewed: boolean, onMain: boolean, viewingAgent: boolean): string {
++  if (onMain) return viewingAgent ? "↑/↓ to select · Enter to view" : "↑/↓ to select";
++  return viewed ? "↑/↓ to select" : "";
++}
++
 +function isLive(record: AgentRecord): boolean {
 +  return record.status === "running" || record.status === "queued";
 +}
@@ -301,15 +405,80 @@
  }
  
  export class FleetList {
-@@ -122,6 +182,7 @@
-    * minus the close handle, because that overlay belongs to the extension.
+@@ -108,8 +199,6 @@
+   private active = false;
+   /** 0 = `main`, 1..N = subagents. */
+   private selectedIndex = 0;
+-  /** Set while a conversation overlay is open; calling it closes the overlay. */
+-  private viewerClose: (() => void) | undefined;
+   private viewingAgentId: string | undefined;
+   /** Injected by the extension; absent until workflows are wired (or at all). */
+   private workflowSource: (() => readonly FleetWorkflow[]) | undefined;
+@@ -117,11 +206,14 @@
+   /**
+    * Set while the workflow inspector is up.
+    *
+-   * It does the two jobs `viewerClose` does for an agent's overlay — keep the
+-   * list out of the dialog's keys, and remember which row to come back to —
+-   * minus the close handle, because that overlay belongs to the extension.
++   * It keeps the list out of the dialog's keys and remembers which row to
++   * come back to; the overlay itself belongs to the extension.
     */
    private viewingWorkflowId: string | undefined;
 +  private dismissed = new Set<string>();
++  private viewUnsub: (() => void) | undefined;
++  private viewTimer: ReturnType<typeof setTimeout> | undefined;
++  private settledLeaves = 0;
  
    constructor(
      private manager: AgentManager,
-@@ -206,6 +267,7 @@
+@@ -132,18 +224,6 @@
+      * `showCost` setting.
+      */
+     private showCost: () => boolean = () => false,
+-    /**
+-     * The user's `viewerMarkdown` setting, for a conversation overlay opened
+-     * from here. Read live rather than captured, because the viewer's `m` key
+-     * changes it while the overlay is up. Omitted → the viewer's own default.
+-     */
+-    private viewerMarkdown?: () => ViewerMarkdownMode,
+-    /**
+-     * Persist a mode chosen with `m` in that overlay, so the key means the same
+-     * thing here as it does from `/agents` — one setting, not one per entry
+-     * point. Omitted → `m` still cycles, viewer-locally.
+-     */
+-    private onViewerMarkdown?: (mode: ViewerMarkdownMode) => void,
+   ) {}
+ 
+   // ---- Lifecycle ----
+@@ -174,7 +254,8 @@
+    * Called when an agent finishes. The viewer (if open on it) stays open so the
+    * final output remains readable, and the row lingers in the list — just refresh.
+    */
+-  onAgentFinished(_id: string): void {
++  onAgentFinished(id: string): void {
++    if (id === this.viewingAgentId) this.refreshView();
+     this.update();
+   }
+ 
+@@ -182,7 +263,7 @@
+     if (this.timer) { clearInterval(this.timer); this.timer = undefined; }
+     this.inputUnsub?.();
+     this.inputUnsub = undefined;
+-    if (this.viewerClose) { this.viewerClose(); this.viewerClose = undefined; }
++    this.leaveView();
+     this.viewingAgentId = undefined;
+     // No handle to close the workflow inspector with, but the list is going
+     // away — leaving the id set would keep it swallowing input forever.
+@@ -191,7 +272,6 @@
+     this.widgetRegistered = false;
+     this.tui = undefined;
+     this.active = false;
+-    // Null last so a `viewerClose()` microtask above can't re-register the widget.
+     this.ui = undefined;
+   }
+ 
+@@ -206,6 +286,7 @@
  
      if (!hasRows) {
        if (this.widgetRegistered) {
@@ -317,7 +486,7 @@
          this.ui.setWidget(FLEET_KEY, undefined);
          this.widgetRegistered = false;
          this.tui = undefined;
-@@ -220,10 +282,10 @@
+@@ -220,10 +301,10 @@
      this.ensureTimer(); // keep stats ticking whenever the list is shown (e.g. after a re-enable)
  
      if (!this.widgetRegistered) {
@@ -330,7 +499,7 @@
            invalidate: () => { this.widgetRegistered = false; this.tui = undefined; },
          };
        }, { placement: "belowEditor" });
-@@ -235,21 +297,13 @@
+@@ -235,21 +316,13 @@
  
    // ---- Roster ----
  
@@ -355,7 +524,7 @@
        ))
        .sort((a, b) => a.startedAt - b.startedAt);
    }
-@@ -278,21 +332,16 @@
+@@ -278,21 +351,16 @@
        .filter(run =>
          run.status === "running"
          || run.status === "paused"
@@ -379,7 +548,51 @@
      ];
    }
  
-@@ -354,6 +403,7 @@
+@@ -314,7 +382,7 @@
+     // While an overlay is open, let it own all input. Checked before the focus
+     // test below, which would otherwise read the dialog holding the keyboard as
+     // "the user left the list" and reset the selection out from under it.
+-    if (this.viewerClose || this.viewingWorkflowId) return undefined;
++    if (this.viewingWorkflowId) return undefined;
+     // Input listeners fire BEFORE the focused component, and dialogs
+     // (ctx.ui.select/confirm/input, pi's own menus) swap the prompt editor out
+     // while getEditorText() still reads the detached — empty — editor. So when
+@@ -324,6 +392,34 @@
+       return undefined;
+     }
+ 
++    if (!this.active && this.viewingAgentId !== undefined) {
++      const viewed = this.manager.getRecord(this.viewingAgentId);
++      if (matchesKey(data, "escape")) {
++        if (viewed && isLive(viewed)) {
++          this.manager.abort(viewed.id);
++          this.refreshView();
++        } else {
++          this.leaveView();
++          this.update();
++        }
++        return { consume: true };
++      }
++      const typed = this.ui.getEditorText();
++      if (matchesKey(data, Key.enter) && typed.trim() !== "" && !typed.startsWith("/") && viewed && isLive(viewed) && this.ui.setEditorText) {
++        this.manager.steer(viewed.id, typed.trim());
++        this.ui.setEditorText("");
++        this.update();
++        return { consume: true };
++      }
++      if (matchesKey(data, "down") && typed === "") {
++        const idx = this.roster().findIndex(e => e.kind === "agent" && e.record.id === this.viewingAgentId);
++        this.active = true;
++        this.selectedIndex = Math.max(0, idx);
++        this.update();
++        return { consume: true };
++      }
++    }
++
+     if (!this.active) {
+       // Activate: ↓ or ← at an empty prompt moves focus into the list.
+       const isActivator = matchesKey(data, "down") || matchesKey(data, "left");
+@@ -354,6 +450,7 @@
      }
      if (matchesKey(data, "escape")) { this.deactivate(); return { consume: true }; }
      if (matchesKey(data, Key.enter)) { this.openSelected(); return { consume: true }; }
@@ -387,7 +600,150 @@
  
      // Any other key cancels navigation and flows to the editor.
      this.deactivate();
-@@ -457,87 +507,65 @@
+@@ -382,14 +479,18 @@
+   private openSelected(): void {
+     const entry = this.roster()[this.selectedIndex];
+     if (!entry || entry.kind === "main") {
++      if (this.viewingAgentId !== undefined) {
++        this.leaveView();
++        this.update();
++        return;
++      }
+       // `main` = return to the prompt; the native transcript is already shown.
+       this.deactivate();
+       return;
+     }
+     if (entry.kind === "workflow") {
+-      // The extension owns this overlay and closes it, so there is no
+-      // `viewerClose` to hold — but the list still has to know one is up, and
+-      // still has to put the cursor back on the run when it comes down.
++      // The extension owns this overlay and closes it, but the list still has
++      // to know one is up, and to put the cursor back on the run afterwards.
+       this.viewingWorkflowId = entry.workflow.id;
+       void Promise.resolve(this.openWorkflow?.(entry.workflow.id)).then(
+         () => this.clearViewer(),
+@@ -397,147 +498,148 @@
+       );
+       return;
+     }
+-    const record = entry.record;
+-    if (!this.ui) return;
+-    if (!record.session) {
+-      this.ui.notify(`Agent is ${record.status} — no session available.`, "info");
+-      return;
+-    }
+-    const session = record.session;
+-    const activity = this.agentActivity.get(record.id);
++    this.viewAgent(entry.record.id);
++  }
++
++  viewAgent(id: string): boolean {
++    const record = this.manager.getRecord(id);
++    if (!record) return false;
++    this.enterView(record);
++    return true;
++  }
++
++  settledViewLeaves(): number {
++    return this.settledLeaves;
++  }
++
++  agentView(): AgentView | undefined {
++    const record = this.viewingAgentId !== undefined ? this.manager.getRecord(this.viewingAgentId) : undefined;
++    if (!record) return undefined;
++    return {
++      id: record.id,
++      label: record.alias !== undefined ? `@${record.alias}` : record.description,
++      name: record.alias ?? record.type,
++      color: agentViewColor(getConfig(record.type).color),
++      running: isLive(record),
++      startedAt: record.startedAt,
++      tokens: contextTokens(record) + record.lifetimeUsage.output,
++    };
++  }
++
++  private enterView(record: AgentRecord): void {
++    if (this.viewingAgentId !== record.id) this.leaveView();
+     this.viewingAgentId = record.id;
++    this.viewUnsub ??= record.session?.subscribe(() => this.scheduleViewRefresh());
++    this.refreshView();
++    this.update();
++  }
+ 
+-    void this.ui.custom<undefined>(
+-      (tui, theme, keybindings, done) => {
+-        this.viewerClose = () => done(undefined);
+-        return new ConversationViewer(
+-          tui,
+-          session,
+-          record,
+-          activity,
+-          theme,
+-          done,
+-          () => {
+-            if (this.manager.abort(record.id)) this.ui?.notify(`Stopped "${record.description}".`, "info");
+-          },
+-          keybindings,
+-          (message: string) => this.manager.steer(record.id, message),
+-          this.showCost(),
+-          this.viewerMarkdown,
+-          this.onViewerMarkdown,
+-        );
+-      },
+-      {
+-        overlay: true,
+-        overlayOptions: { anchor: "center", width: "90%", maxHeight: `${VIEWPORT_HEIGHT_PCT}%` },
+-      },
+-    ).then(() => this.clearViewer(), () => this.clearViewer());
++  private scheduleViewRefresh(): void {
++    if (this.viewTimer) return;
++    this.viewTimer = setTimeout(() => {
++      this.viewTimer = undefined;
++      this.refreshView();
++    }, 50);
++  }
++
++  private refreshView(): void {
++    const record = this.viewingAgentId !== undefined ? this.manager.getRecord(this.viewingAgentId) : undefined;
++    if (!record) return;
++    if (!this.viewUnsub && record.session) this.viewUnsub = record.session.subscribe(() => this.scheduleViewRefresh());
++    chatView()?.show(record.session?.messages ?? []);
++  }
++
++  private leaveView(): void {
++    if (this.viewTimer) { clearTimeout(this.viewTimer); this.viewTimer = undefined; }
++    this.viewUnsub?.();
++    this.viewUnsub = undefined;
++    if (this.viewingAgentId !== undefined) {
++      chatView()?.hide();
++      if (!this.manager.listAgents().some(a => isTopLevelAgent(a) && a.isBackground === true && isLive(a))) this.settledLeaves++;
++    }
++    this.viewingAgentId = undefined;
+   }
+ 
+-  /** Reset overlay state and return to the list (on close, auto-close, or error). */
++  /** Reset the workflow inspector state and return to the list. */
+   private clearViewer(): void {
+-    // Keep the cursor on the agent we were viewing — re-resolve by id so it
+-    // still feels natural if the list reordered (an earlier agent finished)
+-    // while the overlay was open. If that agent is gone, leave the index for
+-    // update()'s clamp to settle.
+-    const viewed = this.viewingAgentId ?? this.viewingWorkflowId;
++    const viewed = this.viewingWorkflowId;
+     if (viewed !== undefined) {
+-      const idx = this.roster().findIndex(e =>
+-        e.kind === "agent" ? e.record.id === viewed
+-        : e.kind === "workflow" ? e.workflow.id === viewed
+-        : false,
+-      );
++      const idx = this.roster().findIndex(e => e.kind === "workflow" && e.workflow.id === viewed);
+       if (idx >= 0) this.selectedIndex = idx;
+     }
+-    this.viewerClose = undefined;
+-    this.viewingAgentId = undefined;
+     this.viewingWorkflowId = undefined;
+     this.update();
+   }
  
    // ---- Rendering ----
  
@@ -452,9 +808,11 @@
 +  hint(theme: Theme): string | undefined {
 +    if (!this.enabled || !this.active) return undefined;
 +    const entry = this.roster()[this.selectedIndex];
++    const viewingAgent = this.viewingAgentId !== undefined;
++    if (entry?.kind === "agent" && entry.record.id === this.viewingAgentId && viewingAgent) return theme.fg("muted", agentViewHint(true, false, true));
 +    if (entry?.kind === "agent") return theme.fg("muted", `Enter to view · x to ${isLive(entry.record) ? "stop" : "clear"}`);
 +    if (entry?.kind === "workflow") return theme.fg("muted", "Enter to view");
-+    return theme.fg("muted", "↑/↓ to select");
++    return theme.fg("muted", agentViewHint(false, true, viewingAgent));
    }
  
 -  private bullet(rosterIndex: number, sel: number, theme: Theme): string {
@@ -514,8 +872,14 @@
 -    const stats = `${formatFleetElapsed(elapsedMs)} · ${formatFleetTokens(tokens)}${cost ? ` · ${cost}` : ""}`;
 -    const right = selected ? theme.fg("text", stats) : theme.fg("dim", stats);
 -    return rightAlign(left, right, width);
++  private nestedCount(id: string): number {
++    const children = this.manager.listAgents().filter(a => a.parentAgentId === id && isLive(a));
++    return children.reduce((sum, child) => sum + this.nestedCount(child.id), children.length);
++  }
++
 +  private agentRow(record: AgentRecord, selected: boolean, now: number): FleetRow {
 +    const live = isLive(record);
++    const nested = live ? this.nestedCount(record.id) : 0;
 +    const elapsed = formatFleetElapsed(Math.max(0, (live ? now : record.completedAt ?? record.startedAt) - record.startedAt));
 +    const tokens = contextTokens(record) + record.lifetimeUsage.output;
 +    const acting = record.toolUses > 0 || (this.agentActivity.get(record.id)?.activeTools.size ?? 0) > 0;
@@ -523,7 +887,7 @@
 +      selected,
 +      viewed: record.id === this.viewingAgentId,
 +      bulletRole: live ? undefined : FAILED_STATUSES.has(record.status) ? "error" : "borderAccent",
-+      name: cleanFleetText(record.alias ?? record.type),
++      name: cleanFleetText(record.alias ?? record.type) + (nested > 0 ? ` (+${nested})` : ""),
 +      named: record.alias !== undefined,
 +      description: cleanFleetText(record.description),
 +      status: tokens > 0 ? `${elapsed} · ${formatFleetTokens(tokens, acting ? "↓" : "↑")}` : elapsed,

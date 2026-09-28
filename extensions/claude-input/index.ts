@@ -138,6 +138,37 @@ export function promptLines(lines: string[], paint: Paint, promptMark: string = 
 	return [...menu, ...box];
 }
 
+export type AgentView = { label: string; name: string; color: string };
+
+export function agentViewPlaceholder(name: string): string {
+	return `Message @${name.length > 20 ? `${name.slice(0, 19)}…` : name}…`;
+}
+
+function hexPaint(hex: string, background = false): Paint {
+	const [r, g, b] = [1, 3, 5].map((i) => Number.parseInt(hex.slice(i, i + 2), 16));
+	return background ? (text) => `\x1b[38;2;0;0;0m\x1b[48;2;${r};${g};${b}m${text}\x1b[49m\x1b[39m` : (text) => `\x1b[38;2;${r};${g};${b}m${text}\x1b[39m`;
+}
+
+export function agentViewRules(lines: string[], view: AgentView): string[] {
+	const rule = hexPaint(view.color);
+	const badge = hexPaint(view.color, true);
+	let first = true;
+	return lines.map((line) => {
+		if (!isRule(line)) return line;
+		const width = line.replace(VISIBLE_ESCAPES, "").length;
+		if (!first) return rule("─".repeat(width));
+		first = false;
+		const label = ` ${view.label} `;
+		const lead = width - label.length - 1;
+		return lead < 1 ? rule("─".repeat(width)) : rule("─".repeat(lead)) + badge(label) + rule("─");
+	});
+}
+
+function viewedAgent(): AgentView | undefined {
+	const registry = (globalThis as Record<symbol, { agentView?: () => AgentView | undefined } | undefined>)[Symbol.for("pi-subagents:manager")];
+	return registry?.agentView?.();
+}
+
 const prompted = ((globalThis as { __claudeInputPrompted?: { submitted: boolean } }).__claudeInputPrompted ??= { submitted: false });
 
 export default function (pi: ExtensionAPI) {
@@ -168,9 +199,15 @@ export default function (pi: ExtensionAPI) {
 			const inner = (width: number) => {
 				const lines = render(width);
 				const text = editor.getText();
+				const view = viewedAgent();
+				if (view && text === "") return withPlaceholder(lines, agentViewPlaceholder(view.name));
 				return text === "" && !prompted.submitted && !hasMessages ? withPlaceholder(lines, placeholder) : withArgumentHint(lines, text, muted);
 			};
-			editor.render = (width: number) => promptLines(inner(width - PROMPT.length), paint, busy ? mutedPrompt : PROMPT, command, noMatchRow(editor.getText(), muted, command.names));
+			editor.render = (width: number) => {
+				const rows = promptLines(inner(width - PROMPT.length), paint, busy ? mutedPrompt : PROMPT, command, noMatchRow(editor.getText(), muted, command.names));
+				const view = viewedAgent();
+				return view ? agentViewRules(rows, view) : rows;
+			};
 			return editor;
 		});
 	});

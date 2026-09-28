@@ -6,12 +6,17 @@ a = ap.parse_args()
 
 PLACEHOLDER = re.compile(r'^❯\s+Try "(?:fix lint errors|fix typecheck errors|how does \S+ work\?|refactor \S+|how do I log an error\?|edit \S+ to\.\.\.|write a test for \S+|create a util logging\.py that\.\.\.)"$')
 
+AGENT_PLACEHOLDER = re.compile(r"^❯\s+Message @\S+…$")
+
 VOLATILE = [
     (PLACEHOLDER, '❯ Try "<example>"'),
     (re.compile(r"✻ \S+ for .*?· done .*$"), "✻ <verb> for <time> · done <clock>"),
     (re.compile(r"^[·✢*✶✻✽] \S+…"), "<spinner> <verb>…"),
+    (BLINK := re.compile(r"^[● ] (?=\S.*…$)"), "<blink> "),
     (DURATION := re.compile(r"\b(?:\d+d )?(?:\d+h )?(?:\d+m )?\d+(?:\.\d+)?s\b"), "<n>s"),
     (re.compile(r"↓ \d+(?:\.\d+)?k? tokens"), "↓ <n> tokens"),
+    (re.compile(r"(?<=\S) {2,}(?=<n>s · ↓ <n> tokens$)"), "  "),
+    (re.compile(r"(?<= · )\d+(?:\.\d+)?k? tokens · \d+ tools?(?= · )"), "<n> tokens · <n> tools"),
     (re.compile(r"^(<spinner> <verb>…)(?: \(.*\))?$"), r"\1 <status>"),
     (re.compile(r"\b\d{2}:\d{2} [AP]M(?= \S+$)"), "<clock>"),
 ]
@@ -38,7 +43,7 @@ ANYWHERE = [
 
 ROWS = [
     ("spinner tips: Claude's context-aware catalogue of Claude-feature advice, shown by per-user cooldown history",
-     re.compile(r"^  ⎿[  ]{2}Tip: "), None, False),
+     re.compile(r"^  ⎿[  ]{2}Tip: "), None, re.compile(r"^ {5}\S")),
     ("out-of-scope model warning: the harness pins Haiku 4.5, which is outside Cuong's enabledModels",
      None, re.compile(r"^ Warning: Agent \".*\" using out-of-scope model "), re.compile(r"^\s*$")),
     ("slash-menu inventory: Claude's built-ins (/code-review, /doctor) vs Cuong's pi skills fuzzy-matching the same query",
@@ -56,14 +61,7 @@ def detailed(lines):
     return any(DETAILED.match(line["text"]) for line in lines[-3:])
 
 
-AGENT_TOKENS_NAME = "subagent tokens in the agents list: the mock answers Claude's subagent once, at the end, so its count stays 0"
-AGENT_TOKENS = re.compile(r"◯ .* · [↓↑] \d+(?:\.\d+)?k? tokens$")
-
-
-def right_aligned_without_tokens(text):
-    cut = re.search(r" · [↓↑] \d+(?:\.\d+)?k? tokens$", text)
-    head = text[:cut.start()]
-    return re.sub(r"(  +)(\S+(?: \S+)*)$", lambda m: m.group(1) + " " * len(cut.group(0)) + m.group(2), head, count=1)
+TIPS_NAME = ROWS[0][0]
 
 
 def row_exception(text, side):
@@ -82,17 +80,19 @@ def raw(name):
 def load(name, side, applied, keep=None):
     lines = raw(name)
     lines = lines[-keep:] if keep else lines
-    kept, follower = [], None
+    kept, follower, padded = [], None, False
     for line in lines:
         if follower and follower.search(line["text"]):
+            if padded:
+                kept.insert(max(0, len(kept) - 1), {"text": "", "runs": []})
             continue
         exception, follower = row_exception(line["text"], side)
+        padded = exception == TIPS_NAME
         if exception:
             applied.add(exception)
+            if padded:
+                kept.insert(max(0, len(kept) - 1), {"text": "", "runs": []})
             continue
-        if side == "pi" and AGENT_TOKENS.search(line["text"]):
-            line = {**line, "text": right_aligned_without_tokens(line["text"])}
-            applied.add(AGENT_TOKENS_NAME)
         kept.append(line)
     return kept
 
@@ -107,7 +107,7 @@ def normalise(text):
 def regions(lines):
     texts = [line["text"].rstrip() for line in lines]
     boxed = any(t.startswith("❯") and i > 0 and texts[i - 1].startswith("─") for i, t in enumerate(texts))
-    prompt = max((i for i, t in enumerate(texts) if t.strip() == "❯" or PLACEHOLDER.match(t)), default=len(texts))
+    prompt = max((i for i, t in enumerate(texts) if t.strip() == "❯" or PLACEHOLDER.match(t) or AGENT_PLACEHOLDER.match(t)), default=len(texts))
     start = next((i for i, t in enumerate(texts[:prompt]) if re.match(r"^❯ \S", t)), prompt if boxed else 0)
     start = max((i for i, t in enumerate(texts[:prompt]) if t.startswith("▔")), default=start)
     rule = prompt - 1 if prompt > 0 and texts[prompt - 1].startswith("─") else prompt
@@ -139,11 +139,15 @@ def animated(line):
     return len(line["text"].replace(" ", "")) if SPINNER.match(line["text"]) else 0
 
 
+def blinking(line):
+    return 1 if BLINK.match(line["text"]) and line["text"].startswith("●") else 0
+
+
 def colour_diff(c, p, limit=None):
     if animated(c) and animated(p):
         sc, sp = styles(c)[animated(c):], styles(p)[animated(p):]
     else:
-        sc, sp = styles(c)[:limit], styles(p)[:limit]
+        sc, sp = styles(c)[blinking(c):limit], styles(p)[blinking(p):limit]
     for i, (x, y) in enumerate(zip(sc, sp)):
         if x[1:] != y[1:]:
             return f"char {i} {x[0]!r}: claude {describe(x)} | pi {describe(y)}"

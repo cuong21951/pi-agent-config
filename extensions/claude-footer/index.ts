@@ -165,9 +165,10 @@ export default function (pi: ExtensionAPI) {
 						width,
 					);
 					const mode = statuses.get(MODE_STATUS);
-					const modeRow = mode ? composeModeRow(withShells(mode, statuses.get(SHELLS_STATUS)), width, statuses.get(VOICE_STATUS), statuses.get(TASKS_HINT_STATUS)) : undefined;
 					const fleet = fleetRegistry();
-					return footerRows(line, modeRow, fleet?.fleetHint?.(theme), fleet?.fleetLines?.(fullWidth, theme) ?? []);
+					const fleetLines = fleet?.fleetLines?.(fullWidth, theme) ?? [];
+					const modeRow = mode ? composeModeRow(withShells(mode, statuses.get(SHELLS_STATUS)), width, statuses.get(VOICE_STATUS), fleetLines.length === 0 ? statuses.get(TASKS_HINT_STATUS) : undefined) : undefined;
+					return footerRows(line, modeRow, fleet?.fleetHint?.(theme), fleetLines);
 				},
 				invalidate() {},
 			};

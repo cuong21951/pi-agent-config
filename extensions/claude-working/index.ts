@@ -227,6 +227,17 @@ export function backgroundAgentCount(): number {
 	return typeof registry?.backgroundRunningCount === "function" ? registry.backgroundRunningCount() : 0;
 }
 
+export function settledViewLeaves(): number {
+	const registry = (globalThis as Record<symbol, unknown>)[Symbol.for("pi-subagents:manager")] as { settledViewLeaves?: () => number } | undefined;
+	return typeof registry?.settledViewLeaves === "function" ? registry.settledViewLeaves() : 0;
+}
+
+export type Waiting = { n: number; verb?: string; ms?: number; at?: number; leaves?: number };
+
+export function waitingRow(data: Waiting, leaves: number, now: Date = new Date()): string {
+	return data.verb !== undefined && data.leaves !== leaves ? doneLine(data.verb, data.ms ?? 0, new Date(data.at ?? now.getTime()), now) : waitingLine(data.n);
+}
+
 export type Retry = { attempt: number; maxAttempts: number; deadline: number; errorMessage: string };
 
 export function retryLine(retry: Retry, now: number, width: number): string {
@@ -245,6 +256,17 @@ export function bottomRows(top: string | null, notice: string | null, dialogOpen
 export function line(verb: string, s: SpinnerState): string {
 	const status = statusText(s);
 	return status === "" ? `${glyph(s)} ${message(`${verb}…`, s)}` : `${glyph(s)} ${message(`${verb}…`, s)} ${status}`;
+}
+
+type AgentView = { id: string; running: boolean; startedAt: number; tokens: number };
+
+function viewedAgent(): AgentView | undefined {
+	const registry = (globalThis as Record<symbol, { agentView?: () => AgentView | undefined } | undefined>)[Symbol.for("pi-subagents:manager")];
+	return registry?.agentView?.();
+}
+
+export function agentViewState(view: AgentView, now: number): SpinnerState {
+	return { elapsedMs: now - view.startedAt, mode: "requesting", sinceTokenMs: 0, thinkingMs: 0, thinkingIntensity: 0, thoughtForMs: null, statusKind: "none", tokens: view.tokens, effort: "" };
 }
 
 function pickVerb(previous: string): string {
@@ -342,8 +364,19 @@ export default function claudeWorking(pi: ExtensionAPI) {
 		ctx.ui.setWorkingMessage("");
 		ctx.ui.setWidget("claude-working", (tui, theme) => {
 			requestRender = () => tui.requestRender();
+			const viewVerbs = new Map<string, string>();
+			const viewTick = setInterval(() => {
+				if (viewedAgent()?.running) tui.requestRender();
+			}, TICK_MS);
+			viewTick.unref?.();
 			return {
+				dispose: () => clearInterval(viewTick),
 				render: (width: number) => {
+					const view = viewedAgent();
+					if (view) {
+						if (!viewVerbs.has(view.id)) viewVerbs.set(view.id, pickVerb(""));
+						return bottomRows(view.running ? line(viewVerbs.get(view.id) ?? "", agentViewState(view, Date.now())) : null, null, dialogOpen);
+					}
 					const top = retry ? retryLine(retry, Date.now(), width) : current === "" ? null : current;
 					const effort = Date.now() < effortUntil ? effortLine(ctx.thinkingLevel ?? "off", width, (role, text) => theme.fg(role as never, text), ctx.model?.id) : null;
 					return bottomRows(top, effort, dialogOpen);
@@ -440,8 +473,8 @@ export default function claudeWorking(pi: ExtensionAPI) {
 	});
 
 	pi.registerEntryRenderer("claude-working-waiting", (entry, _options, theme) => {
-		const data = entry.data as { n: number };
-		return dynamic(() => [waitingLine(data.n)]);
+		const data = entry.data as Waiting;
+		return dynamic(() => [waitingRow(data, settledViewLeaves())]);
 	});
 
 	pi.on("agent_end", (event, ctx) => {
@@ -458,7 +491,7 @@ export default function claudeWorking(pi: ExtensionAPI) {
 		if (ctx.hasUI && !interrupted(lastRun)) {
 			const waiting = backgroundAgentCount();
 			if (waiting > 0) {
-				pi.appendEntry("claude-working-waiting", { n: waiting });
+				pi.appendEntry("claude-working-waiting", { n: waiting, verb, ms: Date.now() - started, at: Date.now(), leaves: settledViewLeaves() });
 				return;
 			}
 		}

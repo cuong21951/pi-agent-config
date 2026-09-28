@@ -2,6 +2,7 @@
   "prompt": "Use your Agent tool to start one background agent with description \"Say ok\", subagent_type \"general-purpose\" and prompt \"Run the shell command `sleep 20`, then reply with the single word ok.\". Then reply with exactly: started. No other text.",
   "steps": [
     {"until": "Waiting for \\d+ background agents?|✻ \\S+ for [^\\n]*· done", "timeout": 90},
+    {"until": "Say ok +\\d+s · ↓ [\\d.]+k tokens", "timeout": 30},
     {"sleep": 0.5}, {"snap": "waiting"},
     {"keys": "\u001b[B"},
     {"until": "(?m)^  ↑/↓ to select *$", "timeout": 5},
