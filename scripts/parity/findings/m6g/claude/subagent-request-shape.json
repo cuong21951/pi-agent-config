@@ -1,0 +1,51 @@
+{
+ "model": "claude-haiku-4-5-20251001",
+ "max_tokens": 32000,
+ "thinking": {
+  "budget_tokens": 31999,
+  "type": "enabled"
+ },
+ "context_management": {
+  "edits": [
+   {
+    "type": "clear_thinking_20251015",
+    "keep": "all"
+   }
+  ]
+ },
+ "metadata": {
+  "user_id": "{\"device_id\":\"ebe4246a8c87214ccd5c401686168353ab6a175309c00284bebe3433383e56e0\",\"account_uuid\":\"\",\"session_id\":\"fe37fc30-323e-4fbe-883c-a38a5a26acf3\"}"
+ },
+ "tools": [
+  "Agent",
+  "Artifact",
+  "ArtifactComments",
+  "ArtifactData",
+  "Bash",
+  "Edit",
+  "EnterWorktree",
+  "ExitWorktree",
+  "Glob",
+  "Grep",
+  "LSP",
+  "Monitor",
+  "NotebookEdit",
+  "PowerShell",
+  "Read",
+  "SendMessage",
+  "Skill",
+  "TaskStop",
+  "WebFetch",
+  "WebSearch",
+  "Write"
+ ],
+ "first_user_blocks": [
+  "<system-reminder>\n# Environment\nYou have been invoked in the following environment: \n - Primary working directory: C:\\Users\\cuong\\AppData\\Local\\Temp\\pi-parity\\m6g-fg\\work\n - Is a git repository: false",
+  "<system-reminder>\nYou are powered by the model named Haiku 4.5. The exact model ID is claude-haiku-4-5-20251001. Assistant knowledge cutoff is February 2025.\n</system-reminder>",
+  "<system-reminder>\nThe following skills are available for use with the Skill tool:\n\n- agent-reach: MUST USE when user wants to 调研/research/搜索/search/查/找/look up anything on the internet — e.g. 全网调研 X /",
+  "<system-reminder>\nCodebase and user instructions are shown below. Be sure to adhere to these instructions. IMPORTANT: These instructions OVERRIDE any default behavior and you MUST follow them exactly ",
+  "<system-reminder>\nToday's date is 2026-09-29.\n</system-reminder>",
+  "<system-reminder>\nAttribution for git commits and pull requests you create from here on (this replaces Claude Code's own earlier attribution guidance, such as a previous copy of this reminder; the use",
+  "M6G-SUB-FG: run ls, then reply with the word fgreport."
+ ]
+}

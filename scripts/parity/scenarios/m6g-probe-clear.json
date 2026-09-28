@@ -1,0 +1,38 @@
+{
+ "prompt": "M6G clear run.",
+ "fixture": "findings/m6g/fixture",
+ "end": ".",
+ "steps": [
+  {
+   "until": "Waiting for 1 background agent",
+   "timeout": 60
+  },
+  {
+   "sleep": 2
+  },
+  {
+   "snap": "waiting"
+  },
+  {
+   "keys": "/clear"
+  },
+  {
+   "sleep": 1
+  },
+  {
+   "keys": "\r"
+  },
+  {
+   "sleep": 3
+  },
+  {
+   "snap": "cleared"
+  },
+  {
+   "sleep": 30
+  },
+  {
+   "snap": "after"
+  }
+ ]
+}

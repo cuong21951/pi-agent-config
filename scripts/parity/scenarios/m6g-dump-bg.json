@@ -1,0 +1,17 @@
+{
+ "prompt": "M6G background run.",
+ "fixture": "findings/m6g/fixture",
+ "end": "smdone[\\s\\S]*✻ \\S+ for [^\\n]*· done",
+ "steps": [
+  {
+   "until": "smdone[\\s\\S]*✻ \\S+ for [^\\n]*· done",
+   "timeout": 150
+  },
+  {
+   "sleep": 1
+  },
+  {
+   "snap": "end"
+  }
+ ]
+}
