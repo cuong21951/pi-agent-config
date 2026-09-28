@@ -258,6 +258,10 @@ const EDITS = [
 		'if(content.type==="text"&&content.text.trim())this.contentContainer.addChild(new Markdown(',
 		'if(content.type==="text"&&content.text.trim())this.contentContainer.addChild({render:width=>globalThis.__claudeTranscriptStamp?.(message,width)??[],invalidate(){}}),this.contentContainer.addChild(new Markdown(',
 	],
+	[
+		"await this.rebindCurrentSession(),this.renderInitialMessages(),onThemeChange(",
+		"this.claudeNoticeStart=this.chatContainer.children.length,await this.rebindCurrentSession(),this.claudeNotices=this.chatContainer.children.splice(this.claudeNoticeStart),this.renderInitialMessages(),this.chatContainer.children.push(...this.claudeNotices),onThemeChange(",
+	],
 	["PASTE_MARKER_REGEX=/\\[paste #", "PASTE_MARKER_REGEX=/\\[Pasted text #"],
 	["PASTE_MARKER_SINGLE=/^\\[paste #", "PASTE_MARKER_SINGLE=/^\\[Pasted text #"],
 	['!text.includes("[paste #")', '!text.includes("[Pasted text #")'],

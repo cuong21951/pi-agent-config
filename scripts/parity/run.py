@@ -1,4 +1,4 @@
-import argparse, glob, json, os, re, shutil, socket, subprocess, sys, time
+import argparse, glob, json, os, re, shutil, socket, subprocess, sys, time, uuid
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 CAPTURE = os.path.join(HERE, "..", "pty-capture.py")
@@ -26,6 +26,7 @@ ap.add_argument("--pi-env", action="append", default=[], help="NAME=VALUE for th
 ap.add_argument("--raw", action="store_true", help="also save each side's raw terminal output as <side>.raw")
 ap.add_argument("--dump-requests", action="store_true", help="save every main-loop request Claude sends as <out>/request-<n>.json")
 ap.add_argument("--keep-claude-session", action="store_true", help="leave Claude's transcript of the replay in ~/.claude/projects (delete it yourself)")
+ap.add_argument("--fresh-claude", action="store_true", help="with --replay, capture Claude's live replay instead of resuming a copy of it (pi's side is always a resume)")
 a = ap.parse_args()
 os.makedirs(a.out, exist_ok=True)
 SESSIONS = os.path.join(a.out, "pi-sessions")
@@ -72,13 +73,15 @@ def steps_for(side, typed=True):
     return steps
 
 
-def capture(side, cmd_args, env=(), steps=None):
+def capture(side, cmd_args, env=(), steps=None, until=None, out=None):
     fresh_workdir()
+    out = out or a.out
+    os.makedirs(out, exist_ok=True)
     base = [sys.executable, CAPTURE, "--cwd", WORKDIR, "--rows", str(a.rows), "--cols", str(a.cols),
-            "--wait", str(a.timeout), "--until", end if steps else DONE, "--settle", "4",
+            "--wait", str(a.timeout), "--until", until or (end if steps else DONE), "--settle", "4",
             "--steps", json.dumps(steps or []),
-            "--out", os.path.join(a.out, f"{side}.txt"), "--json", os.path.join(a.out, f"{side}.json"),
-            *(["--raw", os.path.join(a.out, f"{side}.raw")] if a.raw else []),
+            "--out", os.path.join(out, f"{side}.txt"), "--json", os.path.join(out, f"{side}.json"),
+            *(["--raw", os.path.join(out, f"{side}.raw")] if a.raw else []),
             "--drop-env-prefix", "CLAUDE_CODE_", "--drop-env-prefix", "CLAUDECODE"]
     for pair in env:
         base += ["--env", pair]
@@ -107,6 +110,19 @@ def claude_project_dir():
 
 def slash(path):
     return path.replace(os.sep, "/")
+
+
+def resumable_copy():
+    files = glob.glob(os.path.join(claude_project_dir(), "*.jsonl"))
+    if not files:
+        raise SystemExit("Claude wrote no transcript to resume")
+    source = max(files, key=os.path.getmtime)
+    old, new = os.path.basename(source)[:-len(".jsonl")], str(uuid.uuid4())
+    with open(source, encoding="utf-8") as f:
+        text = f.read().replace(old, new)
+    with open(os.path.join(claude_project_dir(), f"{new}.jsonl"), "w", encoding="utf-8", newline="\n") as f:
+        f.write(text)
+    return new
 
 
 with open(os.path.join(a.out, "perm-throwaway.json"), "w", encoding="utf-8") as f:
@@ -142,9 +158,14 @@ if a.only in (None, "claude"):
     permission = "--dangerously-skip-permissions" if bypass else "--permission-mode default --allow-dangerously-skip-permissions"
     try:
         wait_port(a.port)
-        capture("claude", ["--cmd", f'"{slash(a.claude)}" --model {a.claude_model} {permission} {scenario.get("claude_args", "")}'],
-                [f"ANTHROPIC_BASE_URL=http://127.0.0.1:{a.port}", "ANTHROPIC_AUTH_TOKEN=parity-mock", "ENABLE_CLAUDEAI_MCP_SERVERS=false", "CLAUDE_CODE_ALWAYS_ENABLE_EFFORT=1", f"CLAUDE_CONFIG_DIR={os.environ['CLAUDE_CONFIG_DIR']}", *scenario.get("claude_env", [])],
-                steps=steps_for("claude"))
+        command = f'"{slash(a.claude)}" --model {a.claude_model} {permission} {scenario.get("claude_args", "")}'
+        claude_env = [f"ANTHROPIC_BASE_URL=http://127.0.0.1:{a.port}", "ANTHROPIC_AUTH_TOKEN=parity-mock", "ENABLE_CLAUDEAI_MCP_SERVERS=false", "CLAUDE_CODE_ALWAYS_ENABLE_EFFORT=1", f"CLAUDE_CONFIG_DIR={os.environ['CLAUDE_CONFIG_DIR']}", *scenario.get("claude_env", [])]
+        if a.replay and not a.fresh_claude:
+            capture("claude", ["--cmd", command], claude_env, steps=[{"until": ready, "timeout": 90}, {"sleep": 1.5}, {"keys": prompt}, {"sleep": 1.5}, {"keys": "\r"}, {"until": SUBMITTED, "timeout": 6, "retries": 2, "retry_keys": "\r"}], until=DONE, out=os.path.join(a.out, "claude-live"))
+            resumed = steps_for("claude", typed=False) if scenario.get("steps") else [{"until": ready, "timeout": 90}, {"sleep": 1.5}]
+            capture("claude", ["--cmd", f"{command} --resume {resumable_copy()}"], claude_env, steps=resumed, until=None if scenario.get("steps") else ready)
+        else:
+            capture("claude", ["--cmd", command], claude_env, steps=steps_for("claude"))
     finally:
         mock.terminate()
         if not a.keep_claude_session:
