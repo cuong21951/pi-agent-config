@@ -50,6 +50,14 @@ ROWS = [
 ]
 
 
+DETAILED = re.compile(r"^  Showing detailed transcript · ctrl\+o to toggle")
+DETAILED_NAME = "detailed transcript viewport: Claude's ctrl+o transcript scrolls inside its own screen (g/PgUp reach the prompt, measured m5d-measure-bash-top), pi's lies in terminal scrollback (M6b), so only the visible screen is compared"
+
+
+def detailed(lines):
+    return any(DETAILED.match(line["text"]) for line in lines[-3:])
+
+
 AGENT_TOKENS_NAME = "subagent tokens in the agents list: the mock answers Claude's subagent once, at the end, so its count stays 0"
 AGENT_TOKENS = re.compile(r"◯ .* · [↓↑] \d+(?:\.\d+)?k? tokens$")
 
@@ -68,9 +76,14 @@ def row_exception(text, side):
     return None, None
 
 
-def load(name, side, applied):
+def raw(name):
     with open(os.path.join(a.out, f"{name}.json"), encoding="utf-8") as f:
-        lines = json.load(f)
+        return json.load(f)
+
+
+def load(name, side, applied, keep=None):
+    lines = raw(name)
+    lines = lines[-keep:] if keep else lines
     kept, follower = [], None
     for line in lines:
         if follower and follower.search(line["text"]):
@@ -180,8 +193,12 @@ report = ["# pi vs Claude Code parity report", ""]
 total = 0
 applied = set()
 for screen, claude_name, pi_name in screens:
+    c_raw, p_raw = raw(claude_name), raw(pi_name)
+    viewport = len(c_raw) if detailed(c_raw) and detailed(p_raw) and len(p_raw) > len(c_raw) else None
+    if viewport:
+        applied.add(DETAILED_NAME)
     _, c_body, c_foot = regions(load(claude_name, "claude", applied))
-    _, p_body, p_foot = regions(load(pi_name, "pi", applied))
+    _, p_body, p_foot = regions(load(pi_name, "pi", applied, viewport))
     for name, c, p in (("Transcript", c_body, p_body), ("Prompt and footer", c_foot, p_foot)):
         text_diffs, colour_diffs = compare(c, p, applied, name == "Prompt and footer")
         total += len(text_diffs) + len(colour_diffs)

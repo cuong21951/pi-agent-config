@@ -110,7 +110,7 @@ export function transcriptRows(width: number, paint: Paint): string[] {
 	const keys = GUTTER.length + visibleWidth(full) + TRANSCRIPT_STATUS.length < width ? TRANSCRIPT_KEYS : "? for shortcuts";
 	const hint = truncateToWidth(["Showing detailed transcript", "ctrl+o to toggle", keys].join(SEPARATOR), Math.max(1, width - GUTTER.length - TRANSCRIPT_STATUS.length), "…");
 	const gap = Math.max(0, width - GUTTER.length - visibleWidth(hint) - TRANSCRIPT_STATUS.length);
-	return ["", `\x1b[2m${"─".repeat(width)}\x1b[22m`, GUTTER + paint("muted", hint) + " ".repeat(gap) + paint("muted", TRANSCRIPT_STATUS.trimEnd()) + " "];
+	return [`\x1b[2m${"─".repeat(width)}\x1b[22m`, GUTTER + paint("muted", hint) + " ".repeat(gap) + paint("muted", TRANSCRIPT_STATUS.trimEnd()) + " "];
 }
 
 export function transcriptKey(data: string): "exit" | "swallow" | undefined {
@@ -230,9 +230,9 @@ if (process.env.CLAUDE_FOOTER_SELFTEST) {
 	check(fleetRegistry()?.fleetLines?.(132, {})[0] === "w132" && fleetRegistry()?.fleetHint?.({}) === "hint", "the list and the hint come off the pi-subagents cross-package registry");
 	delete (globalThis as Record<symbol, unknown>)[Symbol.for("pi-subagents:manager")];
 	const bar = transcriptRows(132, plain);
-	check(bar[0] === "" && bar[1] === `\x1b[2m${"─".repeat(132)}\x1b[22m`, "ctrl+o: a blank row, then a dim rule edge to edge where the prompt box was");
-	check(bar[2] === `  Showing detailed transcript · ctrl+o to toggle · ↑↓ scroll · v to open in notepad · ? for shortcuts${" ".repeat(23)}verbose `, "the hint row is Claude 2.1.283's, with verbose flush right one column in (measured m5a-measure-ctrlo)");
-	check(transcriptRows(90, plain)[2].startsWith("  Showing detailed transcript · ctrl+o to toggle · ? for shortcuts ") && visibleWidth(transcriptRows(90, plain)[2]) === 90, "too narrow for the scroll keys: Claude's mN keeps only ? for shortcuts");
+	check(bar.length === 2 && bar[0] === `\x1b[2m${"─".repeat(132)}\x1b[22m`, "ctrl+o: a dim rule edge to edge where the prompt box was, after the one blank row the transcript already ends with (an overflowing view in m4d-bash-rows: Claude's done line, one blank, the rule)");
+	check(bar[1] === `  Showing detailed transcript · ctrl+o to toggle · ↑↓ scroll · v to open in notepad · ? for shortcuts${" ".repeat(23)}verbose `, "the hint row is Claude 2.1.283's, with verbose flush right one column in (measured m5a-measure-ctrlo)");
+	check(transcriptRows(90, plain)[1].startsWith("  Showing detailed transcript · ctrl+o to toggle · ? for shortcuts ") && visibleWidth(transcriptRows(90, plain)[1]) === 90, "too narrow for the scroll keys: Claude's mN keeps only ? for shortcuts");
 	check(transcriptKey("q") === "exit" && transcriptKey("\x1b") === "exit" && transcriptKey("x") === "swallow" && transcriptKey("\x1b[A") === "swallow" && transcriptKey("\x0f") === undefined && transcriptKey("\x03") === undefined, "q and esc leave the transcript; typing goes nowhere; ctrl+o and ctrl+c still reach pi");
 	console.log("\nAll claude-footer checks passed.");
 }
