@@ -49,7 +49,7 @@ export default function (pi: ExtensionAPI) {
 		if (!ctx.hasUI) return;
 		shown = false;
 		const commands = new Set(pi.getCommands().map((c) => c.name));
-		const features: Features = { btw: commands.has("btw"), tasks: false, keybindings: commands.has("keybindings") };
+		const features: Features = { btw: commands.has("btw"), tasks: pi.getActiveTools().includes("todo_write"), keybindings: commands.has("keybindings") };
 		card = cardLines((role, text) => ctx.ui.theme.fg(role as never, text), features);
 		const repaint = () => ctx.ui.setWidget("claude-help", undefined);
 		const show = (on: boolean) => {

@@ -1,0 +1,69 @@
+{
+  "cwd": "C:/Users/cuong/.pi/sandbox/agent/scripts/parity/fixture",
+  "start": "2026-09-28T19:00:00+00:00",
+  "turns": [
+    {
+      "prompt": "Track this with the todo list: read the file, fix the bug, write a test.",
+      "steps": [
+        {
+          "assistant": [
+            {
+              "type": "toolCall",
+              "name": "todo_write",
+              "arguments": {
+                "todos": [
+                  { "content": "Read the file", "status": "in_progress", "activeForm": "Reading the file" },
+                  { "content": "Fix the bug", "status": "pending", "activeForm": "Fixing the bug" },
+                  { "content": "Write a test", "status": "pending", "activeForm": "Writing a test" }
+                ]
+              }
+            }
+          ],
+          "results": [
+            {
+              "text": "Todos have been modified successfully. Ensure that you continue to use the todo list to track your progress. Please proceed with the current tasks if applicable",
+              "details": {
+                "todos": [
+                  { "content": "Read the file", "status": "in_progress", "activeForm": "Reading the file" },
+                  { "content": "Fix the bug", "status": "pending", "activeForm": "Fixing the bug" },
+                  { "content": "Write a test", "status": "pending", "activeForm": "Writing a test" }
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "assistant": [
+            {
+              "type": "toolCall",
+              "name": "todo_write",
+              "arguments": {
+                "todos": [
+                  { "content": "Read the file", "status": "completed", "activeForm": "Reading the file" },
+                  { "content": "Fix the bug", "status": "in_progress", "activeForm": "Fixing the bug" },
+                  { "content": "Write a test", "status": "pending", "activeForm": "Writing a test" }
+                ]
+              }
+            }
+          ],
+          "results": [
+            {
+              "text": "Todos have been modified successfully. Ensure that you continue to use the todo list to track your progress. Please proceed with the current tasks if applicable",
+              "details": {
+                "todos": [
+                  { "content": "Read the file", "status": "completed", "activeForm": "Reading the file" },
+                  { "content": "Fix the bug", "status": "in_progress", "activeForm": "Fixing the bug" },
+                  { "content": "Write a test", "status": "pending", "activeForm": "Writing a test" }
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "assistant": [{ "type": "text", "text": "Tracking three tasks; reading the file first." }]
+        }
+      ],
+      "done": { "verb": "Tracked" }
+    }
+  ]
+}

@@ -18,6 +18,7 @@
       "./extensions/intent-tools",
       "./extensions/claude-header",
       "./extensions/claude-tools",
+      "./extensions/claude-todos",
       "./extensions/claude-messages",
       "./extensions/cheap-models",
       "./extensions/claude-footer",

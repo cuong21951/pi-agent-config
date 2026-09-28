@@ -22,6 +22,9 @@ REPLAYED = {
     "question-invalid.jsonl": "Question invalid sample.",
     "m5b-context-low.jsonl": "keep going",
 }
+REPLAYED_SCENARIOS = {
+    "m6b-todos.jsonl": "m6b-todos",
+}
 
 ap = argparse.ArgumentParser(description="Run every parity scenario (live pi on Copilot, Claude replaying it) and every replay fixture, diff each, exit 0 only when all are clean.")
 ap.add_argument("--out", default=os.path.join(os.environ["TEMP"], "pi-parity", "suite"))
@@ -36,6 +39,8 @@ def cases():
         yield name, [] if name == "task" else ["--scenario", name]
     for file, prompt in REPLAYED.items():
         yield file.removesuffix(".jsonl") + "-replay", ["--replay", os.path.join(REPLAYS, file), "--prompt", prompt]
+    for file, scenario in REPLAYED_SCENARIOS.items():
+        yield scenario + "-replay", ["--replay", os.path.join(REPLAYS, file), "--scenario", scenario]
 
 
 def run(index, name, args):
