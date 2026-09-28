@@ -1,0 +1,165 @@
+{
+ "prompt": "",
+ "steps": [
+  {
+   "keys": "hello world"
+  },
+  {
+   "sleep": 0.6
+  },
+  {
+   "keys": "\u001b"
+  },
+  {
+   "sleep": 0.3
+  },
+  {
+   "snap": "esc1"
+  },
+  {
+   "sleep": 1.5
+  },
+  {
+   "snap": "esc-expired"
+  },
+  {
+   "keys": "\u001b"
+  },
+  {
+   "sleep": 0.6
+  },
+  {
+   "keys": "\u001b"
+  },
+  {
+   "sleep": 0.4
+  },
+  {
+   "snap": "esc-gap600"
+  },
+  {
+   "sleep": 1.5
+  },
+  {
+   "keys": "abc"
+  },
+  {
+   "sleep": 0.5
+  },
+  {
+   "keys": "\f"
+  },
+  {
+   "sleep": 0.8
+  },
+  {
+   "snap": "ctrl-l"
+  },
+  {
+   "keys": "\u0003"
+  },
+  {
+   "sleep": 0.4
+  },
+  {
+   "snap": "ctrlc-text"
+  },
+  {
+   "sleep": 2.0
+  },
+  {
+   "snap": "ctrlc-after"
+  },
+  {
+   "keys": "/effort "
+  },
+  {
+   "sleep": 1
+  },
+  {
+   "snap": "effort-arg"
+  },
+  {
+   "keys": ""
+  },
+  {
+   "sleep": 0.5
+  },
+  {
+   "keys": "/compact "
+  },
+  {
+   "sleep": 1
+  },
+  {
+   "snap": "compact-arg"
+  },
+  {
+   "keys": ""
+  },
+  {
+   "sleep": 0.5
+  },
+  {
+   "keys": "\u001b[200~alpha\nbeta\ngamma\u001b[201~"
+  },
+  {
+   "sleep": 1
+  },
+  {
+   "snap": "paste-3-lines"
+  },
+  {
+   "keys": "\u0003"
+  },
+  {
+   "sleep": 2.0
+  },
+  {
+   "keys": "\u001b[200~alpha\nbeta\ngamma\ndelta\u001b[201~"
+  },
+  {
+   "sleep": 1
+  },
+  {
+   "snap": "paste-4-lines"
+  },
+  {
+   "keys": "\u0003"
+  },
+  {
+   "sleep": 2.0
+  },
+  {
+   "keys": "\u001b[200~line 1 of a big paste\nline 2 of a big paste\nline 3 of a big paste\nline 4 of a big paste\nline 5 of a big paste\nline 6 of a big paste\nline 7 of a big paste\nline 8 of a big paste\nline 9 of a big paste\nline 10 of a big paste\nline 11 of a big paste\u001b[201~"
+  },
+  {
+   "sleep": 1
+  },
+  {
+   "snap": "paste"
+  },
+  {
+   "keys": "\u0003"
+  },
+  {
+   "sleep": 2.0
+  },
+  {
+   "keys": "\u0004"
+  },
+  {
+   "sleep": 0.4
+  },
+  {
+   "snap": "ctrld"
+  },
+  {
+   "sleep": 2.0
+  },
+  {
+   "snap": "ctrld-after"
+  }
+ ],
+ "end": "."
+}

@@ -13,7 +13,7 @@ const jiti = createJiti(import.meta.url, {
 });
 
 const here = path.dirname(fileURLToPath(import.meta.url));
-const { promptLines, default: install } = await jiti.import(path.join(here, "index.ts"));
+const { promptLines, withArgumentHint, argumentHint, default: install } = await jiti.import(path.join(here, "index.ts"));
 const { CustomEditor } = await jiti.import(path.join(PI_DIR, "dist/index.js"));
 const { KeybindingsManager } = await jiti.import(path.join(PI_DIR, "dist/core/keybindings.js"));
 const { setKeybindings } = await jiti.import(path.join(PI_DIR, "node_modules/@earendil-works/pi-tui/dist/keybindings.js"));
@@ -121,6 +121,19 @@ const id = (t: string) => t;
 	install({ on: (n: string, fn: any) => { handlers[n] = fn; }, getCommands: () => [] });
 	start([]);
 	assert.equal(row().trim(), "❯", "a reloaded extension (pi's /clear starts a fresh runtime) still knows a prompt was sent");
+}
+
+{
+	const box = ["────────────────────", "/model              ", "────────────────────"];
+	const hinted = withArgumentHint(box, "/model ", (t: string) => `<${t}>`);
+	assert.equal(hinted[1], "/model  <[model]>     ", "Claude 2.1.283 draws \"/model  [model]\": the hint starts after the typed space and the cursor cell, muted, the row keeps its width");
+	assert.equal(argumentHint("/effort "), "[low|medium|high|xhigh|max|auto]", "the effort hint is Claude's own text, measured");
+	assert.equal(argumentHint("/model"), undefined, "no trailing space, no hint (Claude shows the menu instead)");
+	assert.equal(argumentHint("/model x"), undefined, "typed arguments hide the hint");
+	assert.equal(argumentHint("/tree "), undefined, "a command Claude has no hint for shows none (measured: /tree, /settings, /hotkeys)");
+	assert.equal(argumentHint("/import "), undefined, "pi's /import takes a session file, so Claude's codex|gemini|cursor hint stays off");
+	assert.equal(withArgumentHint(["──────────", "/resume   ", "──────────"], "/resume ", (t: string) => t)[1], "/resume  …", "a hint wider than the row is cut with an ellipsis (Claude's truncate-end)");
+	assert.deepEqual(withArgumentHint(box, "hello", (t: string) => t), box, "plain text is untouched");
 }
 
 console.log("claude-input selftest: all assertions passed");

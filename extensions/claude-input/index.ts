@@ -87,6 +87,38 @@ export function withPlaceholder(lines: string[], placeholder: string): string[] 
 	return lines.map((line, i) => (i === topRuleIndex + 1 ? filled : line));
 }
 
+export const CLAUDE_ARGUMENT_HINTS: Readonly<Record<string, string>> = {
+	clear: "[name]",
+	compact: "<optional custom summarization instructions>",
+	effort: "[low|medium|high|xhigh|max|auto]",
+	export: "[filename]",
+	fork: "[prompt]",
+	model: "[model]",
+	name: "[name]",
+	new: "[name]",
+	plan: "[open|<description>]",
+	resume: "[conversation id or search term]",
+};
+
+export function argumentHint(text: string, hints: Readonly<Record<string, string>> = CLAUDE_ARGUMENT_HINTS): string | undefined {
+	const match = /^\/([^\s]+) $/.exec(text);
+	return match && Object.hasOwn(hints, match[1]) ? hints[match[1]] : undefined;
+}
+
+export function withArgumentHint(lines: string[], text: string, muted: Paint, hints: Readonly<Record<string, string>> = CLAUDE_ARGUMENT_HINTS): string[] {
+	const hint = argumentHint(text, hints);
+	const topRuleIndex = lines.findIndex(isRule);
+	if (hint === undefined || topRuleIndex === -1 || topRuleIndex + 1 >= lines.length) return lines;
+	const row = lines[topRuleIndex + 1];
+	const width = row.replace(VISIBLE_ESCAPES, "").length;
+	const start = text.length + 1;
+	const room = width - start;
+	if (room <= 0) return lines;
+	const shown = hint.length <= room ? hint : `${hint.slice(0, Math.max(0, room - 1))}…`;
+	const filled = row.slice(0, rawIndexAfter(row, start)) + muted(shown) + " ".repeat(room - shown.length);
+	return lines.map((line, i) => (i === topRuleIndex + 1 ? filled : line));
+}
+
 export function promptLines(lines: string[], paint: Paint, promptMark: string = PROMPT, command: CommandColour = NO_COMMANDS, emptyMenu: string[] = []): string[] {
 	const topRuleIndex = lines.findIndex(isRule);
 	if (topRuleIndex === -1) return lines;
@@ -135,7 +167,8 @@ export default function (pi: ExtensionAPI) {
 			const muted: Paint = (text) => ctx.ui.theme.fg("muted" as never, text);
 			const inner = (width: number) => {
 				const lines = render(width);
-				return editor.getText() === "" && !prompted.submitted && !hasMessages ? withPlaceholder(lines, placeholder) : lines;
+				const text = editor.getText();
+				return text === "" && !prompted.submitted && !hasMessages ? withPlaceholder(lines, placeholder) : withArgumentHint(lines, text, muted);
 			};
 			editor.render = (width: number) => promptLines(inner(width - PROMPT.length), paint, busy ? mutedPrompt : PROMPT, command, noMatchRow(editor.getText(), muted, command.names));
 			return editor;
