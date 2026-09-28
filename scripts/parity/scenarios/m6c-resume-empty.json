@@ -1,0 +1,11 @@
+{
+  "prompt": "",
+  "steps": [
+    {"sleep": 1},
+    {"keys": "/resume"},
+    {"sleep": 1},
+    {"keys": "\r"},
+    {"sleep": 1.5, "snap": "resume"}
+  ],
+  "end": "."
+}

@@ -9,7 +9,7 @@ REPLAYS = os.path.join(HERE, "replays")
 LIVE = ["task", "interrupt", "mcp", "skill", "question", "question-multi", "question-chat", "permission", "clear", "web", "agent", "modes", "modes-default", "retry-live", "plan",
         "spinner-states", "bash-no-thinking", "group-second-running", "parallel-calls", "slow-search", "stream-lines", "highlight", "slash-colour", "question-afk", "m4a-keys", "m4a-exit",
         "m4b-unknown-command", "m4b-typo-command", "m4b-narrow-footer", "m2-permission-decline",
-        "m4c-long-line", "m4d-bash-rows", "m5a-parallel-fail", "m4d-decline-edit"]
+        "m4c-long-line", "m4d-bash-rows", "m5a-parallel-fail", "m4d-decline-edit", "m6c-resume-empty"]
 REPLAYED = {
     "thinking.jsonl": "Thinking sample.",
     "markdown.jsonl": "Show the markdown sample.",
