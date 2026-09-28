@@ -261,4 +261,146 @@ function runResult(resultRenderer, result, options, context, theme = plainTheme)
   console.log("PASS: connecting and refreshing MCP servers is silent by default, like Claude 2.1.280 (only failures notify)");
 }
 
+{
+  const panelMod = await jiti.import(path.join(here, "../npm/node_modules/pi-mcp-adapter/mcp-panel.ts"));
+  const { createMcpPanel } = panelMod;
+  const cacheMod = await jiti.import(path.join(here, "../npm/node_modules/pi-mcp-adapter/metadata-cache.ts"));
+  const { computeServerHash } = cacheMod;
+
+  const trimmedRows = (panel, width = 120) => panel.render(width).map((line) => line.replace(/\s+$/, ""));
+
+  function buildParityPanel(overrides = {}) {
+    const definition = { command: "py", args: ["-3.12", "parity_mcp.py"], ...overrides.definition };
+    const config = { mcpServers: { parity: definition }, ...(overrides.settings ? { settings: overrides.settings } : {}) };
+    const cache = {
+      version: 1,
+      servers: {
+        parity: {
+          configHash: computeServerHash(definition),
+          cachedAt: Date.now(),
+          tools: [
+            { name: "lookup", description: "Look up the value stored under a key.", inputSchema: { type: "object", properties: { key: { type: "string" } }, required: ["key"] } },
+            { name: "explode", description: "Always fails.", inputSchema: { type: "object", properties: {} } },
+          ],
+          resources: [],
+        },
+      },
+    };
+    const provenance = new Map([["parity", { path: "mcp-config.json", kind: overrides.kind ?? "user" }]]);
+    let connectionStatus = overrides.connectionStatus ?? "connected";
+    const callbacks = {
+      reconnect: async () => true,
+      canAuthenticate: () => false,
+      authenticate: async () => ({ ok: false }),
+      getConnectionStatus: () => connectionStatus,
+      getFailureMessage: () => null,
+      refreshCacheAfterReconnect: () => null,
+    };
+    const tui = { requestRender() {} };
+    const state = { done: undefined };
+    const panel = createMcpPanel(config, cache, provenance, callbacks, tui, (result) => { state.done = result; });
+    return { panel, state, setConnectionStatus: (next) => { connectionStatus = next; } };
+  }
+
+  {
+    const { panel } = buildParityPanel();
+    assert.deepEqual(trimmedRows(panel), [
+      "   Manage MCP servers",
+      "   1 server",
+      "",
+      "     User MCPs (mcp-config.json)",
+      "   ❯ ✔ parity   2 tools",
+      "",
+      "   https://code.claude.com/docs/en/mcp for help",
+      "   ↑/↓ to navigate · Enter to confirm · Esc to cancel",
+    ], "list screen matches Claude's captured grouped layout");
+
+    panel.handleInput("\r");
+    assert.deepEqual(trimmedRows(panel), [
+      "   Parity MCP Server",
+      "",
+      "   Status:           ✔ connected",
+      "   Config location:  mcp-config.json",
+      "   Capabilities: tools",
+      "   Tools: 2 tools",
+      "",
+      "   ❯ 1. View tools",
+      "     2. Reconnect",
+      "     3. Disable",
+      "",
+      "   ↑/↓ to navigate · Enter to select · Esc to back",
+    ], "server actions screen matches Claude's captured Status/Config/Capabilities/Tools + numbered actions");
+
+    panel.handleInput("\r");
+    assert.deepEqual(trimmedRows(panel), [
+      "   Tools for parity",
+      "   2 tools",
+      "",
+      "   ❯ lookup — Look up the value stored under a key.",
+      "     explode — Always fails.",
+      "",
+      "   ↑/↓ to navigate · Enter to select · Esc to back · space to toggle direct",
+    ], "tools screen matches Claude's captured tools list (plus pi's own direct-tool marker)");
+
+    panel.handleInput("\r");
+    assert.deepEqual(trimmedRows(panel), [
+      "   lookup",
+      "   parity",
+      "",
+      "   Tool name: lookup",
+      "   Full name: parity_lookup",
+      "",
+      "   Description:",
+      "   Look up the value stored under a key.",
+      "",
+      "   Parameters:",
+      "     ● key (required): string",
+      "",
+      "   Esc to go back",
+    ], "tool detail screen matches Claude's captured Tool name/Full name/Description/Parameters (pi's own tool-prefix naming, not Claude's mcp__ scheme)");
+
+    panel.handleInput("\x1b");
+    assert.ok(trimmedRows(panel).includes("   Tools for parity"), "esc from detail goes back to the tools screen");
+    panel.handleInput("\x1b");
+    assert.ok(trimmedRows(panel).includes("   Parity MCP Server"), "esc from tools goes back to the actions screen");
+    panel.handleInput("\x1b");
+    assert.ok(trimmedRows(panel).includes("   Manage MCP servers"), "esc from actions goes back to the list");
+    console.log("PASS: /mcp list -> actions -> tools -> detail, esc walking back one level at a time");
+  }
+
+  {
+    const { panel } = buildParityPanel();
+    panel.handleInput("\r");
+    panel.handleInput("\r");
+    panel.handleInput("\x1b[B");
+    panel.handleInput("\r");
+    assert.ok(trimmedRows(panel).includes("     No parameters."), "a tool with an empty input schema shows \"No parameters.\" instead of an empty list");
+    console.log("PASS: tool with no declared parameters");
+  }
+
+  {
+    const { panel, state } = buildParityPanel({ definition: { directTools: true } });
+    assert.ok(trimmedRows(panel).some((row) => row.includes("2 tools") && row.includes("2 direct")), "pi's direct-tool count stays visible as an extra suffix Claude has no equivalent for");
+
+    panel.handleInput("\r");
+    panel.handleInput("\x1b[B");
+    panel.handleInput("\x1b[B");
+    panel.handleInput("\r");
+    assert.ok(trimmedRows(panel).some((row) => row.includes("Disable") === false && row.includes("Enable")), "disabling flips the action label to Enable");
+    panel.handleInput("\x1b");
+    panel.handleInput("\x1b");
+    assert.equal(state.done, undefined, "esc at the list with unsaved changes asks to discard first, it does not close silently");
+    assert.ok(trimmedRows(panel).some((row) => row.includes("Discard unsaved changes?")), "the discard confirmation itself has no frame either");
+    panel.handleInput("\r");
+    assert.ok(state.done && state.done.disabledChanges.get("parity") === true, "Keep & Close (the default) saves the disabled change");
+    console.log("PASS: server actions Enable/Disable stays reachable and wires into the existing dirty/save flow");
+  }
+
+  {
+    const { panel } = buildParityPanel({ kind: "project" });
+    assert.ok(trimmedRows(panel).includes("     Project MCPs (mcp-config.json)"), "a project-scoped server groups under \"Project MCPs (path)\"");
+    console.log("PASS: project-provenance group label");
+  }
+}
+
 console.log("\nAll selftest assertions passed.");
