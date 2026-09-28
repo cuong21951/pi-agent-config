@@ -3,60 +3,38 @@
   "start": "2026-09-28T19:00:00+00:00",
   "turns": [
     {
-      "prompt": "Track this with the todo list: read the file, fix the bug, write a test.",
+      "prompt": "Track this with the task list: read the file, fix the bug, write a test.",
       "steps": [
         {
           "assistant": [
-            {
-              "type": "toolCall",
-              "name": "todo_write",
-              "arguments": {
-                "todos": [
-                  { "content": "Read the file", "status": "in_progress", "activeForm": "Reading the file" },
-                  { "content": "Fix the bug", "status": "pending", "activeForm": "Fixing the bug" },
-                  { "content": "Write a test", "status": "pending", "activeForm": "Writing a test" }
-                ]
-              }
-            }
+            { "type": "toolCall", "name": "task_create", "arguments": { "subject": "Read the file", "description": "Read the file", "activeForm": "Reading the file" } }
           ],
           "results": [
-            {
-              "text": "Todos have been modified successfully. Ensure that you continue to use the todo list to track your progress. Please proceed with the current tasks if applicable",
-              "details": {
-                "todos": [
-                  { "content": "Read the file", "status": "in_progress", "activeForm": "Reading the file" },
-                  { "content": "Fix the bug", "status": "pending", "activeForm": "Fixing the bug" },
-                  { "content": "Write a test", "status": "pending", "activeForm": "Writing a test" }
-                ]
-              }
-            }
+            { "text": "Task #1 created successfully: Read the file", "details": { "tasks": [{ "id": "1", "subject": "Read the file", "description": "Read the file", "activeForm": "Reading the file", "status": "pending", "blocks": [], "blockedBy": [] }], "nextId": 2 } }
           ]
         },
         {
           "assistant": [
-            {
-              "type": "toolCall",
-              "name": "todo_write",
-              "arguments": {
-                "todos": [
-                  { "content": "Read the file", "status": "completed", "activeForm": "Reading the file" },
-                  { "content": "Fix the bug", "status": "in_progress", "activeForm": "Fixing the bug" },
-                  { "content": "Write a test", "status": "pending", "activeForm": "Writing a test" }
-                ]
-              }
-            }
+            { "type": "toolCall", "name": "task_create", "arguments": { "subject": "Fix the bug", "description": "Fix the bug", "activeForm": "Fixing the bug" } }
           ],
           "results": [
-            {
-              "text": "Todos have been modified successfully. Ensure that you continue to use the todo list to track your progress. Please proceed with the current tasks if applicable",
-              "details": {
-                "todos": [
-                  { "content": "Read the file", "status": "completed", "activeForm": "Reading the file" },
-                  { "content": "Fix the bug", "status": "in_progress", "activeForm": "Fixing the bug" },
-                  { "content": "Write a test", "status": "pending", "activeForm": "Writing a test" }
-                ]
-              }
-            }
+            { "text": "Task #2 created successfully: Fix the bug", "details": { "tasks": [{ "id": "1", "subject": "Read the file", "description": "Read the file", "activeForm": "Reading the file", "status": "pending", "blocks": [], "blockedBy": [] }, { "id": "2", "subject": "Fix the bug", "description": "Fix the bug", "activeForm": "Fixing the bug", "status": "pending", "blocks": [], "blockedBy": [] }], "nextId": 3 } }
+          ]
+        },
+        {
+          "assistant": [
+            { "type": "toolCall", "name": "task_create", "arguments": { "subject": "Write a test", "description": "Write a test", "activeForm": "Writing a test" } }
+          ],
+          "results": [
+            { "text": "Task #3 created successfully: Write a test", "details": { "tasks": [{ "id": "1", "subject": "Read the file", "description": "Read the file", "activeForm": "Reading the file", "status": "pending", "blocks": [], "blockedBy": [] }, { "id": "2", "subject": "Fix the bug", "description": "Fix the bug", "activeForm": "Fixing the bug", "status": "pending", "blocks": [], "blockedBy": [] }, { "id": "3", "subject": "Write a test", "description": "Write a test", "activeForm": "Writing a test", "status": "pending", "blocks": [], "blockedBy": [] }], "nextId": 4 } }
+          ]
+        },
+        {
+          "assistant": [
+            { "type": "toolCall", "name": "task_update", "arguments": { "taskId": "1", "status": "in_progress" } }
+          ],
+          "results": [
+            { "text": "Updated task #1 status", "details": { "tasks": [{ "id": "1", "subject": "Read the file", "description": "Read the file", "activeForm": "Reading the file", "status": "in_progress", "blocks": [], "blockedBy": [] }, { "id": "2", "subject": "Fix the bug", "description": "Fix the bug", "activeForm": "Fixing the bug", "status": "pending", "blocks": [], "blockedBy": [] }, { "id": "3", "subject": "Write a test", "description": "Write a test", "activeForm": "Writing a test", "status": "pending", "blocks": [], "blockedBy": [] }], "nextId": 4 } }
           ]
         },
         {

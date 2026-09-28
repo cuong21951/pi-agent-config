@@ -1,6 +1,6 @@
 {
   "bypass": true,
-  "prompt": "Track this with the todo list: read the file, fix the bug, write a test.",
+  "prompt": "Track this with the task list: read the file, fix the bug, write a test.",
   "steps": [
     {"until": "✻ \\S+ for [^\\n]*· done", "timeout": 90},
     {"sleep": 3},

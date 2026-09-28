@@ -177,6 +177,14 @@ def to_claude(name, args, claude_tools, plan_file=None):
         return [("Agent", compact({"description": args.get("description"), "prompt": args.get("prompt"), "subagent_type": args.get("subagent_type"), "model": args.get("model")}))]
     if name == "ask_user_question":
         return [("AskUserQuestion", {"questions": args.get("questions", [])})]
+    if name == "task_create":
+        return [("TaskCreate", args)]
+    if name == "task_get":
+        return [("TaskGet", args)]
+    if name == "task_list":
+        return [("TaskList", args)]
+    if name == "task_update":
+        return [("TaskUpdate", args)]
     if name == "web_search":
         return [("WebSearch", {"query": args.get("query") or (args.get("queries") or [""])[0]})]
     if name == "fetch_content":

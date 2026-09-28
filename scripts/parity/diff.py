@@ -45,6 +45,8 @@ ROWS = [
      re.compile(r"^  /(?:code-review|doctor) "), re.compile(r"^  /skill:\S+ "), re.compile(r"^ {32}\S")),
     ("session-start notice: each harness's own SessionStart line (Claude's agents-md hook, pi's Ponytail loader), drawn after the history on a resume",
      re.compile(r"^● agents-md: "), re.compile(r"^● Ponytail loaded: "), None),
+    ("live task-list rows: Claude's TaskCreate/TaskUpdate renderToolUseMessage is null (measured live via mock, m6b-todos-replay) — no per-call row at all; pi renders the checklist so ctrl+t has something to toggle",
+     None, re.compile(r"^(?:☐|☒) "), re.compile(r"^(?:\s*|☐ .*|☒ .*)$")),
 ]
 
 
