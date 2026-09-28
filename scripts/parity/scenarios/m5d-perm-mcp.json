@@ -1,0 +1,28 @@
+{
+ "bypass": false,
+ "prompt": "Call the parity MCP tool lookup with key alpha. Then reply with exactly: done. No other text.",
+ "pi_args": "--mcp-config {parity}/mcp-pi.json",
+ "claude_args": "--mcp-config {parity}/mcp-claude.json",
+ "steps": [
+  {
+   "until": "(?m)^(?!❯ ).*(proceed|Allow|allow|Yes)",
+   "timeout": 90
+  },
+  {
+   "sleep": 3
+  },
+  {
+   "snap": "asking"
+  },
+  {
+   "keys": "\r"
+  },
+  {
+   "until": "✻ \\S+ for [^\n]*· done",
+   "timeout": 90
+  },
+  {
+   "sleep": 1
+  }
+ ]
+}
