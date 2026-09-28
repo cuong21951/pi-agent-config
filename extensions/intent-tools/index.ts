@@ -1,7 +1,8 @@
-import { createBashTool, type BashToolDetails, type ExtensionAPI } from "@earendil-works/pi-coding-agent";
+import { createBashTool, type ExtensionAPI } from "@earendil-works/pi-coding-agent";
 import { truncateToWidth } from "@earendil-works/pi-tui";
+import { closeSync, openSync, readSync } from "node:fs";
 import { describeTool, dynamic, failed, finished, groupRow, joinOnExecute, watch } from "../claude-tools/rows.ts";
-import { commandBody, DEFAULT_TIMEOUT_SECONDS, describeBash, doneLine, resultLines, withDefaultTimeout } from "./render.ts";
+import { CLAUDE_BASH_MAX_CHARS, commandBody, DEFAULT_TIMEOUT_SECONDS, describeBash, displayOutput, doneLine, resultLines, withDefaultTimeout } from "./render.ts";
 
 // ponytail: map is only a fallback when the model omits `description`.
 // Claude's real mechanism is a model-supplied `description` field per bash call.
@@ -45,6 +46,27 @@ const INTENT_MAP: Array<[RegExp, string]> = [
 	[/^cargo\b/, "Cargo"],
 	[/^npm\b/, "npm"],
 ];
+
+const heads = new Map<string, string | undefined>();
+
+function readHead(path: string): string | undefined {
+	if (!heads.has(path)) heads.set(path, readFileHead(path));
+	return heads.get(path);
+}
+
+function readFileHead(path: string): string | undefined {
+	try {
+		const fd = openSync(path, "r");
+		try {
+			const buffer = Buffer.alloc(CLAUDE_BASH_MAX_CHARS * 4);
+			return buffer.subarray(0, readSync(fd, buffer, 0, buffer.length, 0)).toString("utf8");
+		} finally {
+			closeSync(fd);
+		}
+	} catch {
+		return undefined;
+	}
+}
 
 function firstSegment(cmd: string): string {
 	const seg = cmd.split(/\s*(?:&&|\|\||;|\|)\s*/).find((s) => s.trim());
@@ -100,13 +122,12 @@ export default function (pi: ExtensionAPI) {
 			const args = (context as { args?: { command?: unknown; description?: unknown } })?.args ?? {};
 			const command = String(args.command ?? "");
 			const intent = String(args.description ?? "").trim() || describe(command);
-			const details = result.details as BashToolDetails | undefined;
 			const content = result.content[0];
 			const output = content?.type === "text" ? content.text : "";
 			const exitMatch = output.match(/exit(?:ed with)? code:? (\d+)/);
 			const id = (context as { toolCallId?: string })?.toolCallId ?? "";
 			const exitCode = exitMatch ? parseInt(exitMatch[1], 10) : failed.has(id) ? 1 : null;
-			const lines = resultLines(output, exitCode, expanded, details?.truncation?.truncated === true, theme);
+			const lines = resultLines(displayOutput(output, readHead), exitCode, expanded, theme);
 			return dynamic((width) => [doneLine(intent, theme), ...(lines ?? [])].map((line) => truncateToWidth(line, width)));
 		},
 	});

@@ -1,0 +1,11 @@
+{
+  "bypass": true,
+  "prompt": "Run exactly these two shell commands as two separate Bash tool calls, in order: (1) `python -c \"for i in range(10000): print(i)\"` and (2) `echo partial; exit 3`. Do not summarize the output. After both finish, reply with exactly: done.",
+  "steps": [
+    {"until": "✻ \\S+ for [^\\n]*· done", "timeout": 120},
+    {"sleep": 1},
+    {"snap": "collapsed"},
+    {"keys": "\u000f"},
+    {"sleep": 1.5}
+  ]
+}
