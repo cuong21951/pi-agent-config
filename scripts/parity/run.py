@@ -6,6 +6,7 @@ MOCK = os.path.join(HERE, "mock.py")
 PROMPT = "Follow the instructions in TASK.md exactly."
 DONE = r"✻ \S+ for [^\n]*· done"
 SUBMITTED = r"(?m)^❯\s*$"
+PI_SANDBOX_ENV = [f"{name}={os.environ[name]}" for name in ("PI_CODING_AGENT_DIR", "PI_CLI") if os.environ.get(name)]
 
 ap = argparse.ArgumentParser(description="Play a parity scenario live in pi (Copilot), replay pi's replies to Claude Code through mock.py, capture both screens.")
 ap.add_argument("--out", default=os.path.join(os.environ["TEMP"], "pi-parity", "out"))
@@ -109,10 +110,10 @@ for stale in glob.glob(os.path.join(a.out, "claude*.json")) + glob.glob(os.path.
 if a.replay and a.only in (None, "pi"):
     copy = os.path.join(a.out, "replay.jsonl")
     shutil.copyfile(a.replay, copy)
-    capture("pi", ["--args", f"--model {a.pi_model} --session {slash(copy)}"])
+    capture("pi", ["--args", f"--model {a.pi_model} --session {slash(copy)}"], PI_SANDBOX_ENV)
 elif a.only in (None, "pi"):
     shutil.rmtree(SESSIONS, ignore_errors=True)
-    capture("pi", ["--args", f"--model {a.pi_model} --models {a.pi_model} --session-dir {slash(SESSIONS)} {scenario.get('pi_args', '')}"], a.pi_env + scenario.get("pi_env", []), steps=steps_for("pi"))
+    capture("pi", ["--args", f"--model {a.pi_model} --models {a.pi_model} --session-dir {slash(SESSIONS)} {scenario.get('pi_args', '')}"], PI_SANDBOX_ENV + a.pi_env + scenario.get("pi_env", []), steps=steps_for("pi"))
 
 if a.only in (None, "claude"):
     session = a.replay or a.session or newest_session()

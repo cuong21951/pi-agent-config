@@ -1,7 +1,7 @@
 import argparse, json, os, re, shlex, shutil, time, threading
 import pyte, winpty
 
-PI = os.path.join(os.environ["LOCALAPPDATA"], "Volta/tools/image/packages/@earendil-works/pi-coding-agent/node_modules/@earendil-works/pi-coding-agent/dist/bundle/cli.js")
+PI = os.environ.get("PI_CLI") or os.path.join(os.environ["LOCALAPPDATA"], "Volta/tools/image/packages/@earendil-works/pi-coding-agent/node_modules/@earendil-works/pi-coding-agent/dist/bundle/cli.js")
 
 ap = argparse.ArgumentParser()
 ap.add_argument("--cmd", default=None)

@@ -6,6 +6,7 @@ const PACKAGE = "@earendil-works/pi-coding-agent";
 
 function knownInstalls() {
 	return [
+		process.env.PI_INSTALL_DIR,
 		process.env.PI_CODING_AGENT_DIR,
 		process.env.LOCALAPPDATA && path.join(process.env.LOCALAPPDATA, "Volta/tools/image/packages", PACKAGE, "node_modules", PACKAGE),
 		process.env.APPDATA && path.join(process.env.APPDATA, "npm/node_modules", PACKAGE),
