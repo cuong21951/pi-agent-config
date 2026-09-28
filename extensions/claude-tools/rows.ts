@@ -24,6 +24,7 @@ const joinedAt = slot("joinedAt", () => new Map<string, number>());
 const startedAt = slot("startedAt", () => new Map<string, number>());
 const born = slot("born", () => new Map<string, number>());
 const live = slot("live", () => new Set<string>());
+const seeded = slot("seeded", () => new Set<string>());
 const tools = slot("tools", () => new Map<string, string>());
 const inputs = slot("inputs", () => new Map<string, Args>());
 const outputLines = slot("outputLines", () => new Map<string, number>());
@@ -331,7 +332,7 @@ function sentence(group: string[], active: boolean, bold: (text: string) => stri
 	const bashReadonly = (member: string): Kind | undefined =>
 		kinds.get(member) === "bash" ? bashReadonlyKind(String(inputs.get(member)?.command ?? "")) : undefined;
 	const unclassifiedBash = (member: string): boolean => kinds.get(member) === "bash" && bashReadonly(member) === undefined;
-	const classifiedShell = (member: string): boolean => bashReadonly(member) !== undefined || tools.get(member) === "ls";
+	const classifiedShell = (member: string): boolean => !seeded.has(member) && (bashReadonly(member) !== undefined || tools.get(member) === "ls");
 	const count = (kind: Kind) =>
 		group.filter((member) => kinds.get(member) === kind).length +
 		(kind === "search" || kind === "read" || kind === "list" ? group.filter((member) => bashReadonly(member) === kind).length : 0);
@@ -527,6 +528,7 @@ export function seed(entries: Iterable<Entry>): void {
 					const args = (block.arguments ?? {}) as Args;
 					tools.set(block.id!, block.name ?? "");
 					inputs.set(block.id!, args);
+					seeded.add(block.id!);
 					place(block.id!, kindFor(block.id!, block.name ?? "", args), at);
 				}
 		}
@@ -715,6 +717,13 @@ if (process.env.CLAUDE_ROWS_SELFTEST) {
 		{ type: "message", message: { role: "toolResult", toolCallId: "old2", isError: false } },
 	]);
 	check(summaryFor("old1") === "" && summaryFor("old2") === "  Searched for 1 pattern, read 1 file", "replayed sessions group from their entries");
+	seed([
+		{ type: "message", message: { role: "user", content: "credit" } },
+		{ type: "message", message: { role: "assistant", content: [{ type: "toolCall", id: "oldgit", name: "bash", arguments: { command: "git status" } }, { type: "toolCall", id: "oldls", name: "bash", arguments: { command: "ls -la" } }] } },
+		{ type: "message", message: { role: "assistant", content: [{ type: "toolCall", id: "oldcat", name: "bash", arguments: { command: "cat notes.txt" } }] } },
+		{ type: "message", message: { role: "assistant", content: [{ type: "toolCall", id: "oldlstool", name: "ls", arguments: { path: "src" } }] } },
+	]);
+	check(summaryFor("oldlstool") === "  Read 1 file, listed 2 directories, ran 1 shell command", "a group drawn from history counts only its unclassified bash calls: resumed, Claude 2.1.283 has no streaming peak (shell-credit replay cases B-E)");
 	seed([
 		{ type: "message", message: { role: "user", content: "again" } },
 		{ type: "message", message: { role: "assistant", content: [{ type: "toolCall", id: "err1", name: "read", arguments: {} }] } },
