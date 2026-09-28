@@ -1,12 +1,15 @@
 --- a/ask-user-question.ts
 +++ b/ask-user-question.ts
-@@ -1,3 +1,6 @@
+@@ -1,5 +1,8 @@
 +import { readFileSync } from "node:fs";
 +import { homedir } from "node:os";
 +import { join } from "node:path";
  import type { ExtensionAPI, ExtensionContext, Theme } from "@earendil-works/pi-coding-agent";
- import { isKeyRelease, isKeyRepeat, matchesKey, type OverlayHandle, type TUI } from "@earendil-works/pi-tui";
+-import { isKeyRelease, isKeyRepeat, matchesKey, type OverlayHandle, type TUI } from "@earendil-works/pi-tui";
++import { isKeyRelease, isKeyRepeat, matchesKey, truncateToWidth, wrapTextWithAnsi, type OverlayHandle, type TUI } from "@earendil-works/pi-tui";
  import {
+ 	COLLAPSE_KEY_OFF,
+ 	formatKeySpecForDisplay,
 @@ -19,7 +22,8 @@
  import { displayLabel, t } from "./state/i18n-bridge.js";
  import { sentinelsToAppend } from "./state/row-intent.js";
@@ -126,12 +129,22 @@
  		});
  		sessionRef.current = session;
  		return session.component;
-@@ -300,7 +380,70 @@
+@@ -300,7 +380,80 @@
  
  Preview content is rendered as markdown in a monospace box. Multi-line text with newlines is supported. When any option has a preview, the UI switches to a side-by-side layout with a vertical option list on the left and preview on the right. Do not use previews for simple preference questions where labels and descriptions suffice. Note: previews are only supported for single-select questions (not multiSelect).`;
  
 +function claudeRow(render: (width: number) => string[]) {
 +	return { render, invalidate() {} };
++}
++
++const ELBOW_HANG = "     ";
++
++export function fitRows(rows: string[], width: number): string[] {
++	return rows.flatMap((row) => {
++		const [first = "", ...rest] = wrapTextWithAnsi(row, width);
++		const hung = rest.length === 0 ? [] : wrapTextWithAnsi(rest.join(" "), Math.max(1, width - ELBOW_HANG.length)).map((line) => ELBOW_HANG + line);
++		return [first, ...hung].map((line) => truncateToWidth(line, width));
++	});
 +}
 +
 +function formatAnsweredRows(answers: QuestionnaireResult["answers"], theme: Pick<Theme, "fg">): string[] {
@@ -197,7 +210,7 @@
  	const guidance = validateGuidanceFields(loadConfig().guidance);
  	pi.registerTool({
  		name: ASK_USER_QUESTION_TOOL_NAME,
-@@ -310,6 +453,22 @@
+@@ -310,6 +463,22 @@
  		promptGuidelines: guidance.promptGuidelines ?? DEFAULT_PROMPT_GUIDELINES,
  		parameters: QuestionParamsSchema,
  
@@ -212,15 +225,15 @@
 +		renderResult(result, { isPartial }, theme, context) {
 +			if (isPartial) return claudeRow(() => []);
 +			if (context.isError && isSchemaRejection(result)) return claudeRow(() => schemaRejectedRows(theme));
-+			return claudeRow(() =>
-+				answeredRows(result.details as QuestionnaireResult | undefined, theme, context.args?.questions),
++			return claudeRow((width) =>
++				fitRows(answeredRows(result.details as QuestionnaireResult | undefined, theme, context.args?.questions), width),
 +			);
 +		},
 +
  		async execute(_toolCallId, params, _signal, _onUpdate, ctx) {
  			// Line-terminator normalization runs once here, ahead of validation, so
  			// every downstream consumer — validator, TUI, RPC walker, envelope, prompt
-@@ -348,22 +507,12 @@
+@@ -348,22 +517,12 @@
  				return buildToolResult(sessionLoad.message, { answers: [], cancelled: true, error: sessionLoad.error });
  			}
  			const { QuestionnaireSession } = sessionLoad.module;
@@ -246,7 +259,7 @@
  			const canReopenWhileHidden = removeOverlayInputListener !== undefined;
  
  			emitAskUserBlockedEvent(pi, true);
-@@ -375,23 +524,12 @@
+@@ -375,23 +534,12 @@
  						typed,
  						itemsByTab,
  						collapseKey,
