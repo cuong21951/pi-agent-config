@@ -4,7 +4,10 @@ ap = argparse.ArgumentParser(description="Compare the Claude Code and pi capture
 ap.add_argument("--out", default=os.path.join(os.environ["TEMP"], "pi-parity", "out"))
 a = ap.parse_args()
 
+PLACEHOLDER = re.compile(r'^❯\s+Try "(?:fix lint errors|fix typecheck errors|how does \S+ work\?|refactor \S+|how do I log an error\?|edit \S+ to\.\.\.|write a test for \S+|create a util logging\.py that\.\.\.)"$')
+
 VOLATILE = [
+    (PLACEHOLDER, '❯ Try "<example>"'),
     (re.compile(r"✻ \S+ for .*?· done .*$"), "✻ <verb> for <time> · done <clock>"),
     (re.compile(r"^[·✢*✶✻✽] \S+…"), "<spinner> <verb>…"),
     (DURATION := re.compile(r"\b(?:\d+d )?(?:\d+h )?(?:\d+m )?\d+(?:\.\d+)?s\b"), "<n>s"),
@@ -87,7 +90,7 @@ def normalise(text):
 
 def regions(lines):
     texts = [line["text"].rstrip() for line in lines]
-    prompt = max((i for i, t in enumerate(texts) if t.strip() == "❯"), default=len(texts))
+    prompt = max((i for i, t in enumerate(texts) if t.strip() == "❯" or PLACEHOLDER.match(t)), default=len(texts))
     start = next((i for i, t in enumerate(texts[:prompt]) if re.match(r"^❯ \S", t)), prompt)
     start = max((i for i, t in enumerate(texts[:prompt]) if t.startswith("▔")), default=start)
     rule = prompt - 1 if prompt > 0 and texts[prompt - 1].startswith("─") else prompt

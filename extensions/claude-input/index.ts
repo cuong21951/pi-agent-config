@@ -17,7 +17,7 @@ const BUILTIN_COMMAND_NAMES = [
 ];
 
 // ponytail: Claude Code (2.1.260) draws a flat rule above and below the text and a "❯ " prompt, no side
-// borders (its placeholder tip was dropped on request). pi's editor already draws the rules, so the inner editor is rendered
+// borders; its dim `Try "..."` example shows only before the first prompt (2.1.283). pi's editor already draws the rules, so the inner editor is rendered
 // PROMPT.length columns narrower, its rules are stretched back to full width and its text rows
 const isRule = (line: string) => line.replace(ANSI, "").startsWith("─");
 
@@ -61,6 +61,32 @@ export function noMatchRow(text: string, muted: Paint, names: readonly string[] 
 	return COMMAND_TOKEN.test(text) && !known ? [muted(`  No commands match "${text}"`)] : [];
 }
 
+const VISIBLE_ESCAPES = /\x1b\[[0-9;?]*[A-Za-z]|\x1b_[^\x07]*\x07/g;
+const APC = /\x1b_[^\x07]*\x07/g;
+const DIM_OPEN = "\x1b[2m";
+const DIM_CLOSE = "\x1b[22m";
+
+export function stringHash(text: string): number {
+	let hash = 0;
+	for (let i = 0; i < text.length; i++) hash = ((hash << 5) - hash + text.charCodeAt(i)) | 0;
+	return hash;
+}
+
+export function placeholderText(sessionId: string, file = "<filepath>"): string {
+	const examples = ["fix lint errors", "fix typecheck errors", `how does ${file} work?`, `refactor ${file}`, "how do I log an error?", `edit ${file} to...`, `write a test for ${file}`, "create a util logging.py that..."];
+	return `Try "${examples[(Math.abs(stringHash(sessionId)) >>> 8) % examples.length]}"`;
+}
+
+export function withPlaceholder(lines: string[], placeholder: string): string[] {
+	const topRuleIndex = lines.findIndex(isRule);
+	const row = lines[topRuleIndex + 1];
+	if (topRuleIndex === -1) return lines;
+	const width = row.replace(VISIBLE_ESCAPES, "").length;
+	const markers = (row.match(APC) ?? []).join("");
+	const filled = `${markers}${DIM_OPEN}${placeholder}${DIM_CLOSE}${" ".repeat(Math.max(0, width - placeholder.length))}`;
+	return lines.map((line, i) => (i === topRuleIndex + 1 ? filled : line));
+}
+
 export function promptLines(lines: string[], paint: Paint, promptMark: string = PROMPT, command: CommandColour = NO_COMMANDS, emptyMenu: string[] = []): string[] {
 	const topRuleIndex = lines.findIndex(isRule);
 	if (topRuleIndex === -1) return lines;
@@ -82,8 +108,14 @@ export function promptLines(lines: string[], paint: Paint, promptMark: string = 
 
 export default function (pi: ExtensionAPI) {
 	let busy = false;
+	let submitted = false;
+	pi.on("input", () => {
+		submitted = true;
+		return { action: "continue" as const };
+	});
 	pi.on("agent_start", () => {
 		busy = true;
+		submitted = true;
 	});
 	pi.on("agent_settled", () => {
 		busy = false;
@@ -93,12 +125,18 @@ export default function (pi: ExtensionAPI) {
 		const previous = ctx.ui.getEditorComponent();
 		const mutedPrompt = ctx.ui.theme.fg("muted" as never, PROMPT);
 		const command: CommandColour = { names: [...BUILTIN_COMMAND_NAMES, ...pi.getCommands().map((c) => c.name)], paint: commandPaint };
+		const hasMessages = (ctx.sessionManager?.getEntries() ?? []).some((entry) => entry.type === "message");
+		const placeholder = placeholderText(ctx.sessionManager?.getSessionId() ?? "");
 		ctx.ui.setEditorComponent((tui, theme, keybindings) => {
 			const editor = previous ? previous(tui, theme, keybindings) : new CustomEditor(tui, theme, keybindings);
 			const paint: Paint = (text) => theme.borderColor(text);
 			const render = editor.render.bind(editor);
 			const muted: Paint = (text) => ctx.ui.theme.fg("muted" as never, text);
-			editor.render = (width: number) => promptLines(render(width - PROMPT.length), paint, busy ? mutedPrompt : PROMPT, command, noMatchRow(editor.getText(), muted, command.names));
+			const inner = (width: number) => {
+				const lines = render(width);
+				return editor.getText() === "" && !submitted && !hasMessages ? withPlaceholder(lines, placeholder) : lines;
+			};
+			editor.render = (width: number) => promptLines(inner(width - PROMPT.length), paint, busy ? mutedPrompt : PROMPT, command, noMatchRow(editor.getText(), muted, command.names));
 			return editor;
 		});
 	});

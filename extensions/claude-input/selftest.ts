@@ -94,4 +94,30 @@ const id = (t: string) => t;
 	assert.ok(commandLine.includes("\x1b[38;2;153;204;255m/clear\x1b[39m"), `real editor row paints a known typed command 99ccff, like Claude 2.1.280's measured '/clear' run: ${JSON.stringify(commandLine)}`);
 }
 
+{
+	const { placeholderText, withPlaceholder } = await jiti.import(path.join(here, "index.ts"));
+	assert.equal(placeholderText("abc"), 'Try "fix lint errors"', "Claude 2.1.283's f4r: the example is picked by (|hash(session id)| >>> 8) % 8, hash being its QJ string hash");
+	assert.equal(placeholderText("session-7"), 'Try "how does <filepath> work?"', "another session id lands on another of the eight examples, <filepath> standing in for the example files Claude never collects on win32");
+	const rows = withPlaceholder(["────────────────────────────", "\x1b_pi:c\x07\x1b[7m \x1b[0m                           ", "────────────────────────────"], 'Try "x"');
+	assert.equal(rows[1], '\x1b_pi:c\x07\x1b[2mTry "x"\x1b[22m' + " ".repeat(21), "the empty row becomes the dim example, the hardware cursor marker kept in front and the inverse-video cursor dropped (Claude parks its real cursor on the T)");
+	assert.equal(plain(rows[1]).replace(/\x1b_[^\x07]*\x07/g, "").length, 28, "the row keeps its width");
+}
+
+{
+	const tui = { requestRender() {}, terminal: { rows: 40, columns: 80 } };
+	const theme = { borderColor: id, selectList: {} };
+	const handlers: Record<string, any> = {};
+	let factory: any;
+	install({ on: (n: string, fn: any) => { handlers[n] = fn; }, getCommands: () => [] });
+	const start = (entries: unknown[]) => handlers.session_start({}, { hasUI: true, sessionManager: { getEntries: () => entries, getSessionId: () => "abc" }, ui: { getEditorComponent: () => undefined, setEditorComponent: (f: any) => { factory = f; }, theme: { fg: (_role: string, text: string) => text } } });
+	const row = () => plain(factory(tui, theme, keybindings).render(40)[1]).replace(/\x1b_[^\x07]*\x07/g, "");
+	start([]);
+	assert.equal(row(), '❯ Try "fix lint errors"'.padEnd(40), "an empty box in a fresh session shows the dim example, like Claude's M0 modes/plan captures");
+	start([{ type: "message" }]);
+	assert.equal(row().trim(), "❯", "a session with messages shows no example (Claude's hasMessages)");
+	start([]);
+	handlers.input({ text: "hi", source: "interactive" });
+	assert.equal(row().trim(), "❯", "after the first submit no example again, even in a new session (Claude's submitCount outlives /clear)");
+}
+
 console.log("claude-input selftest: all assertions passed");
