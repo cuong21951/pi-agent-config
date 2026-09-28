@@ -60,9 +60,9 @@ def fresh_workdir():
             f.write(f"line one\nline two\n{needle}\n")
 
 
-def steps_for(side):
+def steps_for(side, typed=True):
     steps = [{"until": ready, "timeout": 90}, {"sleep": 1.5}]
-    if prompt:
+    if prompt and typed:
         steps += [{"keys": prompt}, {"sleep": 1.5}, {"keys": "\r"}, {"until": SUBMITTED, "timeout": 6, "retries": 2, "retry_keys": "\r"}]
     for step in scenario.get("steps", []):
         step = dict(step)
@@ -118,7 +118,7 @@ for stale in glob.glob(os.path.join(a.out, "claude*.json")) + glob.glob(os.path.
 if a.replay and a.only in (None, "pi"):
     copy = os.path.join(a.out, "replay.jsonl")
     shutil.copyfile(a.replay, copy)
-    capture("pi", ["--args", f"--model {a.pi_model} --session {slash(copy)}"], PI_SANDBOX_ENV)
+    capture("pi", ["--args", f"--model {a.pi_model} --session {slash(copy)}"], PI_SANDBOX_ENV + a.pi_env, steps=steps_for("pi", typed=False) if scenario.get("steps") else None)
 elif a.only in (None, "pi"):
     shutil.rmtree(SESSIONS, ignore_errors=True)
     capture("pi", ["--args", f"--model {a.pi_model} --models {a.pi_model} --session-dir {slash(SESSIONS)} {scenario.get('pi_args', '')}"], PI_SANDBOX_ENV + a.pi_env + scenario.get("pi_env", []), steps=steps_for("pi"))

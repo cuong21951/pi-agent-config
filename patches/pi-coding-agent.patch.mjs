@@ -246,6 +246,18 @@ const EDITS = [
 		'resumeCommand&&process.stdout.write(`${source_default.dim("To resume this session:")} ${resumeCommand}\n`)',
 		"resumeCommand&&process.stdout.write(source_default.dim(`\nResume this session with:\n${resumeCommand}\n`))",
 	],
+	[
+		'this.showStatus(`Tool output: ${expanded?"expanded":"collapsed"}`)}',
+		"globalThis.__claudeTranscript=expanded,this.ui.requestRender()}",
+	],
+	[
+		"this.editorContainer=new Container,this.editorContainer.addChild(this.editor),",
+		"this.editorContainer=new Container,this.editorContainer.addChild(this.editor),this.editorContainer.render=(render=>width=>this.toolOutputExpanded&&this.editorContainer.children[0]===this.editor?[]:render(width))(this.editorContainer.render.bind(this.editorContainer)),",
+	],
+	[
+		'if(content.type==="text"&&content.text.trim())this.contentContainer.addChild(new Markdown(',
+		'if(content.type==="text"&&content.text.trim())this.contentContainer.addChild({render:width=>globalThis.__claudeTranscriptStamp?.(message,width)??[],invalidate(){}}),this.contentContainer.addChild(new Markdown(',
+	],
 	["PASTE_MARKER_REGEX=/\\[paste #", "PASTE_MARKER_REGEX=/\\[Pasted text #"],
 	["PASTE_MARKER_SINGLE=/^\\[paste #", "PASTE_MARKER_SINGLE=/^\\[Pasted text #"],
 	['!text.includes("[paste #")', '!text.includes("[Pasted text #")'],

@@ -2,50 +2,7 @@ import { createBashTool, type ExtensionAPI } from "@earendil-works/pi-coding-age
 import { truncateToWidth } from "@earendil-works/pi-tui";
 import { closeSync, openSync, readSync } from "node:fs";
 import { describeTool, dynamic, failed, finished, groupRow, joinOnExecute, watch } from "../claude-tools/rows.ts";
-import { CLAUDE_BASH_MAX_CHARS, commandBody, DEFAULT_TIMEOUT_SECONDS, describeBash, displayOutput, doneLine, rejectedLines, resultLines, withDefaultTimeout } from "./render.ts";
-
-// ponytail: map is only a fallback when the model omits `description`.
-// Claude's real mechanism is a model-supplied `description` field per bash call.
-const INTENT_MAP: Array<[RegExp, string]> = [
-	[/^git status/, "Kiểm tra trạng thái git"],
-	[/^git diff/, "Xem diff chưa commit"],
-	[/^git add/, "Staging file cho commit"],
-	[/^git commit/, "Commit thay đổi"],
-	[/^git push/, "Push lên remote"],
-	[/^git pull/, "Kéo thay đổi từ remote"],
-	[/^git log/, "Xem lịch sử commit"],
-	[/^git stash/, "Stash thay đổi"],
-	[/^git (checkout|switch|restore)/, "Chuyển branch / khôi phục file"],
-	[/^git branch/, "Quản lý branch"],
-	[/^git merge/, "Merge branch"],
-	[/^git (reset|revert)/, "Reset / revert git"],
-	[/^git/, "Git"],
-	[/^ls\b|^dir\b/, "Liệt kê file"],
-	[/^find\s/, "Tìm file"],
-	[/^(rg|grep)\b/, "Tìm kiếm trong code"],
-	[/^cat\s/, "Đọc file"],
-	[/^cd\s/, "Đổi thư mục"],
-	[/^pwd\b/, "Hiện thư mục hiện tại"],
-	[/^mkdir\s/, "Tạo thư mục"],
-	[/^(rm|del)\s/, "Xoá file"],
-	[/^mv\s/, "Di chuyển / đổi tên"],
-	[/^cp\s/, "Sao chép file"],
-	[/^dotnet restore|^nuget restore/, "Restore NuGet package"],
-	[/^dotnet build|^msbuild\s|^cargo build/, "Build"],
-	[/^dotnet test|^vstest|^cargo test/, "Chạy test"],
-	[/^npm install|^yarn add|^pnpm add|^npm i\b/, "Cài package"],
-	[/^npm run/, "Chạy npm script"],
-	[/^cargo run/, "Chạy chương trình"],
-	[/^pip install/, "Cài Python package"],
-	[/^python\s|^py\s/, "Chạy Python script"],
-	[/^node\s/, "Chạy Node script"],
-	[/^curl\s|^wget\s/, "Gọi HTTP"],
-	[/^docker\s/, "Docker"],
-	[/^az\s/, "Azure CLI"],
-	[/^dotnet\b/, "dotnet"],
-	[/^cargo\b/, "Cargo"],
-	[/^npm\b/, "npm"],
-];
+import { CLAUDE_BASH_MAX_CHARS, DEFAULT_TIMEOUT_SECONDS, describeBash, displayOutput, rejectedLines, resultLines, verboseCallLine, withDefaultTimeout } from "./render.ts";
 
 const heads = new Map<string, string | undefined>();
 
@@ -66,20 +23,6 @@ function readFileHead(path: string): string | undefined {
 	} catch {
 		return undefined;
 	}
-}
-
-function firstSegment(cmd: string): string {
-	const seg = cmd.split(/\s*(?:&&|\|\||;|\|)\s*/).find((s) => s.trim());
-	return seg ? seg.trim() : cmd;
-}
-
-function describe(raw: string): string {
-	const seg = firstSegment(commandBody(raw)).replace(/^rtk\s+/, "");
-	const lower = seg.toLowerCase();
-	for (const [re, label] of INTENT_MAP) {
-		if (re.test(lower)) return label;
-	}
-	return seg.length > 40 ? `${seg.slice(0, 37)}...` : seg;
 }
 
 export default function (pi: ExtensionAPI) {
@@ -125,12 +68,12 @@ export default function (pi: ExtensionAPI) {
 			if (isPartial || !expanded) return dynamic(() => []);
 			const args = (context as { args?: { command?: unknown; description?: unknown } })?.args ?? {};
 			const command = String(args.command ?? "");
-			const intent = String(args.description ?? "").trim() || describe(command);
 			const exitMatch = output.match(/exit(?:ed with)? code:? (\d+)/);
 			const id = (context as { toolCallId?: string })?.toolCallId ?? "";
 			const exitCode = exitMatch ? parseInt(exitMatch[1], 10) : failed.has(id) ? 1 : null;
 			const lines = resultLines(displayOutput(output, readHead), exitCode, expanded, theme);
-			return dynamic((width) => [doneLine(intent, theme), ...(lines ?? [])].map((line) => truncateToWidth(line, width)));
+			const failedCall = exitCode !== 0 && exitCode !== null;
+			return dynamic((width) => [verboseCallLine(command, failedCall, theme), ...(lines ?? [])].map((line) => truncateToWidth(line, width)));
 		},
 	});
 }

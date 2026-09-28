@@ -4,7 +4,6 @@ export type Style = { fg: (role: string, text: string) => string; bold: (text: s
 
 const RESULT_ELBOW = "  ⎿  ";
 const INDENT = "     ";
-const EXPANDED_MAX = 20;
 
 export const DEFAULT_TIMEOUT_SECONDS = 120;
 
@@ -29,6 +28,10 @@ export function doneLine(intent: string, s: Style): string {
 	return s.fg("muted", `Ran ${intent}`);
 }
 
+export function verboseCallLine(command: string, failed: boolean, s: Style): string {
+	return s.fg(failed ? "error" : "borderAccent", "● ") + s.bold("Bash") + `(${command})`;
+}
+
 const EXIT_STATUS = /(?:^\(no output\))?\s*Command exited with code \d+$/;
 const FULL_OUTPUT_NOTE = /\s*\[Showing [^\]\n]*Full output: ([^\]\n]+)\]$/;
 export const CLAUDE_BASH_MAX_CHARS = 30000;
@@ -40,16 +43,13 @@ export function displayOutput(output: string, readHead: (path: string) => string
 	return (readHead(note[1]) ?? body.slice(0, note.index)).slice(0, CLAUDE_BASH_MAX_CHARS);
 }
 
-// ponytail: null draws nothing; ctrl+o brings the output back with the first line and "… +N lines".
 export function resultLines(output: string, exitCode: number | null, expanded: boolean, s: Style): string[] | null {
 	if (!expanded || isAbort(output)) return null;
 	const failed = exitCode !== 0 && exitCode !== null;
-	const paint = (text: string) => (failed ? s.fg("error", text) : text);
 	const body = output.replace(/\s+$/, "");
+	const paint = (text: string) => (failed ? s.fg("error", text) : body === "(No output)" ? s.fg("muted", text) : text);
 	const lines = [...(failed ? [`Error: Exit code ${exitCode}`] : []), ...(body === "" ? [] : body.split(/\r?\n/))];
-	const shown = lines.slice(0, EXPANDED_MAX).map((line, i) => (i === 0 ? s.fg("muted", RESULT_ELBOW) : INDENT) + paint(line));
-	const more = lines.length > EXPANDED_MAX ? [s.fg("muted", `${INDENT}… +${lines.length - EXPANDED_MAX} lines`)] : [];
-	return [...shown, ...more];
+	return lines.map((line, i) => (i === 0 ? s.fg("muted", RESULT_ELBOW) : INDENT) + paint(line));
 }
 
 export function rejectedLines(output: string, s: Style): string[] | null {
@@ -72,6 +72,7 @@ if (process.env.INTENT_TOOLS_SELFTEST) {
 	check(withDefaultTimeout({ command: "grep -r x ." }).timeout === 120, "a command without a timeout gets Claude Code's two minutes instead of running forever");
 	check(withDefaultTimeout({ command: "dotnet test", timeout: 900 }).timeout === 900, "an explicit timeout is kept");
 	check(doneLine("Check git status", tagged) === "<muted>Ran Check git status</muted>", "finished command is one grey line");
+	check(verboseCallLine("echo hi", false, tagged) === "<borderAccent>● </borderAccent>Bash(echo hi)" && verboseCallLine("exit 3", true, tagged).startsWith("<error>● </error>"), "ctrl+o names the call Claude's way, ● Bash(command), with a red dot when it failed");
 	check(resultLines("only\n", 0, false, plain) === null, "successful collapsed result draws nothing");
 	check(resultLines("boom", 1, false, plain) === null, "a failed command draws no red row; it folds into the grey group line");
 	check(resultLines("Command aborted", 1, true, plain) === null, "an aborted command draws no error row (pi core prints Interrupted)");
@@ -80,9 +81,10 @@ if (process.env.INTENT_TOOLS_SELFTEST) {
 	check(resultLines("a\r\nb\r\n", 0, true, tagged)!.join("|") === `<muted>${RESULT_ELBOW}</muted>a|     b`, "ctrl+o on a good command: the first line sits on the elbow row, the rest five columns in, default colour");
 	check(rejectedLines("The user doesn't want to proceed with this tool use. The tool use was rejected.", tagged)!.join("|") === `<muted>${RESULT_ELBOW}Interrupted · What should Claude do instead?</muted>` && rejectedLines("ok", plain) === null, "a declined bash ask is Claude's grey Interrupted row, collapsed or not");
 	const many = Array.from({ length: 25 }, (_, i) => `l${i}`).join("\n");
-	check(resultLines(many, 0, true, plain)!.at(-1) === "     … +5 lines", "expanded caps at 20");
+	check(resultLines(many, 0, true, plain)!.length === 25 && resultLines(many, 0, true, plain)!.at(-1) === "     l24", "ctrl+o shows every line, like Claude's detailed transcript (m4d-bash-rows: lines 0-5184 on screen)");
 	check(displayOutput("partial\n\n\nCommand exited with code 3", () => undefined) === "partial" && displayOutput("(no output)\n\nCommand exited with code 7", () => undefined) === "", "pi's own exit-status line and empty-output placeholder leave the display; Claude's Error line replaces them");
 	check(displayOutput("(no output)", () => undefined) === "(No output)", "a good command with no output says Claude's \"(No output)\"");
+	check(resultLines("(No output)", 0, true, tagged)!.join("|") === `<muted>${RESULT_ELBOW}</muted><muted>(No output)</muted>`, "and draws it grey, like Claude's detailed transcript (m4c-long-line)");
 	const tail = "8000\r\n9999\r\n\n[Showing lines 8001-10000 of 10000. Full output: C:\\Temp\\pi-bash-x.log]";
 	check(displayOutput(tail, (path) => (path === "C:\\Temp\\pi-bash-x.log" ? "0\r\n1\r\n" : undefined)) === "0\r\n1\r\n", "a cut output shows the head of the full output file, like Claude's display, with no truncation marker");
 	check(displayOutput(tail, () => undefined) === "8000\r\n9999","a missing full output file falls back to pi's kept tail without its bracket");

@@ -1,5 +1,5 @@
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
-import { truncateToWidth } from "@earendil-works/pi-tui";
+import { matchesKey, truncateToWidth, visibleWidth } from "@earendil-works/pi-tui";
 
 const ANSI = /\x1b\[[0-9;]*m/g;
 const SEPARATOR = " · ";
@@ -98,6 +98,27 @@ export function footerRows(line: string, modeRow: string | undefined, fleetHint:
 	return [...(second === undefined ? [line] : [line, second]).map((row) => GUTTER + row), ...fleetLines];
 }
 
+const TRANSCRIPT_STATUS = "verbose ";
+const TRANSCRIPT_KEYS = "↑↓ scroll · v to open in notepad · ? for shortcuts";
+
+export function transcriptOn(): boolean {
+	return (globalThis as { __claudeTranscript?: boolean }).__claudeTranscript === true;
+}
+
+export function transcriptRows(width: number, paint: Paint): string[] {
+	const full = ["Showing detailed transcript", "ctrl+o to toggle", TRANSCRIPT_KEYS].join(SEPARATOR);
+	const keys = GUTTER.length + visibleWidth(full) + TRANSCRIPT_STATUS.length < width ? TRANSCRIPT_KEYS : "? for shortcuts";
+	const hint = truncateToWidth(["Showing detailed transcript", "ctrl+o to toggle", keys].join(SEPARATOR), Math.max(1, width - GUTTER.length - TRANSCRIPT_STATUS.length), "…");
+	const gap = Math.max(0, width - GUTTER.length - visibleWidth(hint) - TRANSCRIPT_STATUS.length);
+	return ["", `\x1b[2m${"─".repeat(width)}\x1b[22m`, GUTTER + paint("muted", hint) + " ".repeat(gap) + paint("muted", TRANSCRIPT_STATUS.trimEnd()) + " "];
+}
+
+export function transcriptKey(data: string): "exit" | "swallow" | undefined {
+	if (data === "q" || matchesKey(data, "escape")) return "exit";
+	if (matchesKey(data, "up") || matchesKey(data, "down") || matchesKey(data, "enter") || /^[^\x00-\x1f\x7f]+$/.test(data)) return "swallow";
+	return undefined;
+}
+
 export default function (pi: ExtensionAPI) {
 	let usage: Usage | undefined;
 	let dialogOpen = false;
@@ -113,11 +134,18 @@ export default function (pi: ExtensionAPI) {
 	pi.on("session_start", (_event, ctx) => {
 		usage = lastUsage(ctx.sessionManager.getBranch() as Entry[]);
 		if (!ctx.hasUI) return;
+		ctx.ui.onTerminalInput((data: string) => {
+			if (!transcriptOn()) return undefined;
+			const key = transcriptKey(data);
+			if (key === "exit") ctx.ui.setToolsExpanded(false);
+			return key ? { consume: true } : undefined;
+		});
 		ctx.ui.setFooter((_tui, theme, footerData) => {
 			const paint: Paint = (role, text) => theme.fg(role as never, text);
 			return {
 				render(fullWidth: number) {
 					if (dialogOpen) return [];
+					if (transcriptOn()) return transcriptRows(fullWidth, paint);
 					const width = Math.max(1, fullWidth - GUTTER.length);
 					const statuses = footerData.getExtensionStatuses();
 					const line = composeFooter(
@@ -201,5 +229,10 @@ if (process.env.CLAUDE_FOOTER_SELFTEST) {
 	(globalThis as Record<symbol, unknown>)[Symbol.for("pi-subagents:manager")] = { fleetLines: (width: number) => [`w${width}`], fleetHint: () => "hint" };
 	check(fleetRegistry()?.fleetLines?.(132, {})[0] === "w132" && fleetRegistry()?.fleetHint?.({}) === "hint", "the list and the hint come off the pi-subagents cross-package registry");
 	delete (globalThis as Record<symbol, unknown>)[Symbol.for("pi-subagents:manager")];
+	const bar = transcriptRows(132, plain);
+	check(bar[0] === "" && bar[1] === `\x1b[2m${"─".repeat(132)}\x1b[22m`, "ctrl+o: a blank row, then a dim rule edge to edge where the prompt box was");
+	check(bar[2] === `  Showing detailed transcript · ctrl+o to toggle · ↑↓ scroll · v to open in notepad · ? for shortcuts${" ".repeat(23)}verbose `, "the hint row is Claude 2.1.283's, with verbose flush right one column in (measured m5a-measure-ctrlo)");
+	check(transcriptRows(90, plain)[2].startsWith("  Showing detailed transcript · ctrl+o to toggle · ? for shortcuts ") && visibleWidth(transcriptRows(90, plain)[2]) === 90, "too narrow for the scroll keys: Claude's mN keeps only ? for shortcuts");
+	check(transcriptKey("q") === "exit" && transcriptKey("\x1b") === "exit" && transcriptKey("x") === "swallow" && transcriptKey("\x1b[A") === "swallow" && transcriptKey("\x0f") === undefined && transcriptKey("\x03") === undefined, "q and esc leave the transcript; typing goes nowhere; ctrl+o and ctrl+c still reach pi");
 	console.log("\nAll claude-footer checks passed.");
 }

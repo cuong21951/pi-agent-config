@@ -1,4 +1,4 @@
-import { dirname, join, resolve } from "node:path";
+import { dirname, isAbsolute, join, resolve } from "node:path";
 import { getAgentDir } from "@earendil-works/pi-coding-agent";
 import { visibleWidth, wrapTextWithAnsi } from "@earendil-works/pi-tui";
 import { isAbort, isRejected, thoughtText } from "./rows.ts";
@@ -43,7 +43,6 @@ export const WRITE_TOOLS = new Set(["write", "edit"]);
 const ELBOW = "  ⎿  ";
 const RESULT_ELBOW = "  ⎿ \u00a0";
 const WRITE_PREVIEW_LINES = 10;
-const EXPANDED_OUTPUT_LINES = 20;
 
 const SEP = /[\\/]/g;
 const asKey = (path: string) => path.replace(SEP, "/").toLowerCase();
@@ -65,6 +64,13 @@ function shortPath(value: unknown, s: Roots): string {
 		if (root !== "" && asKey(raw).startsWith(`${root}/`)) return prefix + native(raw.slice(root.length + 1));
 	}
 	return native(raw);
+}
+
+export function fullPath(value: unknown, s: Roots): string {
+	const raw = typeof value === "string" ? value : "";
+	if (raw === "") return "";
+	const sep = s.home.includes("\\") ? "\\" : "/";
+	return (isAbsolute(raw) ? raw : join(s.cwd, raw)).replace(SEP, sep);
 }
 
 // ponytail: Claude names the thing, not the tool: "Reading a.txt", "Searched "foo"".
@@ -100,10 +106,56 @@ function callLabel(tool: string, args: Record<string, unknown>): string {
 	return tool === "edit" && editCreation(args) ? "Create" : (LABEL[tool] ?? tool);
 }
 
-export function writeCallLine(tool: string, args: Record<string, unknown>, s: Style, failed = false): string {
+export function writeCallLine(tool: string, args: Record<string, unknown>, s: Style, failed = false, verbose = false): string {
 	const dot = s.fg(failed ? "error" : "borderAccent", "● ");
 	if (isPlanFile(args.path)) return dot + s.bold("Updated plan");
-	return dot + s.bold(callLabel(tool, args)) + `(${shortPath(args.path, s)})`;
+	return dot + s.bold(callLabel(tool, args)) + `(${verbose ? fullPath(args.path, s) : shortPath(args.path, s)})`;
+}
+
+const STAMP_TIME = new Intl.DateTimeFormat("en-US", { hour: "2-digit", minute: "2-digit", hourCycle: "h12" });
+const MODEL_TAIL = 8;
+
+export function stampRow(timestamp: number, model: string, width: number, s: Style): string {
+	const text = `${STAMP_TIME.format(new Date(timestamp))} ${model}${" ".repeat(MODEL_TAIL)}`;
+	return " ".repeat(Math.max(0, width - visibleWidth(text))) + s.fg("muted", text.trimEnd()) + " ".repeat(MODEL_TAIL);
+}
+
+export function thinkingRows(content: ReadonlyArray<{ type: string; thinking?: string }>, width: number, s: Style): string[] {
+	const text = content
+		.filter((block) => block.type === "thinking" && (block.thinking ?? "").trim() !== "")
+		.map((block) => (block.thinking ?? "").trim())
+		.join("\n\n");
+	if (text === "") return [];
+	const room = Math.max(1, width - 2);
+	const dim = (line: string) => (line === "" ? "" : DIM + line + UNDIM);
+	const listed = (line: string, first: boolean) => {
+		const marker = first ? line.match(/^\d+\. /)?.[0] : undefined;
+		return marker ? s.fg("muted", marker) + dim(line.slice(marker.length)) : dim(line);
+	};
+	return text
+		.split("\n")
+		.flatMap((line) => (line.trim() === "" ? [""] : wrapTextWithAnsi(line, room).map((piece, i) => listed(piece, i === 0))))
+		.map((line, i) => (i === 0 ? s.fg("muted", "\x1b[3m∴ \x1b[23m") : "  ") + line);
+}
+
+function searchInput(args: Record<string, unknown>): string {
+	const path = typeof args.path === "string" && args.path !== "" ? `, path: "${args.path}"` : "";
+	return `pattern: "${String(args.pattern ?? "")}"${path}`;
+}
+
+export function verboseCallLine(tool: string, args: Record<string, unknown>, s: Style, failed = false): string {
+	const dot = s.fg(failed ? "error" : "borderAccent", "● ");
+	switch (tool) {
+		case "read":
+			return dot + s.bold("Read") + `(${fullPath(args.path, s)})`;
+		case "grep":
+		case "find":
+			return dot + s.bold("Search") + `(${searchInput(args)})`;
+		case "ls":
+			return dot + s.bold("Bash") + `(ls ${typeof args.path === "string" && args.path !== "" ? args.path : "."})`;
+		default:
+			return dot + s.bold(tool);
+	}
 }
 
 function rejectedLine(tool: string, args: Record<string, unknown>, s: Style): string {
@@ -142,18 +194,19 @@ function grepDisplayText(outcome: ToolOutcome): string {
 	return outcome.text.includes(notice) ? outcome.text.replace(notice, "(Results are truncated. Consider using a more specific path or pattern.)") : outcome.text;
 }
 
-export function summary(tool: string, args: Record<string, unknown>, outcome: ToolOutcome, s: Style): string {
+export function summary(tool: string, args: Record<string, unknown>, outcome: ToolOutcome, s: Style, verbose = false): string {
+	const named = (value: unknown) => (verbose ? fullPath(value, s) : shortPath(value, s));
 	switch (tool) {
 		case "read":
-			return `Read ${plural(lineCount(readDisplayText(outcome.text)), "line")}`;
+			return `Read ${plural(lineCount(readDisplayText(outcome.text)), "line", undefined, s.bold)}`;
 		case "write":
-			return `Wrote ${plural(lineCount(String(args.content ?? "")), "line", undefined, s.bold)} to ${s.bold(shortPath(args.path, s))}`;
+			return `Wrote ${plural(lineCount(String(args.content ?? "")), "line", undefined, s.bold)} to ${s.bold(named(args.path))}`;
 		case "edit": {
 			const lines = diffLines(outcome.details);
 			const added = lines.filter((line) => line.startsWith("+")).length;
 			const removed = lines.filter((line) => line.startsWith("-")).length;
 			// ponytail: a missing diff is not a zero-change edit; saying so would misreport the tool.
-			if (added === 0 && removed === 0) return `Updated ${s.bold(shortPath(args.path, s))}`;
+			if (added === 0 && removed === 0) return `Updated ${s.bold(named(args.path))}`;
 			const counts = [
 				[added, "added"],
 				[removed, "removed"],
@@ -165,9 +218,9 @@ export function summary(tool: string, args: Record<string, unknown>, outcome: To
 				.replace(/^./, (first) => first.toUpperCase());
 		}
 		case "grep":
-			return lineCount(outcome.text) === 0 ? "No matches found" : `Found ${plural(lineCount(outcome.text), "line")}`;
+			return lineCount(outcome.text) === 0 ? "No matches found" : `Found ${plural(lineCount(outcome.text), "line", undefined, s.bold)}`;
 		case "find":
-			return lineCount(outcome.text) === 0 ? "No files found" : `Found ${plural(lineCount(outcome.text), "file")}`;
+			return lineCount(outcome.text) === 0 ? "No files found" : `Found ${plural(lineCount(outcome.text), "file", undefined, s.bold)}`;
 		default:
 			return `Listed ${plural(lineCount(outcome.text), "entry", "entries")}`;
 	}
@@ -540,10 +593,11 @@ function writeBody(tool: string, args: Record<string, unknown>, outcome: ToolOut
 	return [...shown, ...more(all.length - shown.length)];
 }
 
-function outputRows(text: string, hint: string): Row[] {
-	const lines = text.replace(/\n$/, "").split("\n");
-	const shown = lines.slice(0, EXPANDED_OUTPUT_LINES);
-	return [...shown.map((line) => ({ kind: "muted" as RowKind, text: `    ${line}` })), ...more(lines.length - shown.length, hint)];
+function outputRows(text: string): Row[] {
+	return text
+		.replace(/\n$/, "")
+		.split("\n")
+		.map((line) => ({ kind: "muted" as RowKind, text: `     ${line}` }));
 }
 
 export interface Result {
@@ -570,10 +624,9 @@ export function resultRows(tool: string, args: Record<string, unknown>, outcome:
 		return { head: elbow + s.fg("error", first), rows, indent: 0 };
 	}
 	if (write && isPlanFile(args.path)) return { head: s.fg("muted", `${RESULT_ELBOW}/plan to preview`), rows: [], indent: 0 };
-	if (write) return { head: elbow + summary(tool, args, outcome, s), rows: writeBody(tool, args, outcome, view, s), indent: RESULT_ELBOW.length };
-	if ((tool === "grep" || tool === "find") && lineCount(outcome.text) === 0) return { head: elbow + summary(tool, args, outcome, s), rows: [], indent: 0 };
-	const output = tool === "read" ? convertLeadingTabs(readDisplayText(outcome.text)) : tool === "grep" ? grepDisplayText(outcome) : outcome.text;
-	return { head: elbow + summary(tool, args, outcome, s), rows: outputRows(output, view.hint), indent: 0 };
+	if (write) return { head: elbow + summary(tool, args, outcome, s, view.expanded), rows: writeBody(tool, args, outcome, view, s), indent: RESULT_ELBOW.length };
+	if (tool === "read" || ((tool === "grep" || tool === "find") && lineCount(outcome.text) === 0)) return { head: elbow + summary(tool, args, outcome, s), rows: [], indent: 0 };
+	return { head: elbow + summary(tool, args, outcome, s), rows: outputRows(tool === "grep" ? grepDisplayText(outcome) : outcome.text), indent: 0 };
 }
 
 if (process.env.CLAUDE_TOOLS_SELFTEST) {
@@ -600,12 +653,12 @@ if (process.env.CLAUDE_TOOLS_SELFTEST) {
 	check(noMatches.head === "  ⎿  No matches found" && noMatches.rows.length === 0, "an empty Grep shows no body under its already-matching \"No matches found\" line");
 	const truncated = resultRows("grep", { pattern: "x" }, ok("a.ts:1: x\n\n[20 matches limit reached. Use limit=40 for more, or refine pattern]", { matchLimitReached: 20 }), view(true), plain)!;
 	check(
-		truncated.rows.at(-1)?.text === "    (Results are truncated. Consider using a more specific path or pattern.)",
+		truncated.rows.at(-1)?.text === "     (Results are truncated. Consider using a more specific path or pattern.)",
 		"pi's own \"N matches limit reached\" notice is swapped for Claude's unknown-total wording, the only variant pi's core can support since it never learns the true total",
 	);
 	const readNote = "line 1\nline 2\n\n[Showing lines 1-2 of 5000. Use offset=2 to continue.]";
 	const readCapped = resultRows("read", { path: "a" }, ok(readNote), view(true), plain)!;
-	check(readCapped.head === "  ⎿  Read 2 lines" && readCapped.rows.map((r) => r.text).join("|") === "    line 1|    line 2", "a capped Read drops pi's visible continuation bracket, like Claude's hidden system-reminder the user never sees");
+	check(readCapped.head === "  ⎿  Read 2 lines" && readCapped.rows.length === 0, "a capped Read counts without pi's visible continuation bracket, like Claude's hidden system-reminder the user never sees");
 	const readByteNote = "line 1\n\n[Showing lines 1-1 of 5000 (50KB limit). Use offset=1 to continue.]";
 	check(readDisplayText(readByteNote) === "line 1", "the byte-limited variant of the continuation bracket is dropped too");
 
@@ -621,10 +674,20 @@ if (process.env.CLAUDE_TOOLS_SELFTEST) {
 	check(resultRows("write", { path: "/home/me/proj/n.ts", content: "x" }, declined, view(), plain)!.head === "  ⎿ \u00a0User rejected write to n.ts" && resultRows("edit", { path: "/home/me/proj/n.ts", edits: [{ oldText: "", newText: "x" }] }, declined, view(), plain)!.head.endsWith("User rejected write to n.ts"), "a declined Write, or an Update that creates a file, says write");
 	check(resultRows("read", { path: "a" }, ok("l1\nl2\nl3\n"), view(), plain) === null, "collapsed read result draws nothing");
 	check(resultRows("read", { path: "a" }, { text: "Operation aborted", isError: true }, view(), plain) === null, "an aborted tool draws no error row (pi core prints Interrupted)");
-	const expanded = resultRows("read", { path: "a" }, ok("l1\nl2"), view(true), plain)!;
-	check(expanded.head === "  ⎿ \u00a0Read 2 lines" && expanded.rows.map((r) => r.text).join("|") === "    l1|    l2", "expanded read shows elbow, summary and output");
-	const tabbedRead = resultRows("read", { path: "a" }, ok("\tx\nl2"), view(true), plain)!;
-	check(tabbedRead.rows.map((r) => r.text).join("|") === "      x|    l2", "an expanded read converts a leading tab in the file content to two spaces, like the Update diff and Write preview");
+	const expanded = resultRows("read", { path: "a" }, ok("l1\nl2"), view(true), tagged)!;
+	check(expanded.head === "<muted>  ⎿ \u00a0</muted>Read <b>2</b> lines" && expanded.rows.length === 0, "ctrl+o on a read is Claude's detailed-transcript Read: the bold count under the elbow and no file body (m5a-measure-ctrlo)");
+	const grepRows = resultRows("grep", { pattern: "x" }, ok(Array.from({ length: 30 }, (_, i) => `a.ts:${i}: x`).join("\n")), view(true), plain)!;
+	check(grepRows.rows.length === 30 && grepRows.rows[0].text === "     a.ts:0: x", "ctrl+o on a search shows every match five columns in, no +N lines cap");
+	check(verboseCallLine("read", { path: "src/a.ts" }, tagged) === "<borderAccent>● </borderAccent><b>Read</b>(/home/me/proj/src/a.ts)", "ctrl+o names a read with its absolute path, Claude's verbose Read(file_path)");
+	check(verboseCallLine("grep", { pattern: "export function", path: "src" }, plain) === '● Search(pattern: "export function", path: "src")' && verboseCallLine("find", { pattern: "*.ts" }, plain) === '● Search(pattern: "*.ts")', "a search is Claude's n7: pattern, then the path as given when there is one");
+	check(verboseCallLine("ls", { path: "src" }, plain) === "● Bash(ls src)" && verboseCallLine("read", { path: "a" }, tagged, true).startsWith("<error>● </error>"), "ls is the Bash(ls …) the harness maps it to; a failed call gets the red dot");
+	check(writeCallLine("edit", { path: "src/b.ts" }, { ...plain, home: "C:\\Users\\me", cwd: "C:\\Work" }, false, true) === "● Update(C:\\Work\\src\\b.ts)", "ctrl+o names an edit by its absolute path with the platform separator");
+	check(stampRow(Date.UTC(2026, 8, 28, 12, 5), "claude-haiku-4.5", 60, plain).length === 60 && stampRow(Date.UTC(2026, 8, 28, 12, 5), "claude-haiku-4.5", 60, plain).endsWith(" claude-haiku-4.5        "), "the transcript stamp sits flush right with Claude's minWidth model box (model + 8 columns)");
+	check(/^ +\d\d:\d\d [AP]M claude-haiku-4\.5 {8}$/.test(stampRow(Date.UTC(2026, 8, 28, 12, 5), "claude-haiku-4.5", 60, plain)), "and reads hh:mm AM/PM, hour two digits (Claude's dR)");
+	const thought = thinkingRows([{ type: "thinking", thinking: "alpha beta gamma" }, { type: "text" }], 12, plain);
+	check(thought.join("|") === "\x1b[3m∴ \x1b[23m\x1b[2malpha beta\x1b[22m|  \x1b[2mgamma\x1b[22m", "ctrl+o shows the thinking: italic ∴, the text dim, continuation rows hang two columns");
+	check(thinkingRows([{ type: "text" }], 40, plain).length === 0, "no thinking, no rows");
+	check(thinkingRows([{ type: "thinking", thinking: "Plan:\n1. Run it" }], 40, tagged)[1] === "  <muted>1. </muted>\x1b[2mRun it\x1b[22m", "a numbered step keeps its number grey and upright, the step itself dim (m4c-long-line)");
 	check(resultRows("read", { path: "a" }, ok(""), { ...view(), isPartial: true }, tagged) === null, "a running read draws no rows of its own: the active group row carries its hint");
 	check(resultRows("write", { path: "a" }, ok(""), { ...view(), isPartial: true }, plain)!.head === "  ⎿  …", "a running write keeps its own elbow row");
 	check(resultRows("read", {}, { text: "ENOENT\nmore", isError: true, details: undefined }, view(), tagged) === null, "a failed read folds into the group like any other call; its row draws nothing");
