@@ -40,7 +40,12 @@ Exit: same as M4, plus a `PI_TUI_DEBUG_REDRAW=1` live run with no `firstChanged 
 
 ## M6 — Class B features (Cuong decides per item before work starts)
 
-Todo list and ctrl+t, background bash with its notice, ctrl+r history search, `/mcp`, `/context`, `/usage`, `/status`, `/resume` picker, light theme and `NO_COLOR`, Claude's no-scrollback screen model. Each item is either built (with its scenario) or moved to the README ledger as an exception with its measurement.
+Todo list and ctrl+t, background bash with its notice, ctrl+r history search, `/mcp`, `/context`, `/usage`, `/status`, `/resume` picker, light theme and `NO_COLOR`. Each item is either built (with its scenario) or moved to the README ledger as an exception with its measurement.
+
+## M6b — Claude's screen model, no terminal scrollback (Cuong decided 2026-09-28: build it, tested hard)
+
+Claude 2.1.283 keeps the overflow out of terminal scrollback (pyte `history.top` stays 0), pi writes it to scrollback. First measure exactly what Claude does (alt screen or not, what scrolls, how the transcript is reached again, mouse wheel, resize, ctrl+o, exit), write the rules into the README ledger, then port.
+Exit: a scenario set at 132x60, 80x24 and 60x40 with transcripts taller than the screen, resize mid-stream and mid-tool, and exit, all clean against Claude; zero `firstChanged < viewportTop` redraws in a `PI_TUI_DEBUG_REDRAW=1` live run; `history.top` equal on both sides in every capture; suite clean twice. Only then does it go into M7.
 
 ## M7 — Land it (needs Cuong's go)
 
