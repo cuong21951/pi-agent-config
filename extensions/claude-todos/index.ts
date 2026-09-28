@@ -1,6 +1,6 @@
 import { StringEnum } from "@earendil-works/pi-ai";
 import type { ExtensionAPI, ExtensionContext, Theme } from "@earendil-works/pi-coding-agent";
-import { Text } from "@earendil-works/pi-tui";
+import { matchesKey, Text } from "@earendil-works/pi-tui";
 import { Type } from "typebox";
 
 export type TaskStatus = "pending" | "in_progress" | "completed";
@@ -407,12 +407,14 @@ export default function (pi: ExtensionAPI) {
 		},
 	});
 
-	pi.registerShortcut("ctrl+t", {
-		description: "Toggle the task list",
-		handler: () => {
+	pi.on("session_start", (_event, ctx) => {
+		if (!ctx.hasUI) return;
+		ctx.ui.onTerminalInput((data: string) => {
+			if (!matchesKey(data, "ctrl+t")) return undefined;
 			expanded = !expanded;
 			redraw();
-		},
+			return { consume: true };
+		});
 	});
 }
 
