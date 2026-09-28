@@ -1,7 +1,7 @@
 import { dirname, join, resolve } from "node:path";
 import { getAgentDir } from "@earendil-works/pi-coding-agent";
 import { visibleWidth, wrapTextWithAnsi } from "@earendil-works/pi-tui";
-import { isAbort, thoughtText } from "./rows.ts";
+import { isAbort, isRejected, thoughtText } from "./rows.ts";
 
 export type Paint = (role: string, text: string) => string;
 export interface Roots {
@@ -104,6 +104,11 @@ export function writeCallLine(tool: string, args: Record<string, unknown>, s: St
 	const dot = s.fg(failed ? "error" : "borderAccent", "● ");
 	if (isPlanFile(args.path)) return dot + s.bold("Updated plan");
 	return dot + s.bold(callLabel(tool, args)) + `(${shortPath(args.path, s)})`;
+}
+
+function rejectedLine(tool: string, args: Record<string, unknown>, s: Style): string {
+	const operation = tool === "edit" && !editCreation(args) ? "update" : "write";
+	return s.fg("dim", `User rejected ${operation} to `) + s.fg("dim", s.bold(shortPath(args.path, s)));
 }
 
 function editErrorText(text: string): string {
@@ -554,6 +559,7 @@ export function resultRows(tool: string, args: Record<string, unknown>, outcome:
 	if (view.isPartial) return write ? { head: s.fg("muted", ELBOW) + s.fg("muted", "…"), rows: [], indent: 0 } : null;
 	const elbow = s.fg("muted", RESULT_ELBOW);
 	if (outcome.isError && isAbort(outcome.text)) return null;
+	if (write && outcome.isError && isRejected(outcome.text)) return { head: elbow + rejectedLine(tool, args, s), rows: [], indent: 0 };
 	if (!write && !view.expanded) return null;
 	if (outcome.isError && tool === "edit" && !view.expanded) return { head: elbow + s.fg("error", editErrorText(outcome.text)), rows: [], indent: 0 };
 	if (outcome.isError) {
@@ -610,6 +616,9 @@ if (process.env.CLAUDE_TOOLS_SELFTEST) {
 	check(writeCallLine("edit", { path: "C:/Users/me/.pi/x.ts" }, win) === "● Update(~\\.pi\\x.ts)", "Windows: pi's forward slashes still match home, and the row uses backslashes");
 	check(writeCallLine("edit", { path: "C:/Work/src/b.ts" }, win) === "● Update(src\\b.ts)", "Windows: inside the working directory wins over ~");
 
+	const declined = { text: "The user doesn't want to proceed with this tool use. The tool use was rejected (eg. if it was a file edit, the new_string was NOT written to the file). STOP what you are doing and wait for the user to tell you how to proceed.", isError: true };
+	check(resultRows("edit", { path: "/home/me/proj/src/app.ts", edits: [{ oldText: "a", newText: "b" }] }, declined, view(), tagged)!.head === "<muted>  ⎿ \u00a0</muted><dim>User rejected update to </dim><dim><b>src/app.ts</b></dim>", "a declined Update is Claude's grey \"User rejected update to\" + bold path, not an error row");
+	check(resultRows("write", { path: "/home/me/proj/n.ts", content: "x" }, declined, view(), plain)!.head === "  ⎿ \u00a0User rejected write to n.ts" && resultRows("edit", { path: "/home/me/proj/n.ts", edits: [{ oldText: "", newText: "x" }] }, declined, view(), plain)!.head.endsWith("User rejected write to n.ts"), "a declined Write, or an Update that creates a file, says write");
 	check(resultRows("read", { path: "a" }, ok("l1\nl2\nl3\n"), view(), plain) === null, "collapsed read result draws nothing");
 	check(resultRows("read", { path: "a" }, { text: "Operation aborted", isError: true }, view(), plain) === null, "an aborted tool draws no error row (pi core prints Interrupted)");
 	const expanded = resultRows("read", { path: "a" }, ok("l1\nl2"), view(true), plain)!;

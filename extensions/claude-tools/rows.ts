@@ -152,6 +152,10 @@ export function isAbort(text: string | undefined): boolean {
 	return /^(Error: )?(This operation was|Operation|Command) aborted\.?$/i.test((text ?? "").trim());
 }
 
+export function isRejected(text: string | undefined): boolean {
+	return (text ?? "").startsWith("The user doesn't want to proceed with this tool use.");
+}
+
 export function blinkOn(now = Date.now()): boolean {
 	return Math.floor(now / BLINK_MS) % 2 === 0;
 }
@@ -764,6 +768,7 @@ if (process.env.CLAUDE_ROWS_SELFTEST) {
 	check(summaryFor(thoughtId({ timestamp: 1 })) === "" && summaryFor("t2") === "" && summaryFor(thoughtId({ timestamp: 3 })) === "  Thought for 2s, read 1 file", "the last member draws the line, even when it is the thought");
 	check(summaryFor(thoughtId({ timestamp: 4 })) === null && !hasThought([thinking(" ")]), "a blank thinking block is no thought");
 	check(!isAbort("boom") && isAbort("Operation aborted\n") && isAbort("Command aborted") && isAbort("This operation was aborted") && !isAbort(undefined), "abort text");
+	check(isRejected("The user doesn't want to proceed with this tool use. The tool use was rejected.") && !isRejected("boom") && !isRejected(undefined), "a declined permission ask is recognised by Claude's rejection text");
 	const resumed = [
 		{ type: "message", timestamp: at(20), message: { role: "user", content: "go" } },
 		{ type: "message", timestamp: at(22), message: { role: "assistant", timestamp: 5, content: [thinking("run it"), { type: "toolCall", id: "live1", name: "bash", arguments: { command: "sleep 5" } }] } },

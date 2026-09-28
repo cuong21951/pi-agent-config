@@ -473,7 +473,7 @@ export default function (pi: ExtensionAPI) {
 		if (!ctx.hasUI) return;
 		const kind = event.toolName as ToolKind;
 		const outcome = await askPermission(ctx, kind, input);
-		if (outcome === "no") return { block: true, reason: "Declined. Press shift+tab for bypass mode to stop being asked." };
+		if (outcome === "no") return { block: true, terminate: true, reason: rejectedResult("") };
 		if (outcome === "amend") {
 			if (kind === "bash") ctx.ui.setEditorText(command);
 			return { block: true, reason: "Amend the command, then resend it." };

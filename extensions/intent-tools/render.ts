@@ -1,4 +1,4 @@
-import { clip, isAbort } from "../claude-tools/rows.ts";
+import { clip, isAbort, isRejected } from "../claude-tools/rows.ts";
 
 export type Style = { fg: (role: string, text: string) => string; bold: (text: string) => string };
 
@@ -52,6 +52,10 @@ export function resultLines(output: string, exitCode: number | null, expanded: b
 	return [...shown, ...more];
 }
 
+export function rejectedLines(output: string, s: Style): string[] | null {
+	return isRejected(output) ? [s.fg("muted", `${RESULT_ELBOW}Interrupted · What should Claude do instead?`)] : null;
+}
+
 if (process.env.INTENT_TOOLS_SELFTEST) {
 	const check = (ok: boolean, msg: string) => {
 		if (!ok) throw new Error(`FAIL: ${msg}`);
@@ -74,6 +78,7 @@ if (process.env.INTENT_TOOLS_SELFTEST) {
 	check(resultLines("partial", 3, true, tagged)!.join("|") === `<muted>${RESULT_ELBOW}</muted><error>Error: Exit code 3</error>|     <error>partial</error>`, "ctrl+o on a failed command: Claude's red \"Error: Exit code N\" under the elbow, then the output in red, no ✗");
 	check(resultLines("", 7, true, plain)!.join("|") === `${RESULT_ELBOW}Error: Exit code 7`, "a failed command with no output is the one error line");
 	check(resultLines("a\r\nb\r\n", 0, true, tagged)!.join("|") === `<muted>${RESULT_ELBOW}</muted>a|     b`, "ctrl+o on a good command: the first line sits on the elbow row, the rest five columns in, default colour");
+	check(rejectedLines("The user doesn't want to proceed with this tool use. The tool use was rejected.", tagged)!.join("|") === `<muted>${RESULT_ELBOW}Interrupted · What should Claude do instead?</muted>` && rejectedLines("ok", plain) === null, "a declined bash ask is Claude's grey Interrupted row, collapsed or not");
 	const many = Array.from({ length: 25 }, (_, i) => `l${i}`).join("\n");
 	check(resultLines(many, 0, true, plain)!.at(-1) === "     … +5 lines", "expanded caps at 20");
 	check(displayOutput("partial\n\n\nCommand exited with code 3", () => undefined) === "partial" && displayOutput("(no output)\n\nCommand exited with code 7", () => undefined) === "", "pi's own exit-status line and empty-output placeholder leave the display; Claude's Error line replaces them");

@@ -2,7 +2,7 @@ import { createBashTool, type ExtensionAPI } from "@earendil-works/pi-coding-age
 import { truncateToWidth } from "@earendil-works/pi-tui";
 import { closeSync, openSync, readSync } from "node:fs";
 import { describeTool, dynamic, failed, finished, groupRow, joinOnExecute, watch } from "../claude-tools/rows.ts";
-import { CLAUDE_BASH_MAX_CHARS, commandBody, DEFAULT_TIMEOUT_SECONDS, describeBash, displayOutput, doneLine, resultLines, withDefaultTimeout } from "./render.ts";
+import { CLAUDE_BASH_MAX_CHARS, commandBody, DEFAULT_TIMEOUT_SECONDS, describeBash, displayOutput, doneLine, rejectedLines, resultLines, withDefaultTimeout } from "./render.ts";
 
 // ponytail: map is only a fallback when the model omits `description`.
 // Claude's real mechanism is a model-supplied `description` field per bash call.
@@ -118,12 +118,14 @@ export default function (pi: ExtensionAPI) {
 		},
 
 		renderResult(result, { expanded, isPartial }, theme, context) {
+			const content = result.content[0];
+			const output = content?.type === "text" ? content.text : "";
+			const rejected = isPartial ? null : rejectedLines(output, theme);
+			if (rejected) return dynamic((width) => rejected.map((line) => truncateToWidth(line, width)));
 			if (isPartial || !expanded) return dynamic(() => []);
 			const args = (context as { args?: { command?: unknown; description?: unknown } })?.args ?? {};
 			const command = String(args.command ?? "");
 			const intent = String(args.description ?? "").trim() || describe(command);
-			const content = result.content[0];
-			const output = content?.type === "text" ? content.text : "";
 			const exitMatch = output.match(/exit(?:ed with)? code:? (\d+)/);
 			const id = (context as { toolCallId?: string })?.toolCallId ?? "";
 			const exitCode = exitMatch ? parseInt(exitMatch[1], 10) : failed.has(id) ? 1 : null;
