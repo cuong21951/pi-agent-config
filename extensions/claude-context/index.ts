@@ -40,13 +40,18 @@ export default function (pi: ExtensionAPI) {
 			requestRender = () => tui.requestRender();
 			return {
 				render(width: number) {
-					const usage = ctx.getContextUsage();
-					const settings = settingsManager.getCompactionSettings();
-					const untilPercent = untilAutoCompactPercent(usage?.tokens ?? null, usage?.contextWindow, settings.reserveTokens);
-					const state = contextLowState(untilPercent, settings.enabled);
-					if (state === "none" || untilPercent === null) return [];
-					const role = state === "critical" ? "error" : "muted";
-					return [noticeRow(contextLowText(state, untilPercent), width, (text) => theme.fg(role as never, text))];
+					if ((globalThis as { __claudeTranscript?: boolean }).__claudeTranscript === true) return [];
+					try {
+						const usage = ctx.getContextUsage();
+						const settings = settingsManager.getCompactionSettings();
+						const untilPercent = untilAutoCompactPercent(usage?.tokens ?? null, usage?.contextWindow, settings.reserveTokens);
+						const state = contextLowState(untilPercent, settings.enabled);
+						if (state === "none" || untilPercent === null) return [];
+						const role = state === "critical" ? "error" : "muted";
+						return [noticeRow(contextLowText(state, untilPercent), width, (text) => theme.fg(role as never, text))];
+					} catch {
+						return [];
+					}
 				},
 				invalidate() {},
 			};

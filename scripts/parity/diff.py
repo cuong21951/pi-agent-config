@@ -13,6 +13,7 @@ VOLATILE = [
     (DURATION := re.compile(r"\b(?:\d+d )?(?:\d+h )?(?:\d+m )?\d+(?:\.\d+)?s\b"), "<n>s"),
     (re.compile(r"↓ \d+(?:\.\d+)?k? tokens"), "↓ <n> tokens"),
     (re.compile(r"^(<spinner> <verb>…)(?: \(.*\))?$"), r"\1 <status>"),
+    (re.compile(r"\b\d{2}:\d{2} [AP]M(?= \S+$)"), "<clock>"),
 ]
 
 
@@ -42,6 +43,8 @@ ROWS = [
      re.compile(r"^ +\(ctrl\+b to run in background\)$"), None, None),
     ("slash-menu inventory: Claude's built-ins (/code-review, /doctor) vs Cuong's pi skills fuzzy-matching the same query",
      re.compile(r"^  /(?:code-review|doctor) "), re.compile(r"^  /skill:\S+ "), re.compile(r"^ {32}\S")),
+    ("session-start notice: each harness's own SessionStart line (Claude's agents-md hook, pi's Ponytail loader), drawn after the history on a resume",
+     re.compile(r"^● agents-md: "), re.compile(r"^● Ponytail loaded: "), None),
 ]
 
 
@@ -90,8 +93,9 @@ def normalise(text):
 
 def regions(lines):
     texts = [line["text"].rstrip() for line in lines]
-    prompt = max((i for i, t in enumerate(texts) if t.strip() == "❯" or PLACEHOLDER.match(t)), default=len(texts))
-    start = next((i for i, t in enumerate(texts[:prompt]) if re.match(r"^❯ \S", t)), prompt)
+    prompt_rows = [i for i, t in enumerate(texts) if t.strip() == "❯" or PLACEHOLDER.match(t)]
+    prompt = max(prompt_rows, default=len(texts))
+    start = next((i for i, t in enumerate(texts[:prompt]) if re.match(r"^❯ \S", t)), prompt if prompt_rows else 0)
     start = max((i for i, t in enumerate(texts[:prompt]) if t.startswith("▔")), default=start)
     rule = prompt - 1 if prompt > 0 and texts[prompt - 1].startswith("─") else prompt
     above = max(start, rule - 2)
