@@ -34,7 +34,9 @@
       "./extensions/claude-commands",
       "./extensions/claude-keys",
       "./extensions/claude-slash-menu",
-      "./extensions/claude-panels"
+      "./extensions/claude-history",
+      "./extensions/claude-panels",
+      "./extensions/claude-resume"
     ]
   }
 }
