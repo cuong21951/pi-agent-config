@@ -1,3 +1,4 @@
+import { wrapTextWithAnsi } from "@earendil-works/pi-tui";
 import type { Mode } from "./modes.ts";
 
 export type Paint = (role: string, text: string) => string;
@@ -52,11 +53,24 @@ function paintToken(token: Token, selected: boolean): string {
 	return `${selected ? ACCENT : ""}${token.bold ? BOLD : ""}${token.text}${RESET}`;
 }
 
-export function optionRow(index: number, tokens: Token[], selected: boolean, paint: Paint): string {
+function optionPrefix(index: number, selected: boolean, paint: Paint): string {
 	const arrow = selected ? `${ACCENT}❯${RESET}` : " ";
-	const number = paint("muted", `${index + 1}.`);
-	const label = tokens.map((token) => paintToken(token, selected)).join("");
-	return ` ${arrow} ${number} ${label}`;
+	return ` ${arrow} ${paint("muted", `${index + 1}.`)} `;
+}
+
+function optionLabel(tokens: Token[], selected: boolean): string {
+	return tokens.map((token) => paintToken(token, selected)).join("");
+}
+
+export function optionRow(index: number, tokens: Token[], selected: boolean, paint: Paint): string {
+	return optionPrefix(index, selected, paint) + optionLabel(tokens, selected);
+}
+
+const OPTION_HANG = "      ";
+
+export function optionRows(index: number, tokens: Token[], selected: boolean, paint: Paint, width: number): string[] {
+	const [first = "", ...rest] = wrapTextWithAnsi(optionLabel(tokens, selected), Math.max(1, width - OPTION_HANG.length));
+	return [optionPrefix(index, selected, paint) + first, ...rest.map((line) => OPTION_HANG + line)];
 }
 
 export function titleFor(kind: ToolKind, exists: boolean): string {
@@ -81,7 +95,7 @@ export function dialogRows(
 		...previewRows,
 		"",
 		QUESTION_ROW,
-		...tokens.map((token, index) => optionRow(index, token, index === selectedIndex, paint)),
+		...tokens.flatMap((token, index) => optionRows(index, token, index === selectedIndex, paint, width)),
 		"",
 		footerRow(paint),
 	];
@@ -236,14 +250,19 @@ if (process.env.CLAUDE_MODES_DIALOG_SELFTEST) {
 		"selected always-allow option keeps the bold target and turns the rest accent",
 	);
 
+	const narrow = optionRows(1, optionTokens("C:\\a\\very\\long\\work\\folder")[1]!, false, (_role, text) => text, 40);
+	check(
+		narrow.every((row) => row.replace(/\x1b\[[0-9;]*m/g, "").length <= 40) && narrow[1]!.startsWith("      ") && narrow.length > 1,
+		"an option longer than the dialog wraps under its label instead of overflowing the terminal (pi exited on a 136-column row at 132)",
+	);
 	check(titleFor("bash", false) === "Bash command", "bash title never varies by file existence");
 	check(titleFor("edit", false) === "Edit file", "edit title");
 	check(titleFor("write", false) === "Create file", "write title for a new file");
 	check(titleFor("write", true) === "Overwrite file", "write title for an existing file");
 
-	const rows = dialogRows("Bash command", ["   echo parity > marker.txt", "   <muted>Write a marker file</muted>"], "/repo", 0, 10, tag);
+	const rows = dialogRows("Bash command", ["   echo parity > marker.txt", "   <muted>Write a marker file</muted>"], "/repo", 0, 80, tag);
 	check(rows.length === 12, "dialog assembles rule, title, blank, 2 preview rows, blank, question, 3 options, blank, footer");
-	check(rows[0] === ruleRow(10) && rows[1] === titleRow("Bash command") && rows[2] === "", "rule, title, blank open the dialog");
+	check(rows[0] === ruleRow(80) && rows[1] === titleRow("Bash command") && rows[2] === "", "rule, title, blank open the dialog");
 	check(rows[6] === QUESTION_ROW && rows[11] === footerRow(tag), "question sits after the preview, footer closes the dialog");
 
 	const plain = (text: string) => text.replace(/\x1b\[[0-9;]*m|<\/?[a-z]+>/g, "");

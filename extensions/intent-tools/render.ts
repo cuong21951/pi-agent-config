@@ -36,7 +36,7 @@ export const CLAUDE_BASH_MAX_CHARS = 30000;
 export function displayOutput(output: string, readHead: (path: string) => string | undefined): string {
 	const body = output.replace(EXIT_STATUS, "");
 	const note = body.match(FULL_OUTPUT_NOTE);
-	if (!note) return body;
+	if (!note) return body === "(no output)" ? "(No output)" : body;
 	return (readHead(note[1]) ?? body.slice(0, note.index)).slice(0, CLAUDE_BASH_MAX_CHARS);
 }
 
@@ -82,6 +82,7 @@ if (process.env.INTENT_TOOLS_SELFTEST) {
 	const many = Array.from({ length: 25 }, (_, i) => `l${i}`).join("\n");
 	check(resultLines(many, 0, true, plain)!.at(-1) === "     … +5 lines", "expanded caps at 20");
 	check(displayOutput("partial\n\n\nCommand exited with code 3", () => undefined) === "partial" && displayOutput("(no output)\n\nCommand exited with code 7", () => undefined) === "", "pi's own exit-status line and empty-output placeholder leave the display; Claude's Error line replaces them");
+	check(displayOutput("(no output)", () => undefined) === "(No output)", "a good command with no output says Claude's \"(No output)\"");
 	const tail = "8000\r\n9999\r\n\n[Showing lines 8001-10000 of 10000. Full output: C:\\Temp\\pi-bash-x.log]";
 	check(displayOutput(tail, (path) => (path === "C:\\Temp\\pi-bash-x.log" ? "0\r\n1\r\n" : undefined)) === "0\r\n1\r\n", "a cut output shows the head of the full output file, like Claude's display, with no truncation marker");
 	check(displayOutput(tail, () => undefined) === "8000\r\n9999","a missing full output file falls back to pi's kept tail without its bracket");
