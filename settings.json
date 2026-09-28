@@ -42,7 +42,7 @@
   ],
   "skills": [
     "C:/Users/cuong/.pi/agent/git/github.com/badlogic/pi-skills/brave-search",
-    "C:/Users/cuong/.pi/agent/skills/browser-tools",
+    "skills/browser-tools",
     "C:/Users/cuong/.pi/agent/git/github.com/badlogic/pi-skills/gccli",
     "C:/Users/cuong/.pi/agent/git/github.com/badlogic/pi-skills/gdcli",
     "C:/Users/cuong/.pi/agent/git/github.com/badlogic/pi-skills/gmcli",
