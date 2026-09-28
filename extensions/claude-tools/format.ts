@@ -130,7 +130,7 @@ export function thinkingRows(content: ReadonlyArray<{ type: string; thinking?: s
 	const room = Math.max(1, width - 2);
 	const dim = (line: string) => (line === "" ? "" : DIM + line + UNDIM);
 	const listed = (line: string, first: boolean) => {
-		const marker = first ? line.match(/^\d+\. /)?.[0] : undefined;
+		const marker = first ? line.match(/^(?:\d+\.|-) /)?.[0] : undefined;
 		return marker ? s.fg("muted", marker) + dim(line.slice(marker.length)) : dim(line);
 	};
 	return text
@@ -716,6 +716,7 @@ if (process.env.CLAUDE_TOOLS_SELFTEST) {
 	check(thought.join("|") === "\x1b[3m∴ \x1b[23m\x1b[2malpha beta\x1b[22m|  \x1b[2mgamma\x1b[22m", "ctrl+o shows the thinking: italic ∴, the text dim, continuation rows hang two columns");
 	check(thinkingRows([{ type: "text" }], 40, plain).length === 0, "no thinking, no rows");
 	check(thinkingRows([{ type: "thinking", thinking: "Plan:\n1. Run it" }], 40, tagged)[1] === "  <muted>1. </muted>\x1b[2mRun it\x1b[22m", "a numbered step keeps its number grey and upright, the step itself dim (m4c-long-line)");
+	check(thinkingRows([{ type: "thinking", thinking: "First call:\n- command: echo ok" }], 40, tagged)[1] === "  <muted>- </muted>\x1b[2mcommand: echo ok\x1b[22m", "a bullet keeps its dash grey, the item dim (m5a-parallel-fail, Claude 2.1.283)");
 	check(resultRows("read", { path: "a" }, ok(""), { ...view(), isPartial: true }, tagged) === null, "a running read draws no rows of its own: the active group row carries its hint");
 	check(resultRows("write", { path: "a" }, ok(""), { ...view(), isPartial: true }, plain)!.head === "  ⎿  …", "a running write keeps its own elbow row");
 	check(resultRows("read", {}, { text: "ENOENT\nmore", isError: true, details: undefined }, view(), tagged) === null, "a failed read folds into the group like any other call; its row draws nothing");
