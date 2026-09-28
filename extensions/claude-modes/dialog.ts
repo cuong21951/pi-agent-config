@@ -44,7 +44,7 @@ export function optionTokens(target: string): Token[][] {
 	return [
 		[{ text: "Yes" }],
 		[{ text: "Yes, and always allow access to " }, { text: target, bold: true }, { text: " from this project" }],
-		[{ text: "No, and tell Claude what to do differently " }, { text: "(esc)", bold: true }],
+		[{ text: "No" }],
 	];
 }
 
@@ -235,8 +235,8 @@ if (process.env.CLAUDE_MODES_DIALOG_SELFTEST) {
 		"selected option 1: accent arrow, muted number, accent label",
 	);
 	check(
-		optionRow(2, tokens[2]!, false, tag) === `   <muted>3.</muted> No, and tell Claude what to do differently ${BOLD}(esc)${RESET}`,
-		"unselected option 3: no arrow, muted number, Claude's decline wording with (esc) bolded",
+		optionRow(2, tokens[2]!, false, tag) === "   <muted>3.</muted> No",
+		"unselected option 3: no arrow, muted number, plain label",
 	);
 	const always = optionRow(1, tokens[1]!, false, tag);
 	check(
