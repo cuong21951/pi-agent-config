@@ -55,3 +55,7 @@ Exit: a scenario set at 132x60, 80x24 and 60x40 with transcripts taller than the
 ## M7 — Land it (needs Cuong's go)
 
 Merge `parity-sandbox` into `main`, update the README ledger, push `origin main`. Running pi sessions pick it up only after a restart; say so.
+
+## Next round (deferred by Cuong 2026-09-29)
+
+Claude's `Monitor` tool; MCP and Fetch permission dialogs in manual mode (pi asks nothing, Claude asks); light theme and `NO_COLOR`; the send-now screen's queued-message placement (`m6a-sendnow` out of the suite); suite-diffed cases for the `/context`, `/usage`, `/status`, `/mcp` panels (selftest-only now); `/btw`; thinking markdown (inline code, nested lists) in the ctrl+o view; M6b.
