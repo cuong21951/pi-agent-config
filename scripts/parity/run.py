@@ -15,7 +15,7 @@ ap.add_argument("--scenario", default=None, help="scripts/parity/scenarios/<name
 ap.add_argument("--session", default=None, help="replay this pi session to Claude instead of the one pi just wrote")
 ap.add_argument("--replay", default=None, help="no model at all: pi re-renders this saved session and Claude replays it")
 ap.add_argument("--prompt", default=None)
-ap.add_argument("--claude", default=os.path.join(os.environ["USERPROFILE"], ".local", "bin", "claude.exe"))
+ap.add_argument("--claude", default=os.environ.get("PARITY_CLAUDE") or os.path.join(os.environ["USERPROFILE"], ".local", "bin", "claude.exe"))
 ap.add_argument("--claude-model", default="haiku")
 ap.add_argument("--pi-model", default="github-copilot/claude-haiku-4.5")
 ap.add_argument("--rows", type=int, default=100)
@@ -41,7 +41,13 @@ a.claude_model = scenario.get("claude_model", a.claude_model)
 
 
 def fresh_workdir():
+    deadline = time.time() + 30
     shutil.rmtree(WORKDIR, ignore_errors=True)
+    while os.path.exists(WORKDIR) and time.time() < deadline:
+        time.sleep(0.5)
+        shutil.rmtree(WORKDIR, ignore_errors=True)
+    if os.path.exists(WORKDIR):
+        raise SystemExit(f"{WORKDIR} is still held open 30 s after the pi run; a child process outlived pi")
     shutil.copytree(fixture, WORKDIR)
     count = scenario.get("search_data", 0)
     if count:
@@ -94,7 +100,7 @@ def wait_port(port, seconds=10):
 
 
 def claude_project_dir():
-    return os.path.join(os.environ["USERPROFILE"], ".claude", "projects", re.sub(r"[^A-Za-z0-9]", "-", WORKDIR))
+    return os.path.join(os.environ["CLAUDE_CONFIG_DIR"], "projects", re.sub(r"[^A-Za-z0-9]", "-", WORKDIR))
 
 
 def slash(path):
@@ -116,6 +122,8 @@ elif a.only in (None, "pi"):
     capture("pi", ["--args", f"--model {a.pi_model} --models {a.pi_model} --session-dir {slash(SESSIONS)} {scenario.get('pi_args', '')}"], PI_SANDBOX_ENV + a.pi_env + scenario.get("pi_env", []), steps=steps_for("pi"))
 
 if a.only in (None, "claude"):
+    if not os.environ.get("CLAUDE_CONFIG_DIR"):
+        raise SystemExit("set CLAUDE_CONFIG_DIR to a throwaway Claude config (source ~/.pi/sandbox/env.sh): a killed Claude launch records a fullscreen boot strike in the real ~/.claude.json, and two strikes turn Cuong's fullscreen renderer off")
     session = a.replay or a.session or newest_session()
     if not session and not prompt:
         session = os.path.join(a.out, "empty.jsonl")
@@ -133,7 +141,7 @@ if a.only in (None, "claude"):
     try:
         wait_port(a.port)
         capture("claude", ["--cmd", f'"{slash(a.claude)}" --model {a.claude_model} {permission} {scenario.get("claude_args", "")}'],
-                [f"ANTHROPIC_BASE_URL=http://127.0.0.1:{a.port}", "ANTHROPIC_AUTH_TOKEN=parity-mock", "ENABLE_CLAUDEAI_MCP_SERVERS=false", "CLAUDE_CODE_ALWAYS_ENABLE_EFFORT=1", *scenario.get("claude_env", [])],
+                [f"ANTHROPIC_BASE_URL=http://127.0.0.1:{a.port}", "ANTHROPIC_AUTH_TOKEN=parity-mock", "ENABLE_CLAUDEAI_MCP_SERVERS=false", "CLAUDE_CODE_ALWAYS_ENABLE_EFFORT=1", f"CLAUDE_CONFIG_DIR={os.environ['CLAUDE_CONFIG_DIR']}", *scenario.get("claude_env", [])],
                 steps=steps_for("claude"))
     finally:
         mock.terminate()

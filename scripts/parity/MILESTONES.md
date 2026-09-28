@@ -38,7 +38,7 @@ Exit: every new case clean, suite clean twice, `apply.mjs` no `NEEDS PORT`, self
 ctrl+o detailed-transcript mode, grouped parallel foreground agents, diff inside the Edit/Write permission prompt, context-low row and compaction notices, plan approval scrolling, the 2.1.282/283 redraw fixes (CJK/emoji in diffs, shrink while streaming) against the flicker criterion.
 Exit: same as M4, plus a `PI_TUI_DEBUG_REDRAW=1` live run with no `firstChanged < viewportTop`.
 
-## M6 — Class B features (Cuong decides per item before work starts)
+## M6 — Class B features (Cuong decided 2026-09-28: build all of them)
 
 Todo list and ctrl+t, background bash with its notice, ctrl+r history search, `/mcp`, `/context`, `/usage`, `/status`, `/resume` picker, light theme and `NO_COLOR`. Each item is either built (with its scenario) or moved to the README ledger as an exception with its measurement.
 

@@ -26,7 +26,7 @@ EXCEPTIONS = [
 
 ANYWHERE = [
     ("plan file: each harness keeps its plans in its own folder with a random name (Claude ~/.claude/plans, pi ~/.pi/agent/plans)",
-     re.compile(r"[^\s(]*\.claude[\\/]plans[\\/][\w.-]+\.md"), re.compile(r"[^\s(]*\.pi[\\/]agent[\\/]plans[\\/][\w.-]+\.md")),
+     re.compile(r"[^\s(]*(?:\.claude|claude-config)[\\/]plans[\\/][\w.-]+\.md"), re.compile(r"[^\s(]*\.pi[\\/](?:sandbox[\\/])?agent[\\/]plans[\\/][\w.-]+\.md")),
 ]
 
 
