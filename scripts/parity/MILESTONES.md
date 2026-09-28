@@ -16,6 +16,7 @@
 | --- | --- | --- | --- |
 | M0 | 2026-09-28 | 28/33 | `agent` (pi appends `Sonnet 5`: Cuong's uncommitted `agents/*.md` pin Sonnet 5), `modes`/`modes-default`/`plan` (Claude's empty-box placeholder `Try "…"`, pi has none), `interrupt` (Claude side produced no capture) |
 | M1 | 2026-09-28 | — | sandbox built, isolation proved (Volta `cli.js` hash unchanged, sandbox pi ran from the copy) |
+| M3 | 2026-09-28 | 33/33, 33/33 | sandbox, Claude 2.1.283 pinned, isolated config (runs 2 and 3; run 1 30/33 found the /clear placeholder reset, a sandbox skill-path conflict and the untracked `mcp` scenario). Fixed: sandbox Claude idle screen (`.ponytail-active`, `claudeMdExcludes`), `Try "…"` placeholder in pi, plan folder under `PI_CODING_AGENT_DIR`. Measured, no pi change: agent model tag (Claude draws it too; M0 was Cuong's uncommitted agent file), interrupt child (Claude's `sleep.exe` also outlives esc). No capture with the classic-fallback line; real `~/.claude.json` strikes still 1 |
 
 ## M2 — Verify and triage the findings (time box: 1 session)
 
