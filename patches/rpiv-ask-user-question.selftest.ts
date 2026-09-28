@@ -523,4 +523,15 @@ console.log("PASS: nothing drawn while the questionnaire is open");
   console.log("PASS: schema rejection renders like Claude's InputValidationError");
 }
 
+{
+  const { visibleWidth } = await jiti.import(path.join(PI_DIR, "node_modules/@earendil-works/pi-tui/dist/index.js"));
+  const crashRow = "\x1b[38;2;153;153;153m  ⎿ \xa0· Patch 31489 with these values and set it Resolved + unassigned? (Root cause/Fix comment is already on the ticket from 24-09, so no new comment.) (Yes, patch as shown (Recommended) / Change Story Points / Edit release note)\x1b[39m";
+  const fitted = mod.fitRows([crashRow], 134);
+  assert.ok(fitted.length > 1, "the 229-column row from pi-tui-crash.log (2026-09-28 23:58) wraps instead of overflowing");
+  assert.ok(fitted.every((line: string) => visibleWidth(line) <= 134), "no row is wider than the terminal, so pi-tui cannot throw 'Rendered line exceeds terminal width'");
+  assert.ok(fitted.slice(1).every((line: string) => line.startsWith("     ")), "wrapped rows hang five columns in, under the text after the elbow");
+  assert.ok(mod.fitRows(["x".repeat(500)], 20).every((line: string) => visibleWidth(line) <= 20), "an unbreakable run is cut to the width");
+  console.log("PASS: question transcript rows fit the terminal width");
+}
+
 console.log("ok - rpiv-ask-user-question rows");
