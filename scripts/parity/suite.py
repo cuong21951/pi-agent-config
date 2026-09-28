@@ -19,6 +19,7 @@ REPLAYED = {
     "shell-credit.jsonl": "Shell credit sample.",
     "edit-create.jsonl": "Edit create sample.",
     "question-invalid.jsonl": "Question invalid sample.",
+    "m5b-context-low.jsonl": "keep going",
 }
 
 ap = argparse.ArgumentParser(description="Run every parity scenario (live pi on Copilot, Claude replaying it) and every replay fixture, diff each, exit 0 only when all are clean.")

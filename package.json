@@ -21,6 +21,7 @@
       "./extensions/claude-messages",
       "./extensions/cheap-models",
       "./extensions/claude-footer",
+      "./extensions/claude-context",
       "./extensions/claude-input",
       "./extensions/claude-images",
       "./extensions/api-balance",

@@ -47,7 +47,8 @@ for turn in spec["turns"]:
                 calls.append(block)
             blocks.append(block)
         stop = step.get("stopReason", "toolUse" if calls else "stop")
-        message = {"role": "assistant", "content": blocks, "api": "anthropic-messages", "provider": "github-copilot", "model": "claude-haiku-4.5", "usage": usage, "stopReason": stop, "timestamp": ms()}
+        step_usage = {**usage, **step["usage"]} if "usage" in step else usage
+        message = {"role": "assistant", "content": blocks, "api": "anthropic-messages", "provider": "github-copilot", "model": "claude-haiku-4.5", "usage": step_usage, "stopReason": stop, "timestamp": ms()}
         if step.get("errorMessage"):
             message["errorMessage"] = step["errorMessage"]
         entry("message", step.get("gap", 2), message=message)
