@@ -30,7 +30,7 @@ a = ap.parse_args()
 os.makedirs(a.out, exist_ok=True)
 SESSIONS = os.path.join(a.out, "pi-sessions")
 WORKDIR = os.path.join(a.out, "work")
-scenario = json.load(open(os.path.join(HERE, "scenarios", f"{a.scenario}.json"), encoding="utf-8")) if a.scenario else {}
+scenario = json.loads(open(os.path.join(HERE, "scenarios", f"{a.scenario}.json"), encoding="utf-8").read().replace("{parity}", HERE.replace(os.sep, "/"))) if a.scenario else {}
 prompt = a.prompt or scenario.get("prompt", PROMPT)
 bypass = scenario.get("bypass", True)
 ready = scenario.get("ready", r"\[PONYTAIL")
