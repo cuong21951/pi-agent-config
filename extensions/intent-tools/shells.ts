@@ -15,6 +15,7 @@ export type Shell = {
 	startedAt: number;
 	status: Status;
 	exitCode?: number | null;
+	endedAt?: number;
 	stoppedByModel?: boolean;
 	stop: () => void;
 };
@@ -150,6 +151,7 @@ export function adopt(run: Run, fields: Omit<Shell, "status" | "stop" | "started
 	void run.done.then((result) => {
 		shell.status = result === "aborted" ? "killed" : result.exitCode === 0 ? "completed" : "failed";
 		shell.exitCode = result === "aborted" ? undefined : result.exitCode;
+		shell.endedAt = Date.now();
 		try {
 			appendFileSync(shell.path, exitMark(shell.status, shell.exitCode));
 		} catch {}

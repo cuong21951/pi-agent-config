@@ -12,21 +12,6 @@
    "snap": "after"
   },
   {
-   "keys": "\u000f"
-  },
-  {
-   "sleep": 1.5
-  },
-  {
-   "snap": "after-ctrlo"
-  },
-  {
-   "keys": "\u000f"
-  },
-  {
-   "sleep": 1
-  },
-  {
    "until": "(?m)^\u25cf The timer finished\\.[\\s\\S]*\u273b \\S+ for [^\\n]*\u00b7 done",
    "timeout": 90
   },

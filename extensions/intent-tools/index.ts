@@ -1,8 +1,9 @@
 import { createBashTool, createLocalBashOperations, type ExtensionAPI } from "@earendil-works/pi-coding-agent";
 import { matchesKey, truncateToWidth } from "@earendil-works/pi-tui";
-import { closeSync, openSync, readSync } from "node:fs";
+import { closeSync, fstatSync, openSync, readSync } from "node:fs";
 import { Type } from "typebox";
 import { describeTool, dynamic, failed, finished, groupRow, joinOnExecute, watch } from "../claude-tools/rows.ts";
+import { detailRows, OUTPUT_READ_BYTES, type Paint, pill, type ShellView } from "./details.ts";
 import { backgroundLines, CLAUDE_BASH_MAX_CHARS, DEFAULT_TIMEOUT_SECONDS, describeBash, displayOutput, exitCodeOf, rejectedLines, resultLines, stopCallLine, stopResultLine, timedOutError, verboseCallLine, withDefaultTimeout } from "./render.ts";
 import {
 	adopt,
@@ -46,11 +47,43 @@ function readFileHead(path: string): string | undefined {
 	}
 }
 
+function readTail(path: string): { output: string; bytesTotal: number } {
+	try {
+		const fd = openSync(path, "r");
+		try {
+			const total = fstatSync(fd).size;
+			const buffer = Buffer.alloc(Math.min(total, OUTPUT_READ_BYTES));
+			const read = readSync(fd, buffer, 0, buffer.length, Math.max(0, total - buffer.length));
+			return { output: buffer.subarray(0, read).toString("utf8"), bytesTotal: total };
+		} finally {
+			closeSync(fd);
+		}
+	} catch {
+		return { output: "", bytesTotal: 0 };
+	}
+}
+
+function viewOf(shell: Shell): ShellView {
+	return { status: shell.status, exitCode: shell.exitCode, command: shell.command, startedAt: shell.startedAt, endedAt: shell.endedAt, ...readTail(shell.path) };
+}
+
+function backgroundAgents(): number {
+	const fleet = (globalThis as Record<symbol, unknown>)[Symbol.for("pi-subagents:manager")] as { backgroundRunningCount?: () => number } | undefined;
+	return typeof fleet?.backgroundRunningCount === "function" ? fleet.backgroundRunningCount() : 0;
+}
+
+const hexPaint = (bold: (text: string) => string): Paint => ({
+	bold,
+	hex: (color, text) => `\x1b[38;2;${parseInt(color.slice(0, 2), 16)};${parseInt(color.slice(2, 4), 16)};${parseInt(color.slice(4, 6), 16)}m${text}\x1b[39m`,
+	italic: (text) => `\x1b[3m${text}\x1b[23m`,
+});
+
 type BashParams = { command: string; description?: string; timeout?: number; run_in_background?: boolean };
 type Result = { content: Array<{ type: "text"; text: string }>; details: { backgroundTaskId: string } };
 type Foreground = { run?: Run; move: (reason: Reason, timeoutMs?: number) => boolean };
 
 const NOTIFICATION = "bash-notification";
+const MODAL_EVENT = "claude-modes:modal";
 const SHELL_STATUS = "shells";
 const SEND_NOW_CHORD_MS = 1500;
 
@@ -149,13 +182,58 @@ export default function (pi: ExtensionAPI) {
 	pi.on("session_start", (_event, ctx) => {
 		sessionId = ctx.sessionManager.getSessionId();
 		if (!ctx.hasUI) return;
+		let focused = false;
 		refreshStatus = () => {
 			const count = registry.runningCount();
-			ctx.ui.setStatus(SHELL_STATUS, count === 0 ? undefined : count === 1 ? "1 shell" : `${count} shells`);
+			if (count === 0) focused = false;
+			ctx.ui.setStatus(SHELL_STATUS, pill(count, focused));
+		};
+		const focus = (on: boolean) => {
+			focused = on;
+			refreshStatus();
+		};
+		const openDetails = () => {
+			const shell = [...registry.shells.values()].filter((s) => s.status === "running").at(-1);
+			if (!shell) return;
+			pi.events.emit(MODAL_EVENT, true);
+			void ctx.ui.custom<void>(
+				(tui, theme, _keybindings, done) => {
+					const timer = setInterval(() => tui.requestRender(), 1000);
+					const close = () => {
+						clearInterval(timer);
+						done(undefined);
+					};
+					const paint = hexPaint((text) => theme.bold(text));
+					return {
+						render: (width: number) => detailRows(viewOf(shell), width, Date.now(), paint),
+						invalidate() {},
+						handleInput(input: string) {
+							if (input === "x" && shell.status === "running") {
+								shell.stop();
+								close();
+							} else if (matchesKey(input, "escape") || matchesKey(input, "enter") || input === " " || matchesKey(input, "left")) close();
+						},
+					};
+				},
+				{ overlay: true, overlayOptions: { anchor: "bottom-left", width: "100%", margin: 0 } },
+			).finally(() => pi.events.emit(MODAL_EVENT, false));
 		};
 		refreshStatus();
 		let chordAt = 0;
 		ctx.ui.onTerminalInput((data: string) => {
+			if (focused) {
+				focus(false);
+				if (matchesKey(data, "down") || matchesKey(data, "enter")) {
+					openDetails();
+					return { consume: true };
+				}
+				if (matchesKey(data, "up") || matchesKey(data, "escape")) return { consume: true };
+				return undefined;
+			}
+			if (matchesKey(data, "down") && registry.runningCount() > 0 && ctx.ui.getEditorText() === "" && backgroundAgents() === 0) {
+				focus(true);
+				return { consume: true };
+			}
 			if (matchesKey(data, "ctrl+b")) return moveAll("user") ? { consume: true } : undefined;
 			if (matchesKey(data, "ctrl+x")) {
 				chordAt = Date.now();
@@ -166,6 +244,15 @@ export default function (pi: ExtensionAPI) {
 			if (sendNow && ctx.hasPendingMessages()) return moveAll("message") ? { consume: true } : undefined;
 			return undefined;
 		});
+	});
+
+	pi.on("session_shutdown", () => {
+		for (const shell of registry.shells.values()) {
+			if (shell.status !== "running") continue;
+			shell.stoppedByModel = true;
+			shell.stop();
+		}
+		for (const run of registry.runs) run.abort();
 	});
 
 	pi.registerMessageRenderer<{ summary?: string }>(NOTIFICATION, (message, _options, theme) => {
