@@ -33,7 +33,8 @@
       "./extensions/claude-help",
       "./extensions/claude-commands",
       "./extensions/claude-keys",
-      "./extensions/claude-slash-menu"
+      "./extensions/claude-slash-menu",
+      "./extensions/claude-panels"
     ]
   }
 }

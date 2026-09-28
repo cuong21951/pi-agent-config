@@ -5,7 +5,7 @@ import { cardLines } from "../claude-help/index.ts";
 const BUILTIN_COMMAND_NAMES = [
 	"settings", "model", "tree", "thinking", "scoped-models", "export", "import", "share", "copy", "name",
 	"session", "changelog", "hotkeys", "fork", "clone", "trust", "login", "logout", "new", "clear", "compact",
-	"resume", "reload", "quit",
+	"resume", "reload", "quit", "context", "usage", "cost", "stats", "status",
 ];
 
 const MAX_SUGGEST_DISTANCE = 2;
