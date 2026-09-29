@@ -12,7 +12,6 @@ VOLATILE = [
     (PLACEHOLDER, '❯ Try "<example>"'),
     (re.compile(r"✻ \S+ for .*?· done .*$"), "✻ <verb> for <time> · done <clock>"),
     (re.compile(r"^[·✢*✶✻✽] \S+…"), "<spinner> <verb>…"),
-    (BLINK := re.compile(r"^[● ] (?=\S.*…$)"), "<blink> "),
     (DURATION := re.compile(r"\b(?:\d+d )?(?:\d+h )?(?:\d+m )?\d+(?:\.\d+)?s\b"), "<n>s"),
     (re.compile(r"↓ \d+(?:\.\d+)?k? tokens"), "↓ <n> tokens"),
     (re.compile(r"(?<=\S) {2,}(?=<n>s · ↓ <n> tokens$)"), "  "),
@@ -22,6 +21,8 @@ VOLATILE = [
     (re.compile(r"\ba[0-9a-f]{16}\b"), "<agent-id>"),
     (re.compile(r"(?<=Resuming agent )a[0-9a-f]{6}\b"), "<agent-id7>"),
 ]
+
+BLINK = re.compile(r"^[● ] (?=[^\s⎿].*(?:…| · (?:\d+[hm] )*\d+s)$)")
 
 GLUED = ("tool gap: Claude draws the SendMessage result row directly under the previous tool block, pi keeps its one-row gap between tool rows",
          re.compile(r"^  ⎿[  ]{2}(?:Message queued for delivery to |Resuming agent )"))
@@ -105,8 +106,8 @@ def load(name, side, applied, keep=None):
     return kept
 
 
-def normalise(text):
-    text = text.rstrip()
+def normalise(text, transcript=False):
+    text = BLINK.sub("<blink> ", text.rstrip()) if transcript else text.rstrip()
     for pattern, replacement in VOLATILE:
         text = pattern.sub(replacement, text)
     return text
@@ -155,7 +156,8 @@ def colour_diff(c, p, limit=None):
     if animated(c) and animated(p):
         sc, sp = styles(c)[animated(c):], styles(p)[animated(p):]
     else:
-        sc, sp = styles(c)[blinking(c):limit], styles(p)[blinking(p):limit]
+        skip = limit is None
+        sc, sp = styles(c)[skip and blinking(c):limit], styles(p)[skip and blinking(p):limit]
     for i, (x, y) in enumerate(zip(sc, sp)):
         if x[1:] != y[1:]:
             return f"char {i} {x[0]!r}: claude {describe(x)} | pi {describe(y)}"
@@ -175,8 +177,8 @@ def excepted(texts, side, applied, exceptions=EXCEPTIONS):
 
 
 def compare(claude, pi, applied, footer=False):
-    ct = [normalise(l["text"]) for l in claude]
-    pt = [normalise(l["text"]) for l in pi]
+    ct = [normalise(l["text"], not footer) for l in claude]
+    pt = [normalise(l["text"], not footer) for l in pi]
     before = ct
     ct, pt = excepted(ct, "claude", applied, ANYWHERE), excepted(pt, "pi", applied, ANYWHERE)
     rewritten = {i for i, (x, y) in enumerate(zip(before, ct)) if x != y}

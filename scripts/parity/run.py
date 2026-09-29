@@ -170,7 +170,13 @@ for side in ("claude", "pi"):
 
 if a.replay and a.only in (None, "pi"):
     copy = os.path.join(a.out, "replay.jsonl")
-    shutil.copyfile(a.replay, copy)
+    with open(a.replay, encoding="utf-8") as f:
+        header, *entries = f.read().splitlines(keepends=True)
+    session_header = json.loads(header)
+    if session_header.get("type") == "session" and session_header.get("cwd"):
+        header = json.dumps({**session_header, "cwd": WORKDIR}) + "\n"
+    with open(copy, "w", encoding="utf-8", newline="\n") as f:
+        f.write(header + "".join(entries))
     capture("pi", ["--args", f"--model {a.pi_model} --session {slash(copy)}"], PI_SANDBOX_ENV + a.pi_env, steps=steps_for("pi", typed=False) if scenario.get("steps") else None)
 elif a.only in (None, "pi"):
     shutil.rmtree(SESSIONS, ignore_errors=True)
