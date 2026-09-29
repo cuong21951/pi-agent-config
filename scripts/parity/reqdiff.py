@@ -41,6 +41,10 @@ EXCEPTIONS = [
      re.compile(r"(?m)^The following skills are available for use with the Skill t.*\n")),
     ("pi-permission-system removes every `Guidelines:` section from a system prompt (meant for pi's default preamble), so Claude's Explore guidelines never reach the pi subagent", "claude",
      re.compile(r"\nGuidelines:\n- Use Glob for broad file pattern matching\n(?:- .*\n)+")),
+    ("SendMessage pin: Claude's cross-session address (id/name/ref) for its own transcript row; pi has no cross-session bus", "claude",
+     re.compile(r',"pin":\{[^}]*\}')),
+    ("ListAgents: Claude's own-session line and Peer sessions list; pi has no cross-session registry", "claude",
+     re.compile(r"This session is [^\n]*\n\n|\n\nPeer sessions \(\d+\):(?:\n  [^\n]*)*")),
     ("tool error channel: Claude wraps every failed tool_result in <tool_use_error>, pi sends is_error with the bare text (all tools, not the agent contract)", "claude",
      re.compile(r"</?tool_use_error>")),
 ]
@@ -197,6 +201,10 @@ def extract(bodies, check, prompt):
             return "\n".join(kinds + ["prompt: " + joined.rsplit("</system-reminder>", 1)[-1].strip()])
         if part == "tools":
             return "\n".join(sorted(CLAUDE_TOOL_NAMES.get(t["name"], t["name"]) for t in first.get("tools", [])))
+        if part == "steer":
+            joined = "\n".join(t for m in subs[-1].get("messages", []) for b in blocks(m.get("content")) for t in ([b.get("text", "")] if b.get("type") == "text" else [result_text(b.get("content"))] if b.get("type") == "tool_result" else []))
+            found = re.search(r"(?:<system-reminder>\n)?The coordinator sent a message while you were working:[\s\S]*?Address this before completing your current task\.(?:\n</system-reminder>)?", joined)
+            return normalise(found.group(0)) if found else None
         if part == "model":
             return json.dumps({k: first.get(k) for k in ("model", "max_tokens")})
     raise SystemExit(f"unknown check {check}")

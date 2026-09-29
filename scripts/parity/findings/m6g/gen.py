@@ -62,3 +62,7 @@ session("types2", [
     ("M6G-SUB-PL2: reply with the word plreport.", [["plreport", 5000]]),
     ("M6G-SUB-CU2: reply with the word cureport.", [["cureport", 8000]]),
 ])
+session("sendrun", [
+    ("M6G sendrun run.", [[("Agent", {"description": "Long sleeper", "subagent_type": "general-purpose", "prompt": "M6G-SUB-SR: run the long timer, then reply with the word srreport."})], [("ListAgents", {})], [("SendMessage", {"to": "@FIRST", "message": "M6G-SUB-SM2: also reply with the word smreport.", "summary": "ask more"})], ["asked"], ["srdone"]]),
+    ("M6G-SUB-SR: run the long timer, then reply with the word srreport.", [[("bash", {"command": "python -c 'import time; time.sleep(12)'", "description": "Long timer"})], ["srreport"]]),
+])

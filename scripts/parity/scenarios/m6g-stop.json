@@ -1,0 +1,13 @@
+{
+ "prompt": "M6G stop run.",
+ "fixture": "findings/m6g/fixture",
+ "pi_mock": true,
+ "session": "findings/m6g/stop.jsonl",
+ "end": "afterstop[\\s\\S]*✻ \\S+ for [^\\n]*· done",
+ "steps": [
+  {"until": "afterstop[\\s\\S]*✻ \\S+ for [^\\n]*· done", "timeout": 90},
+  {"sleep": 1},
+  {"snap": "end"}
+ ],
+ "reqdiff": ["tool:TaskStop", "result:ListAgents", "result:TaskStop", "notifications"]
+}

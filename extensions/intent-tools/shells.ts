@@ -40,7 +40,7 @@ export const BASH_BACKGROUND_GUIDANCE =
 	"\n - If your command is long running and you would like to be notified when it finishes — use `run_in_background`. No sleep needed." +
 	"\n - If waiting for a background task you started with `run_in_background`, you will be notified when it completes — do not poll.";
 export const STOP_DESCRIPTION =
-	"\n- Stops a running background task by its ID\n- Takes a task_id parameter identifying the task to stop\n- Returns a success or failure status\n- Use this tool when you need to terminate a long-running task\n";
+	"\n- Stops a running background task by its ID\n- Takes a task_id parameter identifying the task to stop\n- To stop an agent-team teammate, pass its agent ID (\"name@team\") or bare teammate name as task_id\n- To stop a background agent spawned with a name, pass that name as task_id\n- Returns a success or failure status\n- Use this tool when you need to terminate a long-running task\n";
 
 const ID_ALPHABET = "0123456789abcdefghijklmnopqrstuvwxyz";
 const NOTIFICATION_PREAMBLE =
@@ -96,6 +96,10 @@ export function taskNotification(shell: Pick<Shell, "id" | "toolCallId" | "path"
 
 export function stopResult(shell: Pick<Shell, "id" | "command">): string {
 	return JSON.stringify({ message: `Successfully stopped task: ${shell.id} (${shell.command})`, task_id: shell.id, task_type: "local_bash", command: shell.command });
+}
+
+export function stopAgentResult(agent: { id: string; description: string }): string {
+	return JSON.stringify({ message: `Successfully stopped task: ${agent.id} (${agent.description})`, task_id: agent.id, task_type: "local_agent", command: agent.description });
 }
 
 export function stopRow(shell: Pick<Shell, "command">): string {
@@ -180,6 +184,7 @@ if (process.env.INTENT_SHELLS_SELFTEST) {
 	const note = taskNotification({ id: "b1", toolCallId: "t1", path: "P", status: "completed", description: "d", exitCode: 0 });
 	check(note.startsWith("<system-reminder>\n[SYSTEM NOTIFICATION - NOT USER INPUT]\n") && note.endsWith('<task-id>b1</task-id>\n<tool-use-id>t1</tool-use-id>\n<output-file>P</output-file>\n<status>completed</status>\n<summary>Background command "d" completed (exit code 0)</summary>\n</task-notification>\n</system-reminder>'), "the model hears Claude's task-notification, byte for byte (request dump of m6a-measure-bg)");
 	check(stopResult({ id: "b1", command: "c" }) === '{"message":"Successfully stopped task: b1 (c)","task_id":"b1","task_type":"local_bash","command":"c"}', "TaskStop answers with Claude's JSON");
+	check(stopAgentResult({ id: "a8e8fcf123ce39f3f", description: "Long sleeper" }) === '{"message":"Successfully stopped task: a8e8fcf123ce39f3f (Long sleeper)","task_id":"a8e8fcf123ce39f3f","task_type":"local_agent","command":"Long sleeper"}', "TaskStop on an agent answers with Claude's local_agent JSON (m6g-stop3 request-5)");
 	check(!autoBackgrounds("sleep 10") && autoBackgrounds("python x.py"), "a timed-out sleep is killed, anything else moves to the background (Htr = [\"sleep\"])");
 	check(exitMark("completed", 0) === "\n[exited with code 0]\n" && exitMark("killed") === "\n[killed]\n", "the output file ends with Claude's exit mark");
 	const dir = mkdtempSync(join(tmpdir(), "shells-"));

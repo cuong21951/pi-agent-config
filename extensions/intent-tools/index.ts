@@ -21,6 +21,7 @@ import {
 	STOP_DESCRIPTION,
 	STOP_TOOL,
 	startRun,
+	stopAgentResult,
 	stopResult,
 	taskId,
 	taskNotification,
@@ -314,7 +315,7 @@ export default function (pi: ExtensionAPI) {
 		description: STOP_DESCRIPTION,
 		renderShell: "self",
 		parameters: Type.Object({
-			task_id: Type.Optional(Type.String({ description: "The ID of the background task to stop." })),
+			task_id: Type.Optional(Type.String({ description: "The ID of the background task to stop. Agent-team teammates and named background agents are also accepted by agent ID or name." })),
 			shell_id: Type.Optional(Type.String({ description: "Deprecated: use task_id instead" })),
 		}),
 
@@ -323,6 +324,12 @@ export default function (pi: ExtensionAPI) {
 			if (!key) throw new Error("Missing required parameter: task_id");
 			const claudeTasks = (globalThis as { __claudeTasks?: { stop(id: string): boolean } }).__claudeTasks;
 			if (claudeTasks?.stop(key)) return { content: [{ type: "text", text: `Updated task #${key} deleted` }], details: {} };
+			const agents = (globalThis as Record<symbol, { stopByModel?(ref: string): { id: string; description: string; status: string; stopped: boolean } | undefined } | undefined>)[Symbol.for("pi-subagents:manager")];
+			const agent = registry.shells.has(key) ? undefined : agents?.stopByModel?.(key);
+			if (agent) {
+				if (!agent.stopped) throw new Error(`Task ${agent.id} is not running (status: ${agent.status})`);
+				return { content: [{ type: "text", text: stopAgentResult(agent) }], details: { command: agent.description } };
+			}
 			const shell = registry.shells.get(key);
 			if (!shell) throw new Error(`No task found with ID: ${key}`);
 			if (shell.status !== "running") throw new Error(`Task ${key} is not running (status: ${shell.status})`);

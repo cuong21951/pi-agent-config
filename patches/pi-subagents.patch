@@ -38,6 +38,28 @@
      const abortController = new AbortController();
      const record: AgentRecord = {
        id,
+@@ -970,7 +970,9 @@
+     if (pool === "background") this.runningBackground--;
+     else if (pool === "foreground") this.runningForeground--;
+ 
+-    if (guardCallback) {
++    if (record.notifiedEarly) {
++      record.notifiedEarly = undefined;
++    } else if (guardCallback) {
+       try { this.onComplete?.(record); } catch { /* ignore completion side-effect errors */ }
+     } else {
+       this.onComplete?.(record);
+@@ -1422,6 +1424,10 @@
+     record.abortController?.abort();
+     record.status = "stopped";
+     record.completedAt = Date.now();
++    if (record.isBackground) {
++      record.notifiedEarly = true;
++      try { this.onComplete?.(record); } catch { /* ignore completion side-effect errors */ }
++    }
+     return true;
+   }
+ 
 --- a/src/agent-runner.ts
 +++ b/src/agent-runner.ts
 @@ -3,7 +3,7 @@
@@ -59,7 +81,20 @@
  import { preloadSkills } from "./skill-loader.js";
  import { createStructuredCapture, createStructuredOutputTool, structuredRetryPrompt } from "./structured-output.js";
  import type { SubagentType, ThinkingLevel } from "./types.js";
-@@ -245,6 +246,7 @@
+@@ -39,9 +40,11 @@
+  */
+ export const SUBAGENT_TOOL_NAMES = {
+   AGENT: "Agent",
+-  WORKFLOW: "SubagentWorkflow",
++  WORKFLOW: "Workflow",
+   GET_RESULT: "get_subagent_result",
+   STEER: "steer_subagent",
++  SEND_MESSAGE: "SendMessage",
++  LIST_AGENTS: "ListAgents",
+ } as const;
+ 
+ /** Names of tools registered by this extension that subagents must NOT inherit. */
+@@ -245,6 +248,7 @@
       * seeded from `toolNames`.
       */
      readmitToolNames: Set<string>;
@@ -67,7 +102,7 @@
    },
  ): void {
    const { loader, toolNames, disallowedSet, extNames, narrowing, readmitToolNames } = ctx;
-@@ -255,7 +257,7 @@
+@@ -255,7 +259,7 @@
    // and `ext:foo/bar` narrows `foo` to just `bar`.
    const inScope = (): Set<string> => {
      const keep = new Set(toolNames.filter((t) => !disallowedSet?.has(t)));
@@ -76,7 +111,7 @@
      for (const extension of loader.getExtensions().extensions) {
        const canons = extensionCanonicalNames(extension.path);
        if (optInActive && !canons.some((c) => extNames.has(c))) continue;
-@@ -671,16 +673,16 @@
+@@ -671,16 +675,16 @@
    }
  
    // Build system prompt from agent config
@@ -103,7 +138,7 @@
  
    // When skills is string[], we've already preloaded them into the prompt.
    // Still pass noSkills: true since we don't need the skill loader to load them again.
-@@ -744,6 +746,7 @@
+@@ -744,6 +748,7 @@
            };
          };
  
@@ -111,7 +146,7 @@
    const loader = new DefaultResourceLoader({
      cwd: configCwd,
      agentDir,
-@@ -753,7 +756,10 @@
+@@ -753,7 +758,10 @@
      noSkills,
      noPromptTemplates: true,
      noThemes: true,
@@ -123,7 +158,7 @@
      systemPromptOverride: () => systemPrompt,
      appendSystemPromptOverride: () => [],
    });
-@@ -918,7 +924,7 @@
+@@ -918,7 +926,7 @@
  
    let sessionTools: string[] | undefined;
    let sessionExcludeTools: string[] | undefined;
@@ -132,7 +167,7 @@
      // Strict allowlist: built-ins the agent asked for, plus any opt-in nested
      // tools (whose names would otherwise be dropped as EXCLUDED_TOOL_NAMES).
      sessionTools = [
-@@ -1039,6 +1045,7 @@
+@@ -1039,6 +1047,7 @@
        extNames,
        narrowing,
        readmitToolNames,
@@ -140,7 +175,7 @@
      });
    }
  
-@@ -1096,8 +1103,19 @@
+@@ -1096,8 +1105,19 @@
    const collector = collectResponseText(session);
    const cleanupAbort = forwardAbortSignal(session, options.signal);
  
@@ -164,7 +199,7 @@
      if (parentContext) {
 --- a/src/claude-contract.ts
 +++ b/src/claude-contract.ts
-@@ -0,0 +1,177 @@
+@@ -0,0 +1,192 @@
 +import { existsSync, readFileSync } from "node:fs";
 +import { dirname, join } from "node:path";
 +import type { AgentConfig, AgentRecord } from "./types.js";
@@ -203,7 +238,7 @@
 +
 +export function formatTaskNotification(record: AgentRecord): string {
 +  const status = notificationStatus(record);
-+  const result = record.result?.trim() ? record.result : undefined;
++  const result = status !== "killed" && record.result?.trim() ? record.result : undefined;
 +  const hasUsage = status === "completed" || result !== undefined;
 +  const durationMs = record.completedAt ? record.completedAt - record.startedAt : 0;
 +  const tags: [string, string | undefined][] = [
@@ -341,6 +376,21 @@
 +export function launchedGroupLines(calls: { name: string; description: string }[], theme: { fg: (role: string, text: string) => string; bold: (text: string) => string }): string[] {
 +  const head = theme.fg("borderAccent", "● ") + theme.bold(String(calls.length)) + " background agents launched " + theme.fg("muted", "(↓ to manage)");
 +  return [head, ...calls.map((call, i) => "   " + theme.fg("muted", i === calls.length - 1 ? "└ " : "├ ") + call.name + ` (${call.description})`)];
++}
++
++export function coordinatorMessage(message: string): string {
++  return `The coordinator sent a message while you were working:\n${message}\n\nAddress this before completing your current task.`;
++}
++
++export function listStatus(status: AgentRecord["status"]): string {
++  if (status === "running" || status === "queued") return "running";
++  if (status === "error") return "failed";
++  if (status === "stopped") return "killed";
++  return "completed";
++}
++
++export function formatListAgents(rows: { id: string; type: string; status: AgentRecord["status"]; age: string }[]): string {
++  return `Subagents (${rows.length}):` + rows.map((r) => `\n  ${r.id}  ·  ${r.type}  ·  ${listStatus(r.status)}  ·  started ${r.age} ago`).join("");
 +}
 --- a/src/claude-tools.json
 +++ b/src/claude-tools.json
@@ -625,7 +675,7 @@
    type UICtx,
  } from "./ui/agent-widget.js";
 -import { FleetList, type FleetUICtx, type FleetWorkflow } from "./ui/fleet-list.js";
-+import { agentViewColor, FleetList, type FleetUICtx, type FleetWorkflow } from "./ui/fleet-list.js";
++import { agentViewColor, formatFleetElapsed, FleetList, type FleetUICtx, type FleetWorkflow } from "./ui/fleet-list.js";
  import { showSchedulesMenu } from "./ui/schedule-menu.js";
  import { selectItem } from "./ui/select-item.js";
  import { renderWorkflowCard, renderWorkflowEntryCard } from "./ui/workflow-card.js";
@@ -634,7 +684,7 @@
  import { fullWorkflowToolDescription } from "./workflow/tool-description.js";
  import { isWorktreeIsolationEnabled, setWorktreeIsolationEnabled } from "./worktree.js";
 -import { escapeXml } from "./xml.js";
-+import { agentToolsLabel, CLAUDE_TOOLS, isClaudeModelAlias, launchedGroupLines, placeNotifications, remoteIsolationFallback, resolveClaudeModelAlias, formatAgentTypesReminder, formatLaunchResult, formatTaskNotification } from "./claude-contract.js";
++import { agentToolsLabel, CLAUDE_TOOLS, coordinatorMessage, formatListAgents, listStatus, isClaudeModelAlias, launchedGroupLines, placeNotifications, remoteIsolationFallback, resolveClaudeModelAlias, formatAgentTypesReminder, formatLaunchResult, formatTaskNotification } from "./claude-contract.js";
  
  // ---- Shared helpers ----
  
@@ -688,7 +738,15 @@
  /** Build AgentDetails from a base + record-specific fields. */
  function buildDetails(
    base: Pick<AgentDetails, "displayName" | "description" | "subagentType" | "modelName" | "tags">,
-@@ -305,6 +261,24 @@
+@@ -243,6 +199,7 @@
+     durationMs: record.completedAt ? record.completedAt - record.startedAt : 0,
+     outputFile: record.outputFile,
+     error: record.error,
++    killedBy: record.killedBy,
+     resultPreview: record.result
+       ? record.result.length > resultMaxLen
+         ? record.result.slice(0, resultMaxLen) + "…"
+@@ -305,6 +262,24 @@
    if (inChildSessionContext()) return;
  
    // ---- Register custom notification renderer ----
@@ -713,17 +771,20 @@
    pi.registerMessageRenderer<NotificationDetails>(
      "subagent-notification",
      (message, { expanded }, theme) => {
-@@ -317,6 +291,9 @@
+@@ -317,6 +292,12 @@
          const statusText = isError ? d.status
            : d.status === "steered" ? "completed (steered)"
            : "completed";
 +        if (!expanded && !isError) {
 +          return theme.fg("borderAccent", "● ") + `Agent "${d.description}" finished` + theme.fg("muted", ` · ${claudeDuration(d.durationMs)}`);
 +        }
++        if (!expanded && d.status === "stopped") {
++          return theme.fg("warning", "● ") + `Agent "${d.description}" ${d.killedBy === "parent" ? "was stopped by Claude" : "was stopped by user"}`;
++        }
  
          // Line 1: icon + agent description + status
          let line = `${icon} ${theme.bold(d.description)} ${theme.fg("dim", statusText)}`;
-@@ -358,7 +335,7 @@
+@@ -358,7 +339,7 @@
        // from it is what the batch cost — not four figures to add up by hand.
        // Derived from the per-agent details rather than carried alongside them:
        // one source, so the total can never disagree with the rows above it.
@@ -732,7 +793,7 @@
          const total = formatCost(all.reduce((sum, a) => sum + (a.totalCost ?? 0), 0));
          if (total) {
            const tokens = all.reduce((sum, a) => sum + a.totalTokens, 0);
-@@ -470,18 +447,31 @@
+@@ -470,18 +451,31 @@
    }
  
    // ---- Individual nudge helper (async join mode) ----
@@ -774,7 +835,7 @@
    }
  
    function sendIndividualNudge(record: AgentRecord) {
-@@ -492,40 +482,6 @@
+@@ -492,40 +486,6 @@
      widget.update();
    }
  
@@ -815,7 +876,7 @@
    /** Helper: build event data for lifecycle events from an AgentRecord. */
    function buildEventData(record: AgentRecord) {
      const durationMs = record.completedAt ? record.completedAt - record.startedAt : Date.now() - record.startedAt;
-@@ -564,6 +520,26 @@
+@@ -564,6 +524,26 @@
      };
    }
  
@@ -842,7 +903,7 @@
    // Background completion: route through group join or send individual nudge
    const manager = new AgentManager((record) => {
      // Owned children — nested, or a workflow's — report only through their
-@@ -574,6 +550,7 @@
+@@ -574,6 +554,7 @@
  
      // Emit lifecycle event based on terminal status
      const isError = record.status === "error" || record.status === "stopped" || record.status === "aborted";
@@ -850,7 +911,7 @@
      const eventData = buildEventData(record);
      if (isError) {
        pi.events.emit("subagents:failed", eventData);
-@@ -597,19 +574,7 @@
+@@ -597,19 +578,7 @@
        return;
      }
  
@@ -871,7 +932,7 @@
      widget.update();
    }, undefined, (record) => {
      if (!isTopLevelAgent(record)) return;
-@@ -735,6 +700,10 @@
+@@ -735,6 +704,10 @@
      return resolved?.kind === "live" ? resolved.record : undefined;
    };
  
@@ -882,7 +943,7 @@
    const registryEntry = {
      waitForAll: () => manager.waitForAll(),
      hasRunning: () => manager.hasRunning(),
-@@ -743,6 +712,14 @@
+@@ -743,6 +716,24 @@
        const record = manager.getRecord(id);
        return record !== undefined && isTopLevelAgent(record) ? record : undefined;
      },
@@ -894,10 +955,20 @@
 +    taskRecords: () => manager.listAgents(),
 +    viewAgent: (id: string) => fleet.viewAgent(id),
 +    stopAgent: (id: string) => manager.abort(id),
++    stopByModel: (ref: string) => {
++      const record = resolveAgentRef(ref) ?? manager.listAgents().find((r) => r.id === ref);
++      if (!record || !isTopLevelAgent(record)) return undefined;
++      const running = record.status === "running" || record.status === "queued";
++      if (running) {
++        record.killedBy = "parent";
++        manager.abort(record.id);
++      }
++      return { id: record.id, description: record.description, status: listStatus(record.status), stopped: running };
++    },
    };
    const ownsManagerRegistry = (globalThis as any)[MANAGER_KEY] === undefined;
    if (ownsManagerRegistry) {
-@@ -1133,10 +1110,7 @@
+@@ -1133,10 +1124,7 @@
    function setWidgetMode(m: WidgetMode): void { widgetMode = m; widget.update(); }
  
    // Claude Code-style FleetView: navigable list of main + subagents below the editor.
@@ -909,7 +980,7 @@
    let fleetViewEnabled = true;
    function isFleetViewEnabled(): boolean { return fleetViewEnabled; }
    function setFleetViewEnabled(b: boolean): void { fleetViewEnabled = b; fleet.setEnabled(b); }
-@@ -1220,49 +1194,6 @@
+@@ -1220,49 +1208,6 @@
    function getToolDescriptionMode(): ToolDescriptionMode { return toolDescriptionMode; }
    function setToolDescriptionMode(mode: ToolDescriptionMode): void { toolDescriptionMode = mode; }
  
@@ -959,7 +1030,7 @@
    /**
     * Launch a detached resume of an existing agent and wire everything a
     * re-running agent needs: transcript anchoring, activity tracking, join-mode
-@@ -1327,12 +1258,6 @@
+@@ -1327,12 +1272,6 @@
      });
      if (!record) return undefined;
  
@@ -972,7 +1043,7 @@
      agentActivity.set(id, bgState);
      // This agent already finished once, so the widget holds a finished-age
      // for it that is past the linger limit — without clearing it, the
-@@ -1572,9 +1497,24 @@
+@@ -1572,9 +1511,24 @@
        if (custom) return custom;
        console.warn('[pi-subagents] toolDescriptionMode is "custom" but no agent-tool-description.md found — using "full"');
      }
@@ -998,7 +1069,7 @@
    // Held rather than registered inline: the mention clone reuses this exact
    // definition, so the agent it starts is an ordinary top-level spawn instead
    // of a second implementation that has to be kept in step with this one.
-@@ -1589,84 +1529,33 @@
+@@ -1589,84 +1543,33 @@
        "When an agent runs in the background, you will be notified on completion — do not poll or sleep waiting for it. Continue with other work instead.",
        "Trust but verify: an agent's summary describes intent, not outcome. When an agent writes or edits code, check the actual changes before reporting work as done.",
      ],
@@ -1102,7 +1173,7 @@
      },
  
      renderResult(result, { expanded, isPartial }, theme, renderContext) {
-@@ -1703,9 +1592,10 @@
+@@ -1703,9 +1606,10 @@
          return renderRunningAgentStatus(frame, s, details.activity ?? "thinking…", theme);
        }
  
@@ -1114,7 +1185,7 @@
        }
  
        // ---- Completed / Steered ----
-@@ -1771,7 +1661,7 @@
+@@ -1771,7 +1675,7 @@
        // Reload custom agents so new project/global .md files are picked up without restart
        reloadCustomAgents();
  
@@ -1123,7 +1194,7 @@
        // Single decision point for dispatch (#183): unknown, disabled and
        // case-ambiguous types are refused here, BEFORE anything spawns, so a
        // background or scheduled call can't start running the wrong agent while
-@@ -1802,18 +1692,22 @@
+@@ -1802,18 +1706,22 @@
        // Get agent config (if any)
        const customConfig = getAgentConfig(subagentType);
  
@@ -1150,7 +1221,7 @@
          } else {
            model = resolved;
          }
-@@ -1832,6 +1726,9 @@
+@@ -1832,6 +1740,9 @@
        });
        if (scopeVerdict.kind === "error") return textResult(scopeVerdict.message);
        if (scopeVerdict.kind === "warn") ctx.ui.notify(scopeVerdict.message, "warning");
@@ -1160,7 +1231,7 @@
  
        const thinking = resolvedConfig.thinking;
        const inheritContext = resolvedConfig.inheritContext;
-@@ -2083,17 +1980,6 @@
+@@ -2083,17 +1994,6 @@
          // call instead of being reported as a subagent that ran (#179).
          await manager.awaitStartup(id);
  
@@ -1178,7 +1249,7 @@
          agentActivity.set(id, bgState);
          widget.ensureTimer();
          widget.update();
-@@ -2108,17 +1994,8 @@
+@@ -2108,17 +2008,8 @@
            isBackground: true,
          });
  
@@ -1197,7 +1268,21 @@
            { ...detailBaseFor(record), toolUses: 0, tokens: "", durationMs: 0, status: "background" as const, agentId: id },
          );
        }
-@@ -2458,6 +2335,8 @@
+@@ -2407,11 +2298,11 @@
+   // switch changes exactly one thing: whether pi is ever told about the tool.
+   const workflowTool = defineTool({
+     name: SUBAGENT_TOOL_NAMES.WORKFLOW,
+-    label: "SubagentWorkflow",
++    label: "Workflow",
+     description: renderToolDescriptionTemplate(fullWorkflowToolDescription),
+     promptSnippet: "Run a deterministic script that orchestrates many subagents",
+     promptGuidelines: [
+-      "Use SubagentWorkflow when the number of agents depends on something discovered at runtime, when work flows through stages, or when findings should be independently verified. Use Agent for one delegated task or a handful you can name up front.",
++      "Use Workflow when the number of agents depends on something discovered at runtime, when work flows through stages, or when findings should be independently verified. Use Agent for one delegated task or a handful you can name up front.",
+       "Prefer `pipeline` over `parallel` — a barrier costs wall-clock whenever the stages are unevenly sized.",
+       "A workflow runs in the background and notifies you when it finishes — do not poll or sleep waiting for it.",
+     ],
+@@ -2458,9 +2349,11 @@
        ),
      }),
  
@@ -1205,8 +1290,90 @@
 +
      renderCall(args, theme) {
        return new Text(
-         `${theme.fg("toolTitle", "▸ ")}${theme.bold(theme.fg("toolTitle", "SubagentWorkflow"))}  ${theme.fg("muted", workflowCallName(args))}`,
-@@ -3052,33 +2931,10 @@
+-        `${theme.fg("toolTitle", "▸ ")}${theme.bold(theme.fg("toolTitle", "SubagentWorkflow"))}  ${theme.fg("muted", workflowCallName(args))}`,
++        `${theme.fg("toolTitle", "▸ ")}${theme.bold(theme.fg("toolTitle", "Workflow"))}  ${theme.fg("muted", workflowCallName(args))}`,
+         0,
+         0,
+       );
+@@ -2572,7 +2465,7 @@
+                 ? `Nothing to replay from ${params.resumeFromRunId} — every agent runs live.\n`
+                 : "") +
+             `\nYou will be notified when it finishes — do NOT poll or sleep waiting for it.\n` +
+-            `To iterate, edit the script file and call SubagentWorkflow again with scriptPath.`,
++            `To iterate, edit the script file and call Workflow again with scriptPath.`,
+         }],
+         details: { taskId: runId },
+       };
+@@ -2729,7 +2622,7 @@
+ 
+   // ---- get_subagent_result tool ----
+ 
+-  registerToolReportingUsage(defineTool({
++  void (defineTool({
+     name: SUBAGENT_TOOL_NAMES.GET_RESULT,
+     label: "Get Agent Result",
+     description:
+@@ -2819,6 +2712,59 @@
+   // ---- steer_subagent tool ----
+ 
+   registerToolReportingUsage(defineTool({
++    name: SUBAGENT_TOOL_NAMES.SEND_MESSAGE,
++    label: "SendMessage",
++    description: CLAUDE_TOOLS.SendMessage.description,
++    parameters: CLAUDE_TOOLS.SendMessage.input_schema as any,
++    renderShell: "self",
++    renderCall() {
++      return emptyRow as any;
++    },
++    renderResult(result, _options, theme) {
++      const text = result.content[0]?.type === "text" ? result.content[0].text : "";
++      let shown = text;
++      try { shown = JSON.parse(text).message ?? text; } catch { /* plain error text */ }
++      return new Text(theme.fg("muted", "  ⎿  " + shown), 0, 0);
++    },
++    execute: async (toolCallId, params: any, _signal, _onUpdate, ctx) => {
++      const record = resolveAgentRef(String(params.to ?? "").trim());
++      if (!record || !isTopLevelAgent(record)) throw new Error(`No agent or session named "${params.to}" is reachable from this session.`);
++      const message = String(params.message ?? "");
++      if (record.status === "running" || record.status === "queued") {
++        const text = `<system-reminder>\n${coordinatorMessage(message)}\n</system-reminder>`;
++        if (record.session) await steerAgent(record.session, text);
++        else (record.pendingSteers ??= []).push(text);
++        pi.events.emit("subagents:steered", { id: record.id, message });
++        return textResult(JSON.stringify({ success: true, message: `Message queued for delivery to ${record.id} at its next tool round.` }));
++      }
++      if (!record.session) throw new Error(`Agent ${record.id} has no transcript to resume.`);
++      const outputTranscript = getAgentConfig(record.type)?.outputTranscript ?? getOutputTranscriptDefault();
++      const resumed = await startBackgroundResume(ctx, record, coordinatorMessage(message), { outputTranscript, maxTurns: resolveEffectiveMaxTurns(record.type), toolCallId });
++      if (!resumed) throw new Error(`Agent ${record.id} could not be resumed.`);
++      return textResult(JSON.stringify({ success: true, message: `Resuming agent ${record.id.slice(0, 7)}`, resumedAgentId: record.id }));
++    },
++  }));
++
++  registerToolReportingUsage(defineTool({
++    name: SUBAGENT_TOOL_NAMES.LIST_AGENTS,
++    label: "ListAgents",
++    description: CLAUDE_TOOLS.ListAgents.description,
++    parameters: CLAUDE_TOOLS.ListAgents.input_schema as any,
++    renderShell: "self",
++    renderCall() {
++      return emptyRow as any;
++    },
++    renderResult() {
++      return emptyRow as any;
++    },
++    execute: async () => {
++      const now = Date.now();
++      const rows = manager.listAgents().filter(isTopLevelAgent).map((r) => ({ id: r.id, type: r.type, status: r.status, age: formatFleetElapsed(now - r.startedAt) }));
++      return textResult(formatListAgents(rows));
++    },
++  }));
++
++  void (defineTool({
+     name: SUBAGENT_TOOL_NAMES.STEER,
+     label: "Steer Agent",
+     description:
+@@ -3052,33 +2998,10 @@
      if (!record) return;
  
      await viewAgentConversation(ctx, record);
@@ -1275,14 +1442,23 @@
    builtinToolNames?: string[];
    /** Raw `ext:` selector entries from the `tools:` CSV, e.g. ["ext:foo", "ext:bar/x"].
     * Presence of any entry flips extension tools to an explicit allowlist. */
-@@ -172,6 +176,8 @@
+@@ -172,6 +176,9 @@
    alias?: string;
    description: string;
    status: "queued" | "running" | "completed" | "steered" | "aborted" | "stopped" | "error";
 +  killedBy?: "user" | "parent";
++  notifiedEarly?: boolean;
 +  turnLimit?: number;
    result?: string;
    error?: string;
+   toolUses: number;
+@@ -307,6 +314,7 @@
+ /** Details attached to custom notification messages for visual rendering. */
+ export interface NotificationDetails {
+   id: string;
++  killedBy?: "user" | "parent";
+   description: string;
+   status: string;
    toolUses: number;
 --- a/src/ui/fleet-list.ts
 +++ b/src/ui/fleet-list.ts
@@ -1339,7 +1515,7 @@
    notify(message: string, type?: "info" | "warning" | "error"): void;
    custom<T>(
      factory: (tui: any, theme: Theme, keybindings: any, done: (result: T) => void) => { render(width: number): string[]; invalidate(): void; dispose?(): void },
-@@ -69,31 +74,117 @@
+@@ -69,31 +74,118 @@
  type WorkflowEntry = { kind: "workflow"; workflow: FleetWorkflow };
  type FleetEntry = MainEntry | WorkflowEntry | AgentEntry;
  
@@ -1388,6 +1564,7 @@
 +  named: boolean;
 +  description: string;
 +  status: string;
++  inline?: boolean;
 +};
 +
 +export function fleetRowLine(row: FleetRow, labelWidth: number, statusWidth: number, width: number, theme: Theme): string {
@@ -1403,7 +1580,7 @@
 +    tone(name, plain && !row.named),
 +    " ".repeat(labelWidth - visibleWidth(name) + Math.min(2, descriptionBox)),
 +    tone(description, plain),
-+    " ".repeat(Math.max(0, descriptionBox - 2 - visibleWidth(description)) + 1 + statusWidth - visibleWidth(row.status)),
++    row.inline ? "  " : " ".repeat(Math.max(0, descriptionBox - 2 - visibleWidth(description)) + 1 + statusWidth - visibleWidth(row.status)),
 +    tone(row.status, plain),
 +  ].join("");
 +}
@@ -1476,7 +1653,7 @@
  }
  
  export class FleetList {
-@@ -108,8 +199,6 @@
+@@ -108,8 +200,6 @@
    private active = false;
    /** 0 = `main`, 1..N = subagents. */
    private selectedIndex = 0;
@@ -1485,7 +1662,7 @@
    private viewingAgentId: string | undefined;
    /** Injected by the extension; absent until workflows are wired (or at all). */
    private workflowSource: (() => readonly FleetWorkflow[]) | undefined;
-@@ -117,11 +206,14 @@
+@@ -117,11 +207,14 @@
    /**
     * Set while the workflow inspector is up.
     *
@@ -1503,7 +1680,7 @@
  
    constructor(
      private manager: AgentManager,
-@@ -132,18 +224,6 @@
+@@ -132,18 +225,6 @@
       * `showCost` setting.
       */
      private showCost: () => boolean = () => false,
@@ -1522,7 +1699,7 @@
    ) {}
  
    // ---- Lifecycle ----
-@@ -174,7 +254,8 @@
+@@ -174,7 +255,8 @@
     * Called when an agent finishes. The viewer (if open on it) stays open so the
     * final output remains readable, and the row lingers in the list — just refresh.
     */
@@ -1532,7 +1709,7 @@
      this.update();
    }
  
-@@ -182,7 +263,7 @@
+@@ -182,7 +264,7 @@
      if (this.timer) { clearInterval(this.timer); this.timer = undefined; }
      this.inputUnsub?.();
      this.inputUnsub = undefined;
@@ -1541,7 +1718,7 @@
      this.viewingAgentId = undefined;
      // No handle to close the workflow inspector with, but the list is going
      // away — leaving the id set would keep it swallowing input forever.
-@@ -191,7 +272,6 @@
+@@ -191,7 +273,6 @@
      this.widgetRegistered = false;
      this.tui = undefined;
      this.active = false;
@@ -1549,7 +1726,7 @@
      this.ui = undefined;
    }
  
-@@ -206,6 +286,7 @@
+@@ -206,6 +287,7 @@
  
      if (!hasRows) {
        if (this.widgetRegistered) {
@@ -1557,7 +1734,7 @@
          this.ui.setWidget(FLEET_KEY, undefined);
          this.widgetRegistered = false;
          this.tui = undefined;
-@@ -220,10 +301,10 @@
+@@ -220,10 +302,10 @@
      this.ensureTimer(); // keep stats ticking whenever the list is shown (e.g. after a re-enable)
  
      if (!this.widgetRegistered) {
@@ -1570,7 +1747,7 @@
            invalidate: () => { this.widgetRegistered = false; this.tui = undefined; },
          };
        }, { placement: "belowEditor" });
-@@ -235,21 +316,13 @@
+@@ -235,21 +317,13 @@
  
    // ---- Roster ----
  
@@ -1595,7 +1772,7 @@
        ))
        .sort((a, b) => a.startedAt - b.startedAt);
    }
-@@ -278,21 +351,16 @@
+@@ -278,21 +352,16 @@
        .filter(run =>
          run.status === "running"
          || run.status === "paused"
@@ -1619,7 +1796,7 @@
      ];
    }
  
-@@ -314,7 +382,7 @@
+@@ -314,7 +383,7 @@
      // While an overlay is open, let it own all input. Checked before the focus
      // test below, which would otherwise read the dialog holding the keyboard as
      // "the user left the list" and reset the selection out from under it.
@@ -1628,7 +1805,7 @@
      // Input listeners fire BEFORE the focused component, and dialogs
      // (ctx.ui.select/confirm/input, pi's own menus) swap the prompt editor out
      // while getEditorText() still reads the detached — empty — editor. So when
-@@ -324,6 +392,34 @@
+@@ -324,6 +393,34 @@
        return undefined;
      }
  
@@ -1663,7 +1840,7 @@
      if (!this.active) {
        // Activate: ↓ or ← at an empty prompt moves focus into the list.
        const isActivator = matchesKey(data, "down") || matchesKey(data, "left");
-@@ -354,6 +450,7 @@
+@@ -354,6 +451,7 @@
      }
      if (matchesKey(data, "escape")) { this.deactivate(); return { consume: true }; }
      if (matchesKey(data, Key.enter)) { this.openSelected(); return { consume: true }; }
@@ -1671,7 +1848,7 @@
  
      // Any other key cancels navigation and flows to the editor.
      this.deactivate();
-@@ -382,14 +479,18 @@
+@@ -382,14 +480,18 @@
    private openSelected(): void {
      const entry = this.roster()[this.selectedIndex];
      if (!entry || entry.kind === "main") {
@@ -1693,7 +1870,7 @@
        this.viewingWorkflowId = entry.workflow.id;
        void Promise.resolve(this.openWorkflow?.(entry.workflow.id)).then(
          () => this.clearViewer(),
-@@ -397,147 +498,148 @@
+@@ -397,147 +499,149 @@
        );
        return;
      }
@@ -1961,7 +2138,8 @@
 +      name: cleanFleetText(record.alias ?? record.type) + (nested > 0 ? ` (+${nested})` : ""),
 +      named: record.alias !== undefined,
 +      description: cleanFleetText(record.description),
-+      status: tokens > 0 ? `${elapsed} · ${formatFleetTokens(tokens, acting ? "↓" : "↑")}` : elapsed,
++      status: tokens > 0 ? `${elapsed} · ${formatFleetTokens(tokens, acting || !live ? "↓" : "↑")}` : elapsed,
++      inline: !live,
 +    };
    }
  }

@@ -19,7 +19,12 @@ VOLATILE = [
     (re.compile(r"(?<= · )\d+(?:\.\d+)?k? tokens · \d+ tools?(?= · )"), "<n> tokens · <n> tools"),
     (re.compile(r"^(<spinner> <verb>…)(?: \(.*\))?$"), r"\1 <status>"),
     (re.compile(r"\b\d{2}:\d{2} [AP]M(?= \S+$)"), "<clock>"),
+    (re.compile(r"\ba[0-9a-f]{16}\b"), "<agent-id>"),
+    (re.compile(r"(?<=Resuming agent )a[0-9a-f]{6}\b"), "<agent-id7>"),
 ]
+
+GLUED = ("tool gap: Claude draws the SendMessage result row directly under the previous tool block, pi keeps its one-row gap between tool rows",
+         re.compile(r"^  ⎿[  ]{2}(?:Message queued for delivery to |Resuming agent )"))
 
 
 EXCEPTIONS = [
@@ -86,6 +91,9 @@ def load(name, side, applied, keep=None):
             if padded:
                 kept.insert(max(0, len(kept) - 1), {"text": "", "runs": []})
             continue
+        if side == "pi" and GLUED[1].search(line["text"]) and kept and not kept[-1]["text"].strip():
+            kept.pop()
+            applied.add(GLUED[0])
         exception, follower = row_exception(line["text"], side)
         padded = exception == TIPS_NAME
         if exception:
