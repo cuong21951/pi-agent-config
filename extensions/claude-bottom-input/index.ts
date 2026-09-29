@@ -9,6 +9,10 @@ export function padRows(rows: number, used: number, floor: number = 0): number {
 	return Math.max(0, Math.max(rows, floor) - used);
 }
 
+export function heldFloor(rows: number, used: number, pad: number): number {
+	return Math.min(used + pad, rows);
+}
+
 const ANSI = /\x1b\[[0-9;]*m/g;
 const THOUGHT_SUMMARY = /^Thought for .+$/;
 const RULE = /^─+$/;
@@ -73,7 +77,7 @@ export default function (pi: ExtensionAPI) {
 						}
 						const used = tui.render(width).length;
 						const pad = padRows(rows, used, floor);
-						floor = used + pad;
+						floor = heldFloor(rows, used, pad);
 						if (modalOpen) lastRows = 0;
 						return Array<string>(pad).fill("");
 					} finally {
@@ -95,6 +99,8 @@ if (process.env.CLAUDE_BOTTOM_INPUT_SELFTEST) {
 	check(padRows(30, 40, 46) === 6, "a frame that shrank by 6 lines keeps its 46-line height");
 	check(padRows(30, 50, 46) === 0, "a frame that grew past the floor pads nothing");
 	check(padRows(40, 12, 30) === 28, "a taller terminal wins over a smaller floor");
+	check(heldFloor(30, 46, 0) === 30 && padRows(30, 40, heldFloor(30, 46, 0)) === 0, "a transcript taller than the pane holds no floor past the screen, so a shrink leaves no blank rows above the prompt (Claude 2.1.283: 0)");
+	check(heldFloor(30, 12, 18) === 30 && padRows(30, 10, heldFloor(30, 12, 18)) === 20, "a frame that fits the pane still pads to the bottom after it shrinks");
 	check(dialogPad(undefined) === 0 && dialogPad("") === 0 && dialogPad("   ") === 0 && dialogPad("\x1b[38;2;153;153;153m   \x1b[39m") === 0, "a blank (or colour-only-blank) last transcript row needs no pad");
 	check(dialogPad("  Thought for 4s") === 0 && dialogPad("\x1b[38;2;153;153;153mThought for 1m 5s\x1b[39m") === 0, "a collapsed 'Thought for …' summary needs no pad either, like Claude's ask-user-question capture (measured 2026-09-23: straight into the rule)");
 	check(dialogPad("     then reply with just \"written\" and no other text.") === 1, "any other non-blank last transcript row gets exactly one pad row, like Claude's tool box before the permission rule");

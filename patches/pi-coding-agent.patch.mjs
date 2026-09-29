@@ -283,6 +283,14 @@ const EDITS = [
 		'label=theme.fg("customMessageLabel","\\x1B[1m[compaction]\\x1B[22m");if(this.addChild(new Text(label,0,0)),this.addChild(new Spacer(1)),this.expanded){',
 		'label=theme.fg("customMessageLabel","\\x1B[1m[compaction]\\x1B[22m");if(this.paddingX=this.paddingY=this.expanded?1:0,this.setBgFn(this.expanded?t=>theme.bg("customMessageBg",t):void 0),!this.expanded){this.addChild(new Text(theme.fg("muted","  \\u23BF \\u00a0")+"\\x1B[2mCompacted (ctrl+o to see full summary)\\x1B[22m",0,0));return}if(this.addChild(new Text(label,0,0)),this.addChild(new Spacer(1)),this.expanded){',
 	],
+	[
+		"let firstChanged=-1,lastChanged=-1,maxLines=Math.max(newLines.length,this.previousLines.length);",
+		"let reanchorTop=Math.max(0,newLines.length-height);if(newLines.length<this.previousLines.length&&reanchorTop<prevViewportTop&&!this.hasOverlayEntries&&!newLines.some(isImageLine)){logRedraw(`shrink re-anchored viewport (${prevViewportTop} -> ${reanchorTop})`);let out=new BoundedTerminalWriter(data=>this.terminal.write(data));out.append(\"\\x1B[?2026h\");let up=hardwareCursorRow-prevViewportTop;up>0?out.append(`\\x1B[${up}A`):up<0&&out.append(`\\x1B[${-up}B`);out.append(\"\\r\");for(let row=0;row<height;row++){row>0&&out.append(\"\\x1B[1B\\r\");out.append(\"\\x1B[2K\");let i=reanchorTop+row;i<newLines.length&&out.append(newLines[i])}out.append(\"\\x1B[?2026l\"),out.flush();this.hardwareCursorRow=reanchorTop+height-1,this.cursorRow=Math.max(0,newLines.length-1),this.maxLinesRendered=newLines.length,this.previousViewportTop=reanchorTop;this.positionHardwareCursor(cursorPos,newLines.length),this.previousLines=newLines,this.previousKittyImageIds=this.collectKittyImageIds(newLines),this.previousWidth=width,this.previousHeight=height;return}let firstChanged=-1,lastChanged=-1,maxLines=Math.max(newLines.length,this.previousLines.length);",
+	],
+	[
+		"function loadNativeModifiersHelper(){if(nativeModifiersHelper!==void 0)return nativeModifiersHelper??void 0;nativeModifiersHelper=null;",
+		"function loadNativeModifiersHelper(){if(nativeModifiersHelper!==void 0)return nativeModifiersHelper??void 0;nativeModifiersHelper=null;if(process.env.PI_TUI_NO_NATIVE_MODIFIERS)return;",
+	],
 ];
 
 const check = process.argv.includes("--check");

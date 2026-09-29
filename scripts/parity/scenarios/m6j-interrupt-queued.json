@@ -1,0 +1,59 @@
+{
+ "prompt": "Do not use any tool. Write exactly three paragraphs about lighthouses, separated by blank lines. Each paragraph has four long sentences.",
+ "rows": 30,
+ "gap": 1,
+ "steps": [
+  {
+   "until": "✻ \\S+ for [^\\n]*· done",
+   "timeout": 120
+  },
+  {
+   "sleep": 2
+  },
+  {
+   "keys": "\u001b[200~Bao said this about the calendar:\nline two of the pasted chat\nline three of the pasted chat\nline four of the pasted chat\nline five of the pasted chat\nline six of the pasted chat\nline seven of the pasted chat\nline eight of the pasted chat\nline nine of the pasted chat\nline ten: after reading it, write four long paragraphs about regex engines.\u001b[201~"
+  },
+  {
+   "sleep": 1.5
+  },
+  {
+   "keys": "\r"
+  },
+  {
+   "until": "(?m)^[·✢*✶✻✽] \\S+…",
+   "timeout": 30
+  },
+  {
+   "sleep": 1
+  },
+  {
+   "keys": "Now list three uses of regular expressions."
+  },
+  {
+   "sleep": 1
+  },
+  {
+   "keys": "\r"
+  },
+  {
+   "sleep": 1.5
+  },
+  {
+   "snap": "queued"
+  },
+  {
+   "keys": "\u001b"
+  },
+  {
+   "until": "Interrupted",
+   "timeout": 20
+  },
+  {
+   "sleep": 2
+  },
+  {
+   "snap": "interrupted"
+  }
+ ],
+ "end": "Interrupted"
+}

@@ -1,0 +1,45 @@
+{
+ "prompt": "Do not use any tool. Write exactly three paragraphs about lighthouses, separated by blank lines. Each paragraph has four long sentences.",
+ "rows": 30,
+ "gap": 1,
+ "steps": [
+  {
+   "until": "✻ \\S+ for [^\\n]*· done",
+   "timeout": 120
+  },
+  {
+   "sleep": 2
+  },
+  {
+   "keys": "one\u001b\rtwo\u001b\rthree\u001b\rfour\u001b\rfive\u001b\rsix\u001b\rseven\u001b\reight"
+  },
+  {
+   "sleep": 6
+  },
+  {
+   "snap": "typed"
+  },
+  {
+   "keys": "\u0003"
+  },
+  {
+   "sleep": 2
+  },
+  {
+   "snap": "cleared"
+  },
+  {
+   "resize": [
+    24,
+    132
+   ]
+  },
+  {
+   "sleep": 3
+  },
+  {
+   "snap": "resized"
+  }
+ ],
+ "end": "✻ \\S+ for [^\\n]*· done"
+}
