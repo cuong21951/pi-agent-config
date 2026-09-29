@@ -1,5 +1,5 @@
 {
-  "prompt": "Use your Agent tool to start one background agent with description \"Check files\", subagent_type \"general-purpose\" and prompt \"Do these steps in order, one tool call per step: read the file TASK.md; run the shell command python -c 'import time; time.sleep(8)'; search the src folder for the text export; run the shell command python -c 'import time; time.sleep(30)'; then reply with exactly: All checked.\". Then reply with exactly: Started. No other text. Later, only when a task notification arrives, reply with exactly: Checker finished.",
+  "prompt": "Use your Agent tool to start one background agent with description \"Check files\", subagent_type \"general-purpose\" and prompt \"Do these steps in order, one tool call per step: read the file notes.txt; run the shell command python -c 'import time; time.sleep(8)'; search the src folder for the text export; run the shell command python -c 'import time; time.sleep(30)'; then reply with exactly: All checked.\". Then reply with exactly: Started. No other text. Later, only when a task notification arrives, reply with exactly: Checker finished.",
   "steps": [
     {
       "until": "Waiting for 1 background agent",

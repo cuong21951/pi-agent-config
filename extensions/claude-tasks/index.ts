@@ -45,7 +45,7 @@ type Record = {
 	completedAt?: number;
 	error?: string;
 	lifetimeUsage: { output: number };
-	session?: { messages: Message[]; model?: { name?: string; id?: string } };
+	session?: { messages: Message[]; model?: { name?: string; id?: string }; sessionManager?: { getCwd?: () => string } };
 };
 
 function registry(): Registry | undefined {
@@ -67,8 +67,14 @@ export function formatTokens(count: number): string {
 	return count >= 1000 ? COMPACT.format(count).toLowerCase() : String(count);
 }
 
-export function activity(name: string, args: { [key: string]: unknown }): string {
-	const arg = (key: string) => (typeof args[key] === "string" ? (args[key] as string) : "");
+function underCwd(value: string, cwd: string): string {
+	const root = cwd.replace(/[\\/]+$/, "");
+	const head = value.slice(0, root.length + 1).replace(/\\/g, "/").toLowerCase();
+	return root !== "" && head === `${root.replace(/\\/g, "/").toLowerCase()}/` ? value.slice(root.length + 1) : value;
+}
+
+export function activity(name: string, args: { [key: string]: unknown }, cwd = ""): string {
+	const arg = (key: string) => (typeof args[key] === "string" ? (key === "path" ? underCwd(args[key] as string, cwd) : (args[key] as string)) : "");
 	const title: { [key: string]: [string, string] } = {
 		read: ["Read", "path"], bash: ["Bash", "command"], edit: ["Update", "path"], write: ["Write", "path"],
 		grep: ["Search", "pattern"], find: ["Search", "pattern"], ls: ["List", "path"], Agent: ["Agent", "description"],
@@ -107,7 +113,7 @@ export function taskOf(record: Record, now: number): Task {
 		tokens: context + record.lifetimeUsage.output,
 		tools: record.toolUses,
 		prompt: textOf(messages.find((m) => m.role === "user")?.content).replace(/^(?:<system-reminder>\n[\s\S]*?\n<\/system-reminder>\n)+/, "").trim(),
-		activities: calls.slice(-RECENT).map((c) => activity(c.name, c.arguments ?? {})),
+		activities: calls.slice(-RECENT).map((c) => activity(c.name, c.arguments ?? {}, record.session?.sessionManager?.getCwd?.() ?? process.cwd())),
 		...(record.error ? { error: record.error } : {}),
 	};
 }
@@ -271,5 +277,6 @@ if (process.env.CLAUDE_TASKS_SELFTEST) {
 	check(detailRows(base, 132, plain, 3).join("\n") === ["▔".repeat(132), "   general-purpose › Plan review", "   6s · 1.0k tokens · 2 tools · Haiku 4.5", "", "   Progress", "     Agent(Helper sleep)", '   › Bash(python -c "import time; time.sleep(35)")', "", "   Prompt", "   Spawn a helper agent that runs sleep 30, then report.", "", "   ← to go back · Esc/Enter/Space to close · x to stop · f to foreground · ctrl+x ctrl+k to stop all agents"].join("\n"), "a running agent's detail draws Claude's Progress/Prompt card (m6f-measure4 tasks-detail)");
 	check(detailRows({ ...base, status: "completed" }, 132, plain).slice(1, 4).join("\n") === ["   general-purpose › Plan review", "   ✔ Completed · 6s · 1.0k tokens · 2 tools · Haiku 4.5", ""].join("\n") && detailRows({ ...base, status: "completed" }, 132, plain).at(-1) === "   ← to go back · Esc/Enter/Space to close", "a finished agent's card leads with its state and drops Progress and the stop keys");
 	check(activity("read", { path: "TASK.md" }) === "Read(TASK.md)" && activity("bash", { command: "sleep 6" }) === "Bash(sleep 6)" && activity("Agent", { description: "Helper sleep" }) === "Agent(Helper sleep)" && activity("grep", { pattern: "export", path: "src" }) === 'Search(pattern: "export", path: "src")', "activities read like Claude's Progress rows");
+	check(activity("read", { path: "C:\\W\\work\\notes.txt" }, "C:\\W\\work") === "Read(notes.txt)" && activity("grep", { pattern: "export", path: "C:/W/work/src" }, "C:\\W\\work") === 'Search(pattern: "export", path: "src")' && activity("read", { path: "D:\\x.txt" }, "C:\\W") === "Read(D:\\x.txt)", "a path under the agent's cwd reads relative, as Claude's Progress rows do (m6f-view suite run, the model passed absolute paths)");
 	check(shortModel("Claude Haiku 4.5 (latest)") === "Haiku 4.5" && formatTokens(1000) === "1.0k" && formatElapsed(53000) === "53s", "model, tokens and elapsed use Claude's short forms");
 }
