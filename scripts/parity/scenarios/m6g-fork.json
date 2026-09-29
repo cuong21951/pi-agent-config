@@ -1,0 +1,13 @@
+{
+ "prompt": "M6G fork run.",
+ "fixture": "findings/m6g/fixture",
+ "pi_mock": true,
+ "session": "findings/m6g/fork.jsonl",
+ "end": "forkdone[\\s\\S]*✻ \\S+ for [^\\n]*· done",
+ "steps": [
+  {"until": "forkdone[\\s\\S]*✻ \\S+ for [^\\n]*· done", "timeout": 90},
+  {"sleep": 1},
+  {"snap": "end"}
+ ],
+ "reqdiff": ["result:Agent", "notifications", "sub:M6G-SUB-FK:fork"]
+}

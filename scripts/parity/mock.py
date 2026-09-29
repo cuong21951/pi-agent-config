@@ -267,9 +267,10 @@ def user_prompt(message):
     content = message.get("content")
     if isinstance(content, str):
         return content
+    text = "".join(c.get("text", "") for c in content if c.get("type") == "text")
     if any(c.get("type") == "tool_result" for c in content):
-        return None
-    return "".join(c.get("text", "") for c in content if c.get("type") == "text")
+        return text if any(turn["prompt"] and turn["prompt"] in text for turn in TURNS[1:]) else None
+    return text
 
 
 def locate(messages):

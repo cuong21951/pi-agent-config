@@ -43,6 +43,8 @@ EXCEPTIONS = [
      re.compile(r',"pin":\{[^}]*\}')),
     ("ListAgents: Claude's own-session line and Peer sessions list; pi has no cross-session registry", "claude",
      re.compile(r"This session is [^\n]*\n\n|\n\nPeer sessions \(\d+\):(?:\n  [^\n]*)*")),
+    ("fork tool list: rpiv-ask-user-question strips ask_user_question from a session without a UI (reconcile.ts), so a pi fork lacks the AskUserQuestion Claude's fork keeps", "pi",
+     re.compile(r"(?m)^tools: missing \['ask_user_question'\], extra \[\]$"), "tools: the parent tools"),
     ("tool error channel: Claude wraps every failed tool_result in <tool_use_error>, pi sends is_error with the bare text (all tools, not the agent contract)", "claude",
      re.compile(r"</?tool_use_error>")),
 ]
@@ -54,10 +56,10 @@ TOP_LEVEL_SCHEMA = "tool schema envelope: pi-ai's anthropic provider sends every
 def excepted(text, side):
     if text is None:
         return None
-    for name, which, pattern in EXCEPTIONS:
+    for name, which, pattern, *replacement in EXCEPTIONS:
         if which == side and pattern.search(text):
             applied.add(name)
-            text = pattern.sub("", text)
+            text = pattern.sub((replacement or [""])[0], text)
     return text
 
 
@@ -96,12 +98,20 @@ def is_side(body):
     return "Describe your most recent action in 3-5 words" in last or "[SUGGESTION MODE:" in last
 
 
+def user_texts(body):
+    return [text for message in body.get("messages", []) if message.get("role") == "user" for text in texts(message["content"])]
+
+
+def is_fork(body):
+    return any("</fork-boilerplate>" in text for text in user_texts(body))
+
+
 def main_requests(bodies, prompt):
-    return [b for b in bodies if not is_side(b) and (prompt is None or prompt in first_user_text(b))]
+    return [b for b in bodies if not is_side(b) and not is_fork(b) and (prompt is None or prompt in first_user_text(b))]
 
 
 def sub_requests(bodies, key):
-    return [b for b in bodies if not is_side(b) and key in first_user_text(b)]
+    return [b for b in bodies if not is_side(b) and (key in first_user_text(b) or is_fork(b) and any(key in text for text in user_texts(b)))]
 
 
 def canonical(value, key=None):
@@ -168,6 +178,41 @@ def system_text(body):
     return "\n\n".join(normalise(p) for p in parts if not p.startswith("x-anthropic-billing-header"))
 
 
+def plain(value):
+    if isinstance(value, dict):
+        return {k: plain(v) for k, v in value.items() if k != "cache_control"}
+    if isinstance(value, list):
+        return [plain(v) for v in value]
+    return value
+
+
+def turns(messages):
+    merged = []
+    for message in plain(messages):
+        content = blocks(message["content"])
+        if merged and merged[-1]["role"] == message["role"]:
+            merged[-1]["content"] += content
+        else:
+            merged.append({"role": message["role"], "content": list(content)})
+    return merged
+
+
+def fork_summary(fork, main):
+    history, tail = turns(fork["messages"])[:-1], turns(fork["messages"])[-1]
+    parent = next((b for b in main if turns(b["messages"])[:len(history)] == history), None)
+    lines = [f"history: {'the parent conversation' if parent else 'differs from every parent request'} ({len(history)} turns)"]
+    if parent:
+        lines.append(f"system: {'the parent system prompt' if system_text(fork) == system_text(parent) else 'differs from the parent'}")
+        names = lambda body: sorted(t["name"] for t in body.get("tools", []))
+        missing, extra = sorted(set(names(parent)) - set(names(fork))), sorted(set(names(fork)) - set(names(parent)))
+        lines.append("tools: the parent tools" if not missing and not extra else f"tools: missing {missing}, extra {extra}")
+        lines.append(f"model: {'the parent model' if fork.get('model') == parent.get('model') else fork.get('model')}")
+    for block in tail["content"]:
+        text = result_text(block.get("content")) if block.get("type") == "tool_result" else block.get("text", "")
+        lines.append(f"{block.get('type')}: {normalise(text)}")
+    return "\n".join(lines)
+
+
 def extract(bodies, check, prompt):
     kind, _, arg = check.partition(":")
     main = main_requests(bodies, prompt)
@@ -203,6 +248,8 @@ def extract(bodies, check, prompt):
             joined = "\n".join(t for m in subs[-1].get("messages", []) for b in blocks(m.get("content")) for t in ([b.get("text", "")] if b.get("type") == "text" else [result_text(b.get("content"))] if b.get("type") == "tool_result" else []))
             found = re.search(r"(?:<system-reminder>\n)?The coordinator sent a message while you were working:[\s\S]*?Address this before completing your current task\.(?:\n</system-reminder>)?", joined)
             return normalise(found.group(0)) if found else None
+        if part == "fork":
+            return fork_summary(first, main)
         if part == "model":
             return json.dumps({k: first.get(k) for k in ("model", "max_tokens")})
     raise SystemExit(f"unknown check {check}")
