@@ -4,7 +4,8 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 CAPTURE = os.path.join(HERE, "..", "pty-capture.py")
 MOCK = os.path.join(HERE, "mock.py")
 PI_MOCK_PROVIDER = os.path.join(HERE, "pi-mock-provider.ts")
-PI_MOCK_MODEL = "parity-mock/claude-haiku-4-5"
+PI_MOCK_PROVIDER_NAME = "parity-mock"
+PI_MOCK_MODEL_ID = "claude-haiku-4-5"
 PROMPT = "Follow the instructions in TASK.md exactly."
 DONE = r"✻ \S+ for [^\n]*· done"
 SUBMITTED = r"(?m)^❯\s*$"
@@ -46,7 +47,7 @@ a.rows = scenario.get("rows", a.rows)
 pi_mock = a.pi_mock or scenario.get("pi_mock", False)
 scripted = a.session or (os.path.join(HERE, scenario["session"]) if scenario.get("session") else None)
 if pi_mock:
-    a.pi_model = PI_MOCK_MODEL
+    a.pi_model = f"{PI_MOCK_PROVIDER_NAME}/{scenario.get('pi_mock_model', PI_MOCK_MODEL_ID)}"
     a.dump_requests = True
 a.cols = scenario.get("cols", a.cols)
 
@@ -160,6 +161,9 @@ with open(os.path.join(a.out, "reqdiff.json"), "w", encoding="utf-8") as f:
     json.dump({"prompt": prompt, "checks": scenario.get("reqdiff", []) if pi_mock else []}, f)
 with open(os.path.join(a.out, "perm-throwaway.json"), "w", encoding="utf-8") as f:
     json.dump({"yoloMode": bypass}, f)
+CHEAP_MODELS_MOCK = os.path.join(a.out, "cheap-models-mock.json")
+with open(CHEAP_MODELS_MOCK, "w", encoding="utf-8") as f:
+    json.dump({"maxInputPerM": -1, "maxOutputPerM": -1, "subscriptions": [f"{PI_MOCK_PROVIDER_NAME}/*"], "allow": [], "deny": []}, f)
 for stale in glob.glob(os.path.join(a.out, "claude*.json")) + glob.glob(os.path.join(a.out, "pi*.json")) + glob.glob(os.path.join(a.out, "request-*.json")):
     if a.only in (None, os.path.basename(stale).split("-")[0].split(".")[0]):
         os.remove(stale)
@@ -186,7 +190,7 @@ elif a.only in (None, "pi"):
             raise SystemExit("pi_mock needs --session or a scenario session")
         mock = start_mock(scripted, "req-pi", "pi-mock.log", ["--pi"])
         try:
-            capture("pi", ["--args", f"-e {slash(PI_MOCK_PROVIDER)} {pi_args}"], PI_SANDBOX_ENV + a.pi_env + scenario.get("pi_env", []) + [f"PARITY_MOCK_URL=http://127.0.0.1:{a.port}"], steps=steps_for("pi"))
+            capture("pi", ["--args", f"-e {slash(PI_MOCK_PROVIDER)} {pi_args}"], PI_SANDBOX_ENV + a.pi_env + scenario.get("pi_env", []) + [f"PARITY_MOCK_URL=http://127.0.0.1:{a.port}", f"CHEAP_MODELS_CONFIG={CHEAP_MODELS_MOCK}"], steps=steps_for("pi"))
         finally:
             stop_mock(mock)
     else:

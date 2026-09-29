@@ -70,3 +70,18 @@ session("cap", [
     ("M6G cap run.", [[("Agent", {"description": "First sleeper", "subagent_type": "general-purpose", "prompt": "M6G-SUB-CA: run the timer, then reply with the word careport."}), ("Agent", {"description": "Second sleeper", "subagent_type": "general-purpose", "prompt": "M6G-SUB-CB: reply with the word cbreport."})], ["capped"], ["capdone"]]),
     ("M6G-SUB-CA: run the timer, then reply with the word careport.", [[("bash", {"command": "python -c 'import time; time.sleep(4)'", "description": "Timer"})], ["careport"]]),
 ])
+session("fork", [
+    ("M6G fork run.", [[("Agent", {"description": "Fork check", "subagent_type": "fork", "prompt": "M6G-SUB-FK: reply with the word fkreport."})], ["started"], ["forkdone"]]),
+    ("M6G-SUB-FK: reply with the word fkreport.", [["fkreport", 1500]]),
+])
+session("nest", [
+    ("M6G nest run.", [[("Agent", {"description": "Nest parent", "subagent_type": "general-purpose", "prompt": "M6G-SUB-NE: launch one agent, then reply with the word nereport."})], ["started"], ["nested"]]),
+    ("M6G-SUB-NE: launch one agent, then reply with the word nereport.", [[("Agent", {"description": "Nest child", "subagent_type": "general-purpose", "prompt": "M6G-SUB-NF: reply with the word nfreport."})], ["newait"], ["nereport"]]),
+    ("M6G-SUB-NF: reply with the word nfreport.", [["nfreport", 1500]]),
+])
+session("fable", [
+    ("M6G fable run.", [[("Agent", {"description": "Explore", "subagent_type": "Explore", "prompt": "M6G-SUB-FE: reply with the word fereport."})], [("Agent", {"description": "Plan", "subagent_type": "Plan", "prompt": "M6G-SUB-FP: reply with the word fpreport."})], [("Agent", {"description": "General", "subagent_type": "general-purpose", "prompt": "M6G-SUB-FG: reply with the word fgreport."})], ["fabledone"], ["feseen"], ["fpseen"], ["fgseen"]]),
+    ("M6G-SUB-FE: reply with the word fereport.", [["fereport", 2000]]),
+    ("M6G-SUB-FP: reply with the word fpreport.", [["fpreport", 5000]]),
+    ("M6G-SUB-FG: reply with the word fgreport.", [["fgreport", 8000]]),
+])
