@@ -26,6 +26,7 @@ REPLAYED = {
 }
 REPLAYED_SCENARIOS = {
     "m6b-todos.jsonl": "m6b-todos",
+    "m6b-midturn.jsonl": "m6b-midturn",
 }
 
 ap = argparse.ArgumentParser(description="Run every parity scenario (live pi on Copilot, Claude replaying it) and every replay fixture, diff each, exit 0 only when all are clean.")

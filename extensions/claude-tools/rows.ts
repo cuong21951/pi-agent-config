@@ -1,6 +1,6 @@
 import { runningDescription } from "./verbs.ts";
 
-type Kind = "search" | "read" | "list" | "bash" | "write" | "own" | "other" | "thought" | `mcp:${string}`;
+type Kind = "search" | "read" | "list" | "bash" | "write" | "own" | "other" | "thought" | "none" | `mcp:${string}`;
 type Args = Record<string, unknown>;
 export type Brush = { fg: (role: string, text: string) => string; bold: (text: string) => string };
 export type Describe = (args: Args) => { activity?: string; hint?: string };
@@ -76,6 +76,10 @@ const KIND: Record<string, Kind> = {
 	exit_plan_mode: "own",
 	enter_plan_mode: "own",
 	TaskStop: "own",
+	task_create: "none",
+	task_get: "none",
+	task_list: "none",
+	task_update: "none",
 };
 const OWN_ROW: ReadonlySet<Kind> = new Set(["write", "own"]);
 const CLASSIFY_SEPARATOR = /\|\||&&|[;\n|]/;
@@ -224,6 +228,10 @@ export function describeTool(toolName: string, describe: Describe): void {
 
 function place(id: string, kind: Kind, at: number): void {
 	if (kinds.has(id) || dropped.has(id)) return;
+	if (kind === "none") {
+		dropped.add(id);
+		return;
+	}
 	position.set(id, order.length);
 	order.push(id);
 	kinds.set(id, kind);
@@ -696,6 +704,11 @@ if (process.env.CLAUDE_ROWS_SELFTEST) {
 	calls.agent_start({}, {});
 	run("nestedor", "bash", { command: "cd $(dirname $(find . -name tsconfig.json 2>/dev/null | head -1) 2>/dev/null || pwd) 2>/dev/null; ls; npx tsc --noEmit 2>&1 | head -50" }, "no errors");
 	check(summaryFor("nestedor") === "  Ran 1 shell command", "an unrecognized leading word (cd) voids classification for the whole call, leaving just 1 shell command (Claude 2.1.280)");
+	calls.agent_start({}, {});
+	run("taskskip1", "task_create", { subject: "Read the file" }, "Task #1 created successfully: Read the file");
+	run("taskskip2", "task_update", { taskId: "1", status: "in_progress" }, "Updated task #1 status");
+	run("taskbash", "bash", { command: "python -c \"import time; time.sleep(8)\"" }, "");
+	check(!summaryFor("taskskip1") && summaryFor("taskbash") === "  Ran 1 shell command", "Task tools count as nothing in a group, so a bash call after them reads only its own clause (Claude 2.1.283, m6b-midturn)");
 	calls.agent_start({}, {});
 	run("catalone", "bash", { command: "cat src/util.ts" }, "export function clamp() {}");
 	check(summaryFor("catalone") === "  Read 1 file", "a classified bash call alone in its group (Claude's TASK.md `ls src` / `ls ./missing-folder` steps) shows only its clause, no shell-command credit (Claude 2.1.280)");
