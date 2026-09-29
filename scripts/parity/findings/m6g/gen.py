@@ -66,3 +66,7 @@ session("sendrun", [
     ("M6G sendrun run.", [[("Agent", {"description": "Long sleeper", "subagent_type": "general-purpose", "prompt": "M6G-SUB-SR: run the long timer, then reply with the word srreport."})], [("ListAgents", {})], [("SendMessage", {"to": "@FIRST", "message": "M6G-SUB-SM2: also reply with the word smreport.", "summary": "ask more"})], ["asked"], ["srdone"]]),
     ("M6G-SUB-SR: run the long timer, then reply with the word srreport.", [[("bash", {"command": "python -c 'import time; time.sleep(12)'", "description": "Long timer"})], ["srreport"]]),
 ])
+session("cap", [
+    ("M6G cap run.", [[("Agent", {"description": "First sleeper", "subagent_type": "general-purpose", "prompt": "M6G-SUB-CA: run the timer, then reply with the word careport."}), ("Agent", {"description": "Second sleeper", "subagent_type": "general-purpose", "prompt": "M6G-SUB-CB: reply with the word cbreport."})], ["capped"], ["capdone"]]),
+    ("M6G-SUB-CA: run the timer, then reply with the word careport.", [[("bash", {"command": "python -c 'import time; time.sleep(4)'", "description": "Timer"})], ["careport"]]),
+])

@@ -1,0 +1,15 @@
+{
+ "prompt": "M6G cap run.",
+ "fixture": "findings/m6g/fixture",
+ "pi_mock": true,
+ "session": "findings/m6g/cap.jsonl",
+ "claude_env": ["CLAUDE_CODE_MAX_CONCURRENT_SUBAGENTS=1"],
+ "pi_env": ["CLAUDE_CODE_MAX_CONCURRENT_SUBAGENTS=1"],
+ "end": "capdone[\\s\\S]*✻ \\S+ for [^\\n]*· done",
+ "steps": [
+  {"until": "capdone[\\s\\S]*✻ \\S+ for [^\\n]*· done", "timeout": 90},
+  {"sleep": 1},
+  {"snap": "end"}
+ ],
+ "reqdiff": ["result:Agent", "notifications"]
+}

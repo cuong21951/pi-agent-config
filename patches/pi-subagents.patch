@@ -20,7 +20,7 @@
      + ansiColor("foreground", quantized ? rgbTo256(contrasting).index : contrasting)
 --- a/src/agent-manager.ts
 +++ b/src/agent-manager.ts
-@@ -14,7 +14,7 @@
+@@ -14,12 +14,13 @@
   * either — see `occupiesPoolSlot` / `occupiesForegroundSlot`.
   */
  
@@ -29,7 +29,14 @@
  import { statSync } from "node:fs";
  import { isAbsolute } from "node:path";
  import type { Model } from "@earendil-works/pi-ai";
-@@ -498,7 +498,7 @@
+ import type { AgentSession, ExtensionAPI, ExtensionContext } from "@earendil-works/pi-coding-agent";
+-import { resumeAgent, runAgent, type ToolActivity } from "./agent-runner.js";
++import { resolveEffectiveMaxTurns, resumeAgent, runAgent, type ToolActivity } from "./agent-runner.js";
++import { turnLimitNote } from "./claude-contract.js";
+ import { assignHandle, handleBase } from "./mention.js";
+ import { describeModel } from "./model-resolver.js";
+ import type { AgentInvocation, AgentRecord, AgentTombstone, IsolationMode, MentionResolution, SubagentType, ThinkingLevel } from "./types.js";
+@@ -498,7 +499,7 @@
      // can fix and retry; the RPC layer converts throws into error envelopes.
      assertValidSpawnCwd(options.cwd);
  
@@ -38,7 +45,24 @@
      const abortController = new AbortController();
      const record: AgentRecord = {
        id,
-@@ -970,7 +970,9 @@
+@@ -854,6 +855,7 @@
+           // honest "error" — not a completion with an empty or stale result.
+           if (aborted) {
+             record.status = "aborted";
++            record.turnLimit = resolveEffectiveMaxTurns(type, options.maxTurns);
+           } else if (failure) {
+             record.status = "error";
+             record.error = failure;
+@@ -861,7 +863,7 @@
+             record.status = steered ? "steered" : "completed";
+           }
+         }
+-        record.result = responseText;
++        record.result = record.turnLimit && record.status === "aborted" ? `${turnLimitNote(record.turnLimit, type)}\n\n${responseText}`.trimEnd() : responseText;
+         // Kept beside `result`, never inside it: `result` is prose meant for a
+         // reader — it is previewed, transcribed, and appended to below — while
+         // this is a machine-readable payload one caller asked for by schema.
+@@ -970,7 +972,9 @@
      if (pool === "background") this.runningBackground--;
      else if (pool === "foreground") this.runningForeground--;
  
@@ -49,7 +73,7 @@
        try { this.onComplete?.(record); } catch { /* ignore completion side-effect errors */ }
      } else {
        this.onComplete?.(record);
-@@ -1422,6 +1424,10 @@
+@@ -1422,6 +1426,10 @@
      record.abortController?.abort();
      record.status = "stopped";
      record.completedAt = Date.now();
@@ -175,7 +199,25 @@
      });
    }
  
-@@ -1096,8 +1105,19 @@
+@@ -1055,14 +1064,9 @@
+     if (event.type === "turn_end") {
+       turnCount++;
+       options.onTurnEnd?.(turnCount);
+-      if (maxTurns != null) {
+-        if (!softLimitReached && turnCount >= maxTurns) {
+-          softLimitReached = true;
+-          session.steer("You have reached your turn limit. Wrap up immediately — provide your final answer now.");
+-        } else if (softLimitReached && turnCount >= maxTurns + graceTurns) {
+-          aborted = true;
+-          session.abort();
+-        }
++      if (maxTurns != null && !aborted && turnCount >= maxTurns) {
++        aborted = true;
++        session.abort();
+       }
+     }
+     if (event.type === "message_start") {
+@@ -1096,8 +1100,19 @@
    const collector = collectResponseText(session);
    const cleanupAbort = forwardAbortSignal(session, options.signal);
  
@@ -199,7 +241,7 @@
      if (parentContext) {
 --- a/src/claude-contract.ts
 +++ b/src/claude-contract.ts
-@@ -0,0 +1,192 @@
+@@ -0,0 +1,215 @@
 +import { existsSync, readFileSync } from "node:fs";
 +import { dirname, join } from "node:path";
 +import type { AgentConfig, AgentRecord } from "./types.js";
@@ -391,6 +433,29 @@
 +
 +export function formatListAgents(rows: { id: string; type: string; status: AgentRecord["status"]; age: string }[]): string {
 +  return `Subagents (${rows.length}):` + rows.map((r) => `\n  ${r.id}  ·  ${r.type}  ·  ${listStatus(r.status)}  ·  started ${r.age} ago`).join("");
++}
++
++export function concurrentSubagentLimit(): number {
++  const value = Number(process.env.CLAUDE_CODE_MAX_CONCURRENT_SUBAGENTS);
++  return Number.isFinite(value) && value > 0 ? Math.floor(value) : 20;
++}
++
++export function concurrentLimitError(limit: number): string {
++  return `Concurrent subagent limit reached. You can run ${limit} subagents at once. Do not retry. If the user wants more concurrent subagents, ask them to increase CLAUDE_CODE_MAX_CONCURRENT_SUBAGENTS.`;
++}
++
++export function turnLimitNote(turns: number, type: string): string {
++  const send = type === "Explore" || type === "Plan" ? "" : " Send the agent a message (SendMessage) to let it continue from where it stopped.";
++  return `NOTE: this agent stopped at its ${turns}-turn limit before finishing. The text below is PARTIAL output; treat it as incomplete.${send}`;
++}
++
++export function refusedGroupLines(calls: { description: string; failed: boolean }[], theme: { fg: (role: string, text: string) => string; bold: (text: string) => string }): string[] {
++  const rows = calls.flatMap((call, i) => {
++    const last = i === calls.length - 1;
++    const row = "   " + theme.fg("muted", last ? "└ " : "├ ") + theme.bold(call.description) + (call.failed ? " · 0 tool uses" : "");
++    return call.failed ? [row, `   ${last ? " " : theme.fg("muted", "│")} ` + theme.fg("muted", "⎿  Done")] : [row];
++  });
++  return [theme.fg("error", "● ") + theme.bold(String(calls.length)) + " agents finished", ...rows];
 +}
 --- a/src/claude-tools.json
 +++ b/src/claude-tools.json
@@ -684,7 +749,7 @@
  import { fullWorkflowToolDescription } from "./workflow/tool-description.js";
  import { isWorktreeIsolationEnabled, setWorktreeIsolationEnabled } from "./worktree.js";
 -import { escapeXml } from "./xml.js";
-+import { agentToolsLabel, CLAUDE_TOOLS, coordinatorMessage, formatListAgents, listStatus, isClaudeModelAlias, launchedGroupLines, placeNotifications, remoteIsolationFallback, resolveClaudeModelAlias, formatAgentTypesReminder, formatLaunchResult, formatTaskNotification } from "./claude-contract.js";
++import { agentToolsLabel, CLAUDE_TOOLS, refusedGroupLines, concurrentLimitError, concurrentSubagentLimit, coordinatorMessage, formatListAgents, listStatus, isClaudeModelAlias, launchedGroupLines, placeNotifications, remoteIsolationFallback, resolveClaudeModelAlias, formatAgentTypesReminder, formatLaunchResult, formatTaskNotification } from "./claude-contract.js";
  
  // ---- Shared helpers ----
  
@@ -746,7 +811,7 @@
      resultPreview: record.result
        ? record.result.length > resultMaxLen
          ? record.result.slice(0, resultMaxLen) + "…"
-@@ -305,6 +262,24 @@
+@@ -305,6 +262,28 @@
    if (inChildSessionContext()) return;
  
    // ---- Register custom notification renderer ----
@@ -764,6 +829,10 @@
 +    for (const call of calls) agentCallGroups.set(call.id, calls);
 +  };
 +  const emptyRow = { render: () => [] as string[], invalidate: () => {} };
++  const failedAgentCalls = new Set<string>();
++  pi.on("tool_execution_end", async (event: any) => {
++    if (event.toolName === "Agent" && event.isError) failedAgentCalls.add(event.toolCallId);
++  });
 +  pi.on("message_end", async (event: any) => noteAgentCalls(event.message));
 +  pi.on("session_start", async (_event: any, ctx: any) => {
 +    for (const entry of ctx.sessionManager?.getEntries?.() ?? []) if (entry?.type === "message") noteAgentCalls(entry.message);
@@ -771,7 +840,7 @@
    pi.registerMessageRenderer<NotificationDetails>(
      "subagent-notification",
      (message, { expanded }, theme) => {
-@@ -317,6 +292,12 @@
+@@ -317,6 +296,12 @@
          const statusText = isError ? d.status
            : d.status === "steered" ? "completed (steered)"
            : "completed";
@@ -784,7 +853,7 @@
  
          // Line 1: icon + agent description + status
          let line = `${icon} ${theme.bold(d.description)} ${theme.fg("dim", statusText)}`;
-@@ -358,7 +339,7 @@
+@@ -358,7 +343,7 @@
        // from it is what the batch cost — not four figures to add up by hand.
        // Derived from the per-agent details rather than carried alongside them:
        // one source, so the total can never disagree with the rows above it.
@@ -793,7 +862,7 @@
          const total = formatCost(all.reduce((sum, a) => sum + (a.totalCost ?? 0), 0));
          if (total) {
            const tokens = all.reduce((sum, a) => sum + a.totalTokens, 0);
-@@ -470,18 +451,31 @@
+@@ -470,18 +455,31 @@
    }
  
    // ---- Individual nudge helper (async join mode) ----
@@ -835,7 +904,7 @@
    }
  
    function sendIndividualNudge(record: AgentRecord) {
-@@ -492,40 +486,6 @@
+@@ -492,40 +490,6 @@
      widget.update();
    }
  
@@ -876,7 +945,7 @@
    /** Helper: build event data for lifecycle events from an AgentRecord. */
    function buildEventData(record: AgentRecord) {
      const durationMs = record.completedAt ? record.completedAt - record.startedAt : Date.now() - record.startedAt;
-@@ -564,6 +524,26 @@
+@@ -564,6 +528,26 @@
      };
    }
  
@@ -903,7 +972,7 @@
    // Background completion: route through group join or send individual nudge
    const manager = new AgentManager((record) => {
      // Owned children — nested, or a workflow's — report only through their
-@@ -574,6 +554,7 @@
+@@ -574,6 +558,7 @@
  
      // Emit lifecycle event based on terminal status
      const isError = record.status === "error" || record.status === "stopped" || record.status === "aborted";
@@ -911,7 +980,7 @@
      const eventData = buildEventData(record);
      if (isError) {
        pi.events.emit("subagents:failed", eventData);
-@@ -597,19 +578,7 @@
+@@ -597,19 +582,7 @@
        return;
      }
  
@@ -932,7 +1001,7 @@
      widget.update();
    }, undefined, (record) => {
      if (!isTopLevelAgent(record)) return;
-@@ -735,6 +704,10 @@
+@@ -735,6 +708,10 @@
      return resolved?.kind === "live" ? resolved.record : undefined;
    };
  
@@ -943,7 +1012,7 @@
    const registryEntry = {
      waitForAll: () => manager.waitForAll(),
      hasRunning: () => manager.hasRunning(),
-@@ -743,6 +716,24 @@
+@@ -743,6 +720,24 @@
        const record = manager.getRecord(id);
        return record !== undefined && isTopLevelAgent(record) ? record : undefined;
      },
@@ -968,7 +1037,7 @@
    };
    const ownsManagerRegistry = (globalThis as any)[MANAGER_KEY] === undefined;
    if (ownsManagerRegistry) {
-@@ -1133,10 +1124,7 @@
+@@ -1133,10 +1128,7 @@
    function setWidgetMode(m: WidgetMode): void { widgetMode = m; widget.update(); }
  
    // Claude Code-style FleetView: navigable list of main + subagents below the editor.
@@ -980,7 +1049,7 @@
    let fleetViewEnabled = true;
    function isFleetViewEnabled(): boolean { return fleetViewEnabled; }
    function setFleetViewEnabled(b: boolean): void { fleetViewEnabled = b; fleet.setEnabled(b); }
-@@ -1220,49 +1208,6 @@
+@@ -1220,49 +1212,6 @@
    function getToolDescriptionMode(): ToolDescriptionMode { return toolDescriptionMode; }
    function setToolDescriptionMode(mode: ToolDescriptionMode): void { toolDescriptionMode = mode; }
  
@@ -1030,7 +1099,7 @@
    /**
     * Launch a detached resume of an existing agent and wire everything a
     * re-running agent needs: transcript anchoring, activity tracking, join-mode
-@@ -1327,12 +1272,6 @@
+@@ -1327,12 +1276,6 @@
      });
      if (!record) return undefined;
  
@@ -1043,7 +1112,15 @@
      agentActivity.set(id, bgState);
      // This agent already finished once, so the widget holds a finished-age
      // for it that is past the linger limit — without clearing it, the
-@@ -1572,9 +1511,24 @@
+@@ -1429,6 +1372,7 @@
+     },
+     (event, payload) => pi.events.emit(event, payload),
+   );
++  manager.setMaxConcurrent(Math.max(manager.getMaxConcurrent(), concurrentSubagentLimit()));
+ 
+   // ---- Agent tool ----
+ 
+@@ -1572,9 +1516,24 @@
        if (custom) return custom;
        console.warn('[pi-subagents] toolDescriptionMode is "custom" but no agent-tool-description.md found — using "full"');
      }
@@ -1069,7 +1146,7 @@
    // Held rather than registered inline: the mention clone reuses this exact
    // definition, so the agent it starts is an ordinary top-level spawn instead
    // of a second implementation that has to be kept in step with this one.
-@@ -1589,84 +1543,33 @@
+@@ -1589,84 +1548,36 @@
        "When an agent runs in the background, you will be notified on completion — do not poll or sleep waiting for it. Continue with other work instead.",
        "Trust but verify: an agent's summary describes intent, not outcome. When an agent writes or edits code, check the actual changes before reporting work as done.",
      ],
@@ -1152,6 +1229,9 @@
 +      const group = agentCallGroups.get(context.toolCallId);
 +      if (group && group.length > 1) {
 +        if (group[0].id !== context.toolCallId) return emptyRow as any;
++        if (group.some((call) => failedAgentCalls.has(call.id))) {
++          return new Text(refusedGroupLines(group.map((call) => ({ description: call.args.description ?? "", failed: failedAgentCalls.has(call.id) })), theme).join("\n"), 0, 0);
++        }
 +        const calls = group.map((call) => {
 +          const type = call.args.subagent_type || "general-purpose";
 +          const color = getConfig(type).color;
@@ -1173,7 +1253,15 @@
      },
  
      renderResult(result, { expanded, isPartial }, theme, renderContext) {
-@@ -1703,9 +1606,10 @@
+@@ -1675,6 +1586,7 @@
+       // Pi reports pre-execution failures (extension block, abort, argument
+       // validation) as `{ content: [reason], details: {} }` with isError set —
+       // no status to render, so show the reason instead of inventing one (#199).
++      if ((agentCallGroups.get(renderContext.toolCallId)?.length ?? 0) > 1 && (renderContext.isError || details?.status === "background")) return emptyRow as any;
+       if (renderContext.isError || !details?.status) {
+         return new Text(text, 0, 0);
+       }
+@@ -1703,9 +1615,10 @@
          return renderRunningAgentStatus(frame, s, details.activity ?? "thinking…", theme);
        }
  
@@ -1185,7 +1273,7 @@
        }
  
        // ---- Completed / Steered ----
-@@ -1771,7 +1675,7 @@
+@@ -1771,7 +1684,7 @@
        // Reload custom agents so new project/global .md files are picked up without restart
        reloadCustomAgents();
  
@@ -1194,7 +1282,16 @@
        // Single decision point for dispatch (#183): unknown, disabled and
        // case-ambiguous types are refused here, BEFORE anything spawns, so a
        // background or scheduled call can't start running the wrong agent while
-@@ -1802,18 +1706,22 @@
+@@ -1783,6 +1696,8 @@
+       // make a live agent unresumable the moment its type is deleted, disabled,
+       // or gains a case-clashing sibling. Only a real spawn is gated.
+       if (!dispatch.ok && !params.resume) return textResult(dispatch.message);
++      const subagentLimit = concurrentSubagentLimit();
++      if (backgroundRunningCount() >= subagentLimit) throw new Error(concurrentLimitError(subagentLimit));
+       const subagentType = dispatch.ok ? dispatch.type : rawType;
+       // What the caller actually asked for, named once: `fellBackFrom` is "" for
+       // a blank request, so reading it inline invites the `??`-vs-`||` slip that
+@@ -1802,18 +1717,22 @@
        // Get agent config (if any)
        const customConfig = getAgentConfig(subagentType);
  
@@ -1221,7 +1318,7 @@
          } else {
            model = resolved;
          }
-@@ -1832,6 +1740,9 @@
+@@ -1832,6 +1751,9 @@
        });
        if (scopeVerdict.kind === "error") return textResult(scopeVerdict.message);
        if (scopeVerdict.kind === "warn") ctx.ui.notify(scopeVerdict.message, "warning");
@@ -1231,7 +1328,7 @@
  
        const thinking = resolvedConfig.thinking;
        const inheritContext = resolvedConfig.inheritContext;
-@@ -2083,17 +1994,6 @@
+@@ -2083,17 +2005,6 @@
          // call instead of being reported as a subagent that ran (#179).
          await manager.awaitStartup(id);
  
@@ -1249,7 +1346,7 @@
          agentActivity.set(id, bgState);
          widget.ensureTimer();
          widget.update();
-@@ -2108,17 +2008,8 @@
+@@ -2108,17 +2019,8 @@
            isBackground: true,
          });
  
@@ -1268,7 +1365,7 @@
            { ...detailBaseFor(record), toolUses: 0, tokens: "", durationMs: 0, status: "background" as const, agentId: id },
          );
        }
-@@ -2407,11 +2298,11 @@
+@@ -2407,11 +2309,11 @@
    // switch changes exactly one thing: whether pi is ever told about the tool.
    const workflowTool = defineTool({
      name: SUBAGENT_TOOL_NAMES.WORKFLOW,
@@ -1282,7 +1379,7 @@
        "Prefer `pipeline` over `parallel` — a barrier costs wall-clock whenever the stages are unevenly sized.",
        "A workflow runs in the background and notifies you when it finishes — do not poll or sleep waiting for it.",
      ],
-@@ -2458,9 +2349,11 @@
+@@ -2458,9 +2360,11 @@
        ),
      }),
  
@@ -1295,7 +1392,7 @@
          0,
          0,
        );
-@@ -2572,7 +2465,7 @@
+@@ -2572,7 +2476,7 @@
                  ? `Nothing to replay from ${params.resumeFromRunId} — every agent runs live.\n`
                  : "") +
              `\nYou will be notified when it finishes — do NOT poll or sleep waiting for it.\n` +
@@ -1304,7 +1401,7 @@
          }],
          details: { taskId: runId },
        };
-@@ -2729,7 +2622,7 @@
+@@ -2729,7 +2633,7 @@
  
    // ---- get_subagent_result tool ----
  
@@ -1313,7 +1410,7 @@
      name: SUBAGENT_TOOL_NAMES.GET_RESULT,
      label: "Get Agent Result",
      description:
-@@ -2819,6 +2712,59 @@
+@@ -2819,6 +2723,59 @@
    // ---- steer_subagent tool ----
  
    registerToolReportingUsage(defineTool({
@@ -1373,7 +1470,7 @@
      name: SUBAGENT_TOOL_NAMES.STEER,
      label: "Steer Agent",
      description:
-@@ -3052,33 +2998,10 @@
+@@ -3052,33 +3009,10 @@
      if (!record) return;
  
      await viewAgentConversation(ctx, record);

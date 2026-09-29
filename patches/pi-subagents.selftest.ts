@@ -149,3 +149,16 @@ const DOWN = "\x1b[B";
   assert.equal(contract.formatLaunchResult("a610380364ffe983c", launched.match(/^output_file: (.*)$/m)![1]), launched);
   console.log("PASS: the completion and killed <task-notification> and the async launch result are Claude 2.1.283's text byte for byte (findings/m6g/claude/results.txt)");
 }
+
+{
+  const contract = await jiti.import(path.join(here, "../npm/node_modules/@tintinweb/pi-subagents/src/claude-contract.ts"));
+  assert.equal(contract.concurrentLimitError(20), "Concurrent subagent limit reached. You can run 20 subagents at once. Do not retry. If the user wants more concurrent subagents, ask them to increase CLAUDE_CODE_MAX_CONCURRENT_SUBAGENTS.");
+  assert.equal(contract.turnLimitNote(3, "general-purpose"), "NOTE: this agent stopped at its 3-turn limit before finishing. The text below is PARTIAL output; treat it as incomplete. Send the agent a message (SendMessage) to let it continue from where it stopped.");
+  assert.equal(contract.turnLimitNote(3, "Explore"), "NOTE: this agent stopped at its 3-turn limit before finishing. The text below is PARTIAL output; treat it as incomplete.");
+  assert.equal(contract.notificationSummaryVerb({ status: "aborted", turnLimit: 3 }), "stopped at its 3-turn limit (partial result; SendMessage to task-id to continue)");
+  assert.equal(contract.notificationSummaryVerb({ status: "error", error: "boom" }), "failed: boom");
+  assert.equal(contract.notificationSummaryVerb({ status: "stopped" }), "was stopped by user");
+  const placed = contract.placeNotifications([{ role: "toolResult", content: [{ type: "text", text: "launched" }] }, { role: "custom", customType: "subagent-notification", content: [{ type: "text", text: "n1" }] }, { role: "assistant", content: [] }, { role: "custom", customType: "subagent-notification", content: [{ type: "text", text: "n2" }] }, { role: "custom", customType: "subagent-notification", content: [{ type: "text", text: "n3" }] }]);
+  assert.deepEqual(placed.map((m: { content: { text: string }[] }) => m.content.map((b) => b.text)), [["launched", "n1"], [], ["n2", "n3"]]);
+  console.log("PASS: the concurrency refusal, the turn-limit note and summary verbs are Claude 2.1.283's (bundle lLn/g6e/brt); a notification ready inside a tool round joins the last tool_result, notifications ready together share one user message (m6g-types)");
+}
