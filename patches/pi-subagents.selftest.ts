@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 
@@ -129,4 +130,22 @@ const DOWN = "\x1b[B";
   fleet.dispose();
   delete (globalThis as Record<string, unknown>).__claudeChatView;
   console.log("PASS: Enter on an agent swaps the transcript to it in place (Claude 2.1.283, m6f-view): ◯ main / ❯ ● agent with \"↑/↓ to select\", \"↑/↓ to select · Enter to view\" on main, Enter on main swaps back; typing sends to the agent, esc stops it while it runs and swaps back once it has stopped");
+}
+
+{
+  const contract = await jiti.import(path.join(here, "../npm/node_modules/@tintinweb/pi-subagents/src/claude-contract.ts"));
+  const samples = readFileSync(path.join(here, "../scripts/parity/findings/m6g/claude/results.txt"), "utf-8");
+  const sample = (title: string) => samples.split(/^########## /m).find((part) => part.startsWith(title))!.split("\n").slice(2).join("\n").split("\n\n<system-reminder>\n<total_tokens>")[0].trim();
+  const notified = sample("task-notification: completed");
+  const outputFile = notified.match(/<output-file>(.*)<\/output-file>/)![1];
+  const toolUseId = notified.match(/<tool-use-id>(.*)<\/tool-use-id>/)![1];
+  const session = { messages: [{ role: "assistant", usage: { input: 10, output: 5 } }] };
+  const record = { id: "a610380364ffe983c", description: "Sleep briefly", status: "completed", result: "bgreport", toolUses: 1, startedAt: 1000, completedAt: 16411, toolCallId: toolUseId, outputFile, session };
+  assert.equal(contract.formatTaskNotification(record), notified);
+  const killed = sample("task-notification: killed by TaskStop");
+  const killedRecord = { id: "a8e8fcf123ce39f3f", description: "Long sleeper", status: "stopped", killedBy: "parent", toolUses: 0, startedAt: 0, completedAt: 1, toolCallId: killed.match(/<tool-use-id>(.*)<\/tool-use-id>/)![1], outputFile: killed.match(/<output-file>(.*)<\/output-file>/)![1] };
+  assert.equal(contract.formatTaskNotification(killedRecord), killed);
+  const launched = sample("async launch tool_result");
+  assert.equal(contract.formatLaunchResult("a610380364ffe983c", launched.match(/^output_file: (.*)$/m)![1]), launched);
+  console.log("PASS: the completion and killed <task-notification> and the async launch result are Claude 2.1.283's text byte for byte (findings/m6g/claude/results.txt)");
 }
