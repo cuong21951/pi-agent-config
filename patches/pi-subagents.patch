@@ -65,7 +65,17 @@
        resumeSessionFile: options.resumeSessionFile,
        nested: options.parentAgentId !== undefined,
        workflow: options.workflowId !== undefined,
-@@ -854,6 +857,7 @@
+@@ -846,7 +849,8 @@
+         options.onSessionCreated?.(session);
+       },
+     })
+-      .then(async ({ responseText, session, aborted, steered, failure, structuredJson, structuredRetried }) => {
++      .then(async ({ responseText, session, aborted, steered, failure, structuredJson, structuredRetried, renotified }) => {
++        if (renotified) record.toolCallId = undefined;
+         // Don't overwrite status if externally stopped via abort()
+         if (record.status !== "stopped") {
+           // Precedence: a hard abort keeps "aborted"; then a failed final turn
+@@ -854,6 +858,7 @@
            // honest "error" — not a completion with an empty or stale result.
            if (aborted) {
              record.status = "aborted";
@@ -73,7 +83,7 @@
            } else if (failure) {
              record.status = "error";
              record.error = failure;
-@@ -861,7 +865,7 @@
+@@ -861,7 +866,7 @@
              record.status = steered ? "steered" : "completed";
            }
          }
@@ -82,7 +92,7 @@
          // Kept beside `result`, never inside it: `result` is prose meant for a
          // reader — it is previewed, transcribed, and appended to below — while
          // this is a machine-readable payload one caller asked for by schema.
-@@ -970,7 +974,9 @@
+@@ -970,7 +975,9 @@
      if (pool === "background") this.runningBackground--;
      else if (pool === "foreground") this.runningForeground--;
  
@@ -93,7 +103,7 @@
        try { this.onComplete?.(record); } catch { /* ignore completion side-effect errors */ }
      } else {
        this.onComplete?.(record);
-@@ -1422,6 +1428,10 @@
+@@ -1422,6 +1429,10 @@
      record.abortController?.abort();
      record.status = "stopped";
      record.completedAt = Date.now();
@@ -115,17 +125,26 @@
  import { basename, dirname, isAbsolute, join, resolve } from "node:path";
  import type { Model } from "@earendil-works/pi-ai";
  import type { ExtensionContext, LoadExtensionsResult } from "@earendil-works/pi-coding-agent";
-@@ -24,10 +24,11 @@
+@@ -17,17 +17,18 @@
+   SessionManager,
+   SettingsManager,
+ } from "@earendil-works/pi-coding-agent";
+-import { BUILTIN_TOOL_NAMES, getAgentConfig, getConfig, getMemoryToolNames, getReadOnlyMemoryToolNames, getToolNamesForType } from "./agent-types.js";
++import { BUILTIN_TOOL_NAMES, getAgentConfig, getAvailableTypes, getConfig, getMemoryToolNames, getReadOnlyMemoryToolNames, getToolNamesForType } from "./agent-types.js";
+ import { runInChildSessionContext } from "./child-context.js";
+ import { buildParentContext, extractText } from "./context.js";
+ import { DEFAULT_AGENTS } from "./default-agents.js";
  import { detectEnv } from "./env.js";
  import { buildMemoryBlock, buildReadOnlyMemoryBlock } from "./memory.js";
- import { createNestedSubagentTools, getMaxSubagentDepth, type NestedAgentManager } from "./nested-tools.js";
+-import { createNestedSubagentTools, getMaxSubagentDepth, type NestedAgentManager } from "./nested-tools.js";
 -import { buildAgentPrompt, type PromptExtras } from "./prompts.js";
-+import { claudeAgentBody, claudeSubagentSystemPrompt, FORK_STARTED, forkDirective, localDate, placeNotifications, subagentReminders } from "./claude-contract.js";
++import { claudeNestedToolNames, createChildTracker, createNestedSubagentTools, getMaxSubagentDepth, type NestedAgentManager } from "./nested-tools.js";
++import { agentToolsLabel, claudeAgentBody, claudeSubagentSystemPrompt, FORK_STARTED, forkDirective, formatAgentTypesReminder, localDate, placeNotifications, subagentReminders } from "./claude-contract.js";
 +import { type PromptExtras } from "./prompts.js";
  import { preloadSkills } from "./skill-loader.js";
  import { createStructuredCapture, createStructuredOutputTool, structuredRetryPrompt } from "./structured-output.js";
 -import type { SubagentType, ThinkingLevel } from "./types.js";
-+import type { ForkContext, SubagentType, ThinkingLevel } from "./types.js";
++import type { AgentConfig, ForkContext, SubagentType, ThinkingLevel } from "./types.js";
  import type { LifetimeUsage } from "./usage.js";
  import type { CompiledSchema } from "./workflow/json-schema.js";
  
@@ -177,10 +196,47 @@
    /** Runtime bridge for opt-in child-safe nested delegation. */
    nestedRuntime?: {
      manager: NestedAgentManager;
-@@ -593,6 +599,29 @@
+@@ -494,6 +500,7 @@
+ 
+ export interface RunResult {
+   responseText: string;
++  renotified?: boolean;
+   session: AgentSession;
+   /** True if the agent was hard-aborted (max_turns + grace exceeded). */
+   aborted: boolean;
+@@ -593,6 +600,58 @@
   * Wire an AbortSignal to abort a session.
   * Returns a cleanup function to remove the listener.
   */
++function holdsAgentTool(options: RunOptions, agentConfig: AgentConfig | undefined, promptConfig: AgentConfig): boolean {
++  const runtime = options.nestedRuntime;
++  if (!runtime || options.isolated || agentConfig?.allowedSubagents) return false;
++  return runtime.depth < (runtime.maxSubagentDepth ?? getMaxSubagentDepth()) && claudeNestedToolNames(promptConfig).includes("Agent");
++}
++
++function typesReminderExtension() {
++  const reminder = formatAgentTypesReminder(getAvailableTypes().map((name) => {
++    const cfg = getAgentConfig(name);
++    return { name, whenToUse: cfg?.description ?? name, tools: agentToolsLabel(cfg) };
++  }));
++  return (pi: ExtensionAPI) => {
++    pi.on("context", (event) => {
++      const messages: any[] = [...event.messages];
++      const first = messages.findIndex((m: any) => m.role === "toolResult");
++      if (first === -1) return;
++      const content = [...(messages[first].content ?? [])];
++      const last = content.length - 1;
++      if (content[last]?.type === "text") content[last] = { ...content[last], text: `${content[last].text}\n` };
++      messages[first] = { ...messages[first], content: [...content, { type: "text", text: reminder }] };
++      return { messages };
++    });
++  };
++}
++
++async function nextChildNotifications(children: { next(): Promise<string[]> } | undefined): Promise<string[]> {
++  return children ? children.next() : [];
++}
++
 +function forkSessionManager(cwd: string, fork: ForkContext): SessionManager {
 +  const manager = SessionManager.inMemory(cwd, undefined, fork.entries as never);
 +  for (const call of fork.pendingToolCallIds) {
@@ -207,7 +263,7 @@
  function forwardAbortSignal(session: AgentSession, signal?: AbortSignal): () => void {
    if (!signal) return () => {};
    const onAbort = () => session.abort();
-@@ -671,16 +700,16 @@
+@@ -671,16 +730,16 @@
    }
  
    // Build system prompt from agent config
@@ -234,7 +290,7 @@
  
    // When skills is string[], we've already preloaded them into the prompt.
    // Still pass noSkills: true since we don't need the skill loader to load them again.
-@@ -744,6 +773,7 @@
+@@ -744,6 +803,7 @@
            };
          };
  
@@ -242,7 +298,7 @@
    const loader = new DefaultResourceLoader({
      cwd: configCwd,
      agentDir,
-@@ -753,9 +783,13 @@
+@@ -753,9 +813,13 @@
      noSkills,
      noPromptTemplates: true,
      noThemes: true,
@@ -253,20 +309,32 @@
 +    },
      systemPromptOverride: () => systemPrompt,
      appendSystemPromptOverride: () => [],
-+    extensionFactories: options.fork ? [forkExtension(options.fork)] : [],
++    extensionFactories: options.fork ? [forkExtension(options.fork)] : holdsAgentTool(options, agentConfig, promptConfig) ? [typesReminderExtension()] : [],
    });
    await runInChildSessionContext(() => loader.reload());
  
-@@ -852,7 +886,7 @@
+@@ -852,15 +916,18 @@
    const nestedRuntime = options.nestedRuntime && options.nestedRuntime.depth < effectiveMaxDepth
      ? options.nestedRuntime
      : undefined;
 -  const nestedTools = agentConfig?.allowedSubagents && nestedRuntime && !options.isolated
-+  const nestedTools = options.fork ? options.fork.tools as ReturnType<typeof createNestedSubagentTools> : agentConfig?.allowedSubagents && nestedRuntime && !options.isolated
++  const children = nestedRuntime ? createChildTracker(nestedRuntime.manager) : undefined;
++  const nestedTools = options.fork ? options.fork.tools as ReturnType<typeof createNestedSubagentTools> : nestedRuntime && !options.isolated
      ? createNestedSubagentTools({
          manager: nestedRuntime.manager,
          pi: options.pi,
-@@ -918,7 +952,7 @@
+         parentAgentId: nestedRuntime.parentAgentId,
+         depth: nestedRuntime.depth,
+         maxSubagentDepth: effectiveMaxDepth,
+-        allowedSubagents: agentConfig.allowedSubagents,
++        allowedSubagents: agentConfig?.allowedSubagents ?? "all",
+         configCwd,
++        children,
++        claudeTools: agentConfig?.allowedSubagents ? undefined : claudeNestedToolNames(promptConfig),
+       })
+     : [];
+   const nestedToolNames = new Set(nestedTools.map(tool => tool.name));
+@@ -918,7 +985,7 @@
  
    let sessionTools: string[] | undefined;
    let sessionExcludeTools: string[] | undefined;
@@ -275,7 +343,7 @@
      // Strict allowlist: built-ins the agent asked for, plus any opt-in nested
      // tools (whose names would otherwise be dropped as EXCLUDED_TOOL_NAMES).
      sessionTools = [
-@@ -959,7 +993,9 @@
+@@ -959,7 +1026,9 @@
    // which `rememberAgents` supplies for top-level agents only. Same precedence
    // as `outputTranscript`.
    const persistSession = agentConfig?.persistSession ?? (options.nested ? false : rememberAgents);
@@ -286,7 +354,7 @@
      // Reopening an existing conversation: the file already carries its own
      // header (cwd, parent) and history, so none of the create-time options
      // apply. `sessionDir` still matters for a later /new or /branch off it.
-@@ -1039,6 +1075,8 @@
+@@ -1039,6 +1108,8 @@
        extNames,
        narrowing,
        readmitToolNames,
@@ -295,7 +363,7 @@
      });
    }
  
-@@ -1055,14 +1093,9 @@
+@@ -1055,14 +1126,9 @@
      if (event.type === "turn_end") {
        turnCount++;
        options.onTurnEnd?.(turnCount);
@@ -313,7 +381,7 @@
        }
      }
      if (event.type === "message_start") {
-@@ -1096,8 +1129,19 @@
+@@ -1096,8 +1162,19 @@
    const collector = collectResponseText(session);
    const cleanupAbort = forwardAbortSignal(session, options.signal);
  
@@ -335,6 +403,33 @@
    if (options.inheritContext) {
      const parentContext = buildParentContext(ctx);
      if (parentContext) {
+@@ -1109,6 +1186,7 @@
+   // on counts as this run's output (a fresh session, so usually 0).
+   const startLen = session.messages.length;
+   let structuredRetried = false;
++  let renotified = false;
+   try {
+     await session.prompt(effectivePrompt);
+ 
+@@ -1122,6 +1200,10 @@
+       structuredRetried = true;
+       await session.prompt(structuredRetryPrompt(structuredCapture));
+     }
++    for (let ready = await nextChildNotifications(children); ready.length > 0 && !aborted && options.signal?.aborted !== true; ready = await nextChildNotifications(children)) {
++      renotified = true;
++      await session.prompt(ready.join("\n\n"));
++    }
+   } finally {
+     unsubTurns();
+     collector.unsubscribe();
+@@ -1142,6 +1224,7 @@
+     session,
+     aborted,
+     steered: softLimitReached,
++    renotified,
+     failure: finalTurnError(session, startLen) ?? structuredFailure,
+     ...(structuredCapture?.json !== undefined ? { structuredJson: structuredCapture.json } : {}),
+     ...(structuredRetried ? { structuredRetried } : {}),
 --- a/src/claude-contract.ts
 +++ b/src/claude-contract.ts
 @@ -0,0 +1,223 @@
@@ -1121,7 +1216,7 @@
    };
  
 +  function backgroundRunningCount(): number {
-+    return manager.listAgents().filter(r => isTopLevelAgent(r) && r.isBackground === true && (r.status === "running" || r.status === "queued")).length;
++    return manager.listAgents().filter(r => r.workflowId === undefined && r.isBackground === true && (r.status === "running" || r.status === "queued")).length;
 +  }
 +
    const registryEntry = {
@@ -1707,6 +1802,157 @@
      thinking: (agentConfig?.thinking ?? params.thinking) as ThinkingLevel | undefined,
      maxTurns: agentConfig?.maxTurns ?? params.max_turns,
      inheritContext: agentConfig?.inheritContext ?? params.inherit_context ?? false,
+--- a/src/nested-tools.ts
++++ b/src/nested-tools.ts
+@@ -26,6 +26,7 @@
+   writeInitialEntry,
+ } from "./output-file.js";
+ import { getForegroundOutcomeNote, getStatusNote, partialOutputSuffix } from "./status-note.js";
++import { CLAUDE_TOOLS, coordinatorMessage, formatLaunchResult, formatTaskNotification, isClaudeModelAlias, resolveClaudeModelAlias } from "./claude-contract.js";
+ import type {
+   AgentConfig,
+   AgentInvocation,
+@@ -42,12 +43,40 @@
+  * `subagents.json` (`maxSubagentDepth`). Read when a subagent session is built,
+  * so a change applies to sessions started after it.
+  */
+-let maxSubagentDepth = 2;
++let maxSubagentDepth = 4;
+ 
+ export function getMaxSubagentDepth(): number { return maxSubagentDepth; }
+ export function setMaxSubagentDepth(n: number): void { maxSubagentDepth = Math.max(0, Math.floor(n)); }
+ 
+-const NESTED_TOOL_NAMES = ["Agent", "get_subagent_result", "steer_subagent"] as const;
++const NESTED_TOOL_NAMES = ["Agent", "get_subagent_result", "steer_subagent", "SendMessage"] as const;
++
++export type ChildTracker = { add(id: string): void; next(): Promise<string[]> };
++
++export function createChildTracker(manager: Pick<NestedAgentManager, "getRecord">): ChildTracker {
++  const pending = new Set<string>();
++  return {
++    add: (id) => { pending.add(id); },
++    async next() {
++      while (pending.size > 0) {
++        const records = [...pending].map((id) => manager.getRecord(id));
++        for (const id of [...pending]) if (!manager.getRecord(id)) pending.delete(id);
++        const live = records.filter((r): r is AgentRecord => r !== undefined);
++        const done = live.filter((r) => r.status !== "running" && r.status !== "queued");
++        if (done.length > 0) {
++          for (const r of done) pending.delete(r.id);
++          return done.map(formatTaskNotification);
++        }
++        if (live.length > 0) await Promise.race(live.map((r) => r.promise?.catch(() => undefined) ?? new Promise((resolve) => setTimeout(resolve, 250))));
++      }
++      return [];
++    },
++  };
++}
++
++export function claudeNestedToolNames(config: Pick<AgentConfig, "builtinToolNames" | "toolsLabel"> | undefined): string[] {
++  if (config?.builtinToolNames === undefined) return ["Agent", "SendMessage"];
++  return config.toolsLabel?.startsWith("All tools except") ? ["SendMessage"] : [];
++}
+ 
+ interface NestedSpawnOptions {
+   description: string;
+@@ -89,7 +118,7 @@
+     onSpawned?: (id: string) => void,
+   ): Promise<{ id: string; record: AgentRecord }>;
+   getRecord(id: string): AgentRecord | undefined;
+-  resume(id: string, prompt: string, signal?: AbortSignal): Promise<AgentRecord | undefined>;
++  resume(id: string, prompt: string, signal?: AbortSignal, options?: { isBackground?: boolean }): Promise<AgentRecord | undefined>;
+ }
+ 
+ export interface NestedToolContext {
+@@ -102,6 +131,8 @@
+   allowedSubagents: "all" | string[];
+   /** Root used for agent/config discovery; may differ from the agent's working directory. */
+   configCwd: string;
++  children?: ChildTracker;
++  claudeTools?: string[];
+ }
+ 
+ function textResult(text: string, isError = false) {
+@@ -157,13 +188,14 @@
+     return getAvailableTypesIn(registry).filter(name => allowed === undefined || allowed.has(name));
+   };
+ 
++  const claudeAgent = context.claudeTools !== undefined;
+   const agentTool = defineTool({
+     name: NESTED_TOOL_NAMES[0],
+     label: "Agent",
+-    description:
++    description: claudeAgent ? CLAUDE_TOOLS.Agent.description :
+       "Launch a child-safe nested subagent for bounded delegated work. " +
+       "Only use agent types allowed by this parent agent; nesting is depth-limited.",
+-    parameters: Type.Object({
++    parameters: claudeAgent ? CLAUDE_TOOLS.Agent.input_schema as any : Type.Object({
+       prompt: Type.String({ description: "Self-contained task for the nested agent." }),
+       description: Type.String({ description: "Short 3-5 word task description." }),
+       subagent_type: Type.String({ description: `Allowed nested agent type. Available: ${availableIn(loadRegistry()).join(", ") || "none"}.` }),
+@@ -180,7 +212,8 @@
+       inherit_context: Type.Optional(Type.Boolean()),
+       ...isolationParam(isWorktreeIsolationEnabled()),
+     }),
+-    execute: async (_toolCallId, params, signal, _onUpdate, ctx) => {
++    execute: async (toolCallId, rawParams: any, signal, _onUpdate, ctx) => {
++      const params = claudeAgent ? { ...rawParams, subagent_type: rawParams.subagent_type?.trim() || "general-purpose", run_in_background: true } : rawParams;
+       if (params.resume) {
+         const existing = context.manager.getRecord(params.resume);
+         if (!ownsRecord(existing, context.parentAgentId)) {
+@@ -229,7 +262,9 @@
+         defaultRunInBackground: false,
+       });
+       let model = ctx.model;
+-      if (invocation.modelInput) {
++      if (claudeAgent && isClaudeModelAlias(invocation.modelInput)) {
++        model = resolveClaudeModelAlias(invocation.modelInput, ctx.model, ctx.modelRegistry.getAvailable?.() ?? []);
++      } else if (invocation.modelInput) {
+         const resolvedModel = resolveModel(invocation.modelInput, ctx.modelRegistry);
+         if (typeof resolvedModel === "string") {
+           if (invocation.modelFromParams) return textResult(resolvedModel, true);
+@@ -344,7 +379,11 @@
+           // Worktree isolation starts the agent asynchronously; surface its
+           // failure as a tool error, like the synchronous throw used to.
+           await context.manager.awaitStartup(id);
+-          return textResult(`Nested agent started in background. Agent ID: ${id}`);
++          if (!claudeAgent) return textResult(`Nested agent started in background. Agent ID: ${id}`);
++          const launched = context.manager.getRecord(id);
++          if (launched) launched.toolCallId = toolCallId;
++          context.children?.add(id);
++          return textResult(formatLaunchResult(id, launched?.outputFile));
+         }
+ 
+         const { record } = await context.manager.spawnAndWait(
+@@ -418,5 +457,28 @@
+     },
+   });
+ 
++  const sendMessageTool = defineTool({
++    name: NESTED_TOOL_NAMES[3],
++    label: "SendMessage",
++    description: CLAUDE_TOOLS.SendMessage.description,
++    parameters: CLAUDE_TOOLS.SendMessage.input_schema as any,
++    execute: async (_toolCallId, params: any) => {
++      const record = context.manager.getRecord(String(params.to ?? "").trim());
++      if (!ownsRecord(record, context.parentAgentId)) throw new Error(`No agent or session named "${params.to}" is reachable from this session.`);
++      const message = coordinatorMessage(String(params.message ?? ""));
++      if (record.status === "running" || record.status === "queued") {
++        const text = `<system-reminder>\n${message}\n</system-reminder>`;
++        if (record.session) await record.session.steer(text);
++        else (record.pendingSteers ??= []).push(text);
++        return textResult(JSON.stringify({ success: true, message: `Message queued for delivery to ${record.id} at its next tool round.` }));
++      }
++      const resumed = await context.manager.resume(record.id, message, undefined, { isBackground: true });
++      if (!resumed) throw new Error(`Agent ${record.id} could not be resumed.`);
++      context.children?.add(record.id);
++      return textResult(JSON.stringify({ success: true, message: `Resuming agent ${record.id.slice(0, 7)}`, resumedAgentId: record.id }));
++    },
++  });
++
++  if (claudeAgent) return [agentTool, sendMessageTool].filter((tool) => context.claudeTools?.includes(tool.name));
+   return [agentTool, resultTool, steerTool];
+ }
 --- a/src/types.ts
 +++ b/src/types.ts
 @@ -38,6 +38,10 @@

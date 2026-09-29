@@ -230,7 +230,7 @@ def extract(bodies, check, prompt):
     if kind == "reminder":
         return reminder(main, arg)
     if kind == "sub":
-        key, _, part = arg.rpartition(":")
+        key, _, part = arg.partition(":")
         subs = sub_requests(bodies, key)
         if not subs:
             return None
@@ -248,6 +248,11 @@ def extract(bodies, check, prompt):
             joined = "\n".join(t for m in subs[-1].get("messages", []) for b in blocks(m.get("content")) for t in ([b.get("text", "")] if b.get("type") == "text" else [result_text(b.get("content"))] if b.get("type") == "tool_result" else []))
             found = re.search(r"(?:<system-reminder>\n)?The coordinator sent a message while you were working:[\s\S]*?Address this before completing your current task\.(?:\n</system-reminder>)?", joined)
             return normalise(found.group(0)) if found else None
+        if part.startswith("tool:"):
+            return tool([first], part.removeprefix("tool:"))
+        if part == "nested":
+            found = tool_results(subs, "Agent") + notifications(subs)
+            return "\n\n----\n\n".join(found) if found else None
         if part == "fork":
             return fork_summary(first, main)
         if part == "model":
