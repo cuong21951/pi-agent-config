@@ -1,0 +1,6 @@
+{
+  "prompt": "Call the parity MCP tool lookup with key alpha. Then call the parity MCP tool explode. Then reply with exactly: done. No other text.",
+  "pi_args": "--mcp-config {parity}/mcp-pi.json",
+  "claude_args": "--mcp-config {parity}/mcp-claude.json",
+  "steps": []
+}

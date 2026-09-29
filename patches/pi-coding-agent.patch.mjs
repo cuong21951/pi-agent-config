@@ -234,6 +234,63 @@ const EDITS = [
 		"restoreEditor2=()=>{this.editorContainer.clear(),this.editorContainer.addChild(this.editor),this.editor.setText(savedText),this.ui.setFocus(this.editor),this.ui.requestRender()}",
 		"restoreEditor2=()=>{this.editorContainer.clear(),this.editorContainer.addChild(this.editor),this.editor.setText(savedText),this.ui.setFocus(this.editor),this.renderWidgets(),this.ui.requestRender()}",
 	],
+	[
+		"handleCtrlC(){let now=Date.now();now-this.lastSigintTime<500?this.shutdown():(this.clearEditor(),this.lastSigintTime=now)}handleCtrlD(){this.shutdown()}",
+		'handleCtrlC(){this.claudeExitPress("Ctrl-C",()=>this.clearEditor())}handleCtrlD(){this.claudeExitPress("Ctrl-D")}claudeExitPress(key,first){let now=Date.now();if(this.claudeExitKey!==void 0&&now-this.lastSigintTime<=800){this.shutdown();return}first?.(),this.claudeExitKey=key,this.lastSigintTime=now,clearTimeout(this.claudeExitTimer),this.claudeExitTimer=setTimeout(()=>{this.claudeExitKey=void 0,this.ui.requestRender()},800),this.ui.requestRender()}claudeFooterRows(rows,width){if(this.claudeExitKey!==void 0)return[`  ${theme.fg("muted",`Press ${this.claudeExitKey} again to exit`)}`];Date.now()<(this.editor?.claudeExpandUntil??0)&&rows.length>1&&(rows=[rows[0],`  ${theme.fg("muted","paste again to expand")}`,...rows.slice(2)]);for(let filter of globalThis.__claudeFooterRows??[])rows=filter(rows,width)??rows;return rows}',
+	],
+	[
+		"this.footerContainer=new Container,this.footerContainer.addChild(this.footer),",
+		"this.footerContainer=new Container,this.footerContainer.addChild(this.footer),this.footerContainer.render=(render=>width=>this.claudeFooterRows(render(width),width))(this.footerContainer.render.bind(this.footerContainer)),",
+	],
+	[
+		'resumeCommand&&process.stdout.write(`${source_default.dim("To resume this session:")} ${resumeCommand}\n`)',
+		"resumeCommand&&process.stdout.write(source_default.dim(`\nResume this session with:\n${resumeCommand}\n`))",
+	],
+	[
+		'this.showStatus(`Tool output: ${expanded?"expanded":"collapsed"}`)}',
+		"globalThis.__claudeTranscript=expanded,this.ui.requestRender()}",
+	],
+	[
+		"this.documentContainer.addChild(this.chatContainer),this.pendingMessagesContainer=new Container,",
+		"this.documentContainer.addChild(this.chatContainer),globalThis.__claudeChatView={show:messages=>{let chat=this.chatContainer,pending=this.pendingTools,view=this.claudeViewContainer??=new Container,slot=this.documentContainer.children.indexOf(chat);view.clear(),this.chatContainer=view,this.pendingTools=new Map;try{this.renderSessionItems(messages)}finally{this.chatContainer=chat,this.pendingTools=pending}view.children[0]instanceof Spacer||view.children.unshift(new Spacer(1));slot>=0&&(this.documentContainer.children[slot]=view),this.ui.requestRender()},hide:()=>{let slot=this.documentContainer.children.indexOf(this.claudeViewContainer);slot>=0&&(this.documentContainer.children[slot]=this.chatContainer),this.ui.requestRender()}},this.pendingMessagesContainer=new Container,",
+	],
+	[
+		"this.editorContainer=new Container,this.editorContainer.addChild(this.editor),",
+		"this.editorContainer=new Container,this.editorContainer.addChild(this.editor),this.editorContainer.render=(render=>width=>this.toolOutputExpanded&&this.editorContainer.children[0]===this.editor?[]:render(width))(this.editorContainer.render.bind(this.editorContainer)),",
+	],
+	[
+		'if(content.type==="text"&&content.text.trim())this.contentContainer.addChild(new Markdown(',
+		'if(content.type==="text"&&content.text.trim())this.contentContainer.addChild({render:width=>globalThis.__claudeTranscriptStamp?.(message,width)??[],invalidate(){}}),this.contentContainer.addChild(new Markdown(',
+	],
+	[
+		"await this.rebindCurrentSession(),this.renderInitialMessages(),onThemeChange(",
+		"this.claudeNoticeStart=this.chatContainer.children.length,await this.rebindCurrentSession(),this.claudeNotices=this.chatContainer.children.splice(this.claudeNoticeStart),this.renderInitialMessages(),this.chatContainer.children.push(...this.claudeNotices),onThemeChange(",
+	],
+	["PASTE_MARKER_REGEX=/\\[paste #", "PASTE_MARKER_REGEX=/\\[Pasted text #"],
+	["PASTE_MARKER_SINGLE=/^\\[paste #", "PASTE_MARKER_SINGLE=/^\\[Pasted text #"],
+	['!text.includes("[paste #")', '!text.includes("[Pasted text #")'],
+	["new RegExp(`\\\\[paste #${pasteId}", "new RegExp(`\\\\[Pasted text #${pasteId}"],
+	["`[paste #${x2-1}${suffixGroup}]`", '`[Pasted text #${x2-1}${suffixGroup??""}]`'],
+	[
+		"let pastedLines=filteredText.split(`\n`),totalChars=filteredText.length;if(pastedLines.length>10||totalChars>1e3){this.pasteCounter++;let pasteId=this.pasteCounter;this.pastes.set(pasteId,filteredText);let marker=pastedLines.length>10?`[paste #${pasteId} +${pastedLines.length} lines]`:`[paste #${pasteId} ${totalChars} chars]`;this.insertTextAtCursorInternal(marker);return}",
+		"let pastedLines=filteredText.split(`\n`),totalChars=filteredText.length,expandId=this.claudeExpandLast,expandMarker=expandId===void 0?void 0:new RegExp(`\\\\[Pasted text #${expandId}( \\\\+\\\\d+ lines)?\\\\]`);if(expandMarker&&this.pastes.get(expandId)===filteredText&&expandMarker.test(this.getText())){this.claudeExpandUntil=0,this.claudeExpandLast=void 0,this.pastes.delete(expandId),this.setTextInternal(this.getText().replace(expandMarker,()=>filteredText));return}if(totalChars>800||pastedLines.length-1>Math.max(0,Math.min((this.tui?.terminal?.rows??24)-10,2))){this.pasteCounter++;let pasteId=this.pasteCounter;this.pastes.set(pasteId,filteredText);let marker=pastedLines.length>1?`[Pasted text #${pasteId} +${pastedLines.length-1} lines]`:`[Pasted text #${pasteId}]`;this.insertTextAtCursorInternal(marker),this.claudeExpandLast=pasteId,totalChars<=1e5&&(this.claudeExpandUntil=Date.now()+8e3,setTimeout(()=>this.tui?.requestRender?.(),8e3).unref?.());return}",
+	],
+	[
+		'let cancelHint=`(${keyText("app.interrupt")} to cancel)`,label=reason==="manual"?`Compacting context... ${cancelHint}`:`${reason==="overflow"?"Context overflow detected, ":""}Auto-compacting... ${cancelHint}`;super("compaction",ui,spinner=>theme.fg("accent",spinner),text=>theme.fg("muted",text),label)',
+		'let label="Compacting conversation\\u2026";super("compaction",ui,spinner=>theme.fg("mdCode",spinner),text=>theme.fg("mdCode",text),label)',
+	],
+	[
+		'label=theme.fg("customMessageLabel","\\x1B[1m[compaction]\\x1B[22m");if(this.addChild(new Text(label,0,0)),this.addChild(new Spacer(1)),this.expanded){',
+		'label=theme.fg("customMessageLabel","\\x1B[1m[compaction]\\x1B[22m");if(this.paddingX=this.paddingY=this.expanded?1:0,this.setBgFn(this.expanded?t=>theme.bg("customMessageBg",t):void 0),!this.expanded){this.addChild(new Text(theme.fg("muted","  \\u23BF \\u00a0")+"\\x1B[2mCompacted (ctrl+o to see full summary)\\x1B[22m",0,0));return}if(this.addChild(new Text(label,0,0)),this.addChild(new Spacer(1)),this.expanded){',
+	],
+	[
+		"let firstChanged=-1,lastChanged=-1,maxLines=Math.max(newLines.length,this.previousLines.length);",
+		"let reanchorTop=Math.max(0,newLines.length-height);if(newLines.length<this.previousLines.length&&reanchorTop<prevViewportTop&&!this.hasOverlayEntries&&!newLines.some(isImageLine)){logRedraw(`shrink re-anchored viewport (${prevViewportTop} -> ${reanchorTop})`);let out=new BoundedTerminalWriter(data=>this.terminal.write(data));out.append(\"\\x1B[?2026h\");let up=hardwareCursorRow-prevViewportTop;up>0?out.append(`\\x1B[${up}A`):up<0&&out.append(`\\x1B[${-up}B`);out.append(\"\\r\");for(let row=0;row<height;row++){row>0&&out.append(\"\\x1B[1B\\r\");out.append(\"\\x1B[2K\");let i=reanchorTop+row;i<newLines.length&&out.append(newLines[i])}out.append(\"\\x1B[?2026l\"),out.flush();this.hardwareCursorRow=reanchorTop+height-1,this.cursorRow=Math.max(0,newLines.length-1),this.maxLinesRendered=newLines.length,this.previousViewportTop=reanchorTop;this.positionHardwareCursor(cursorPos,newLines.length),this.previousLines=newLines,this.previousKittyImageIds=this.collectKittyImageIds(newLines),this.previousWidth=width,this.previousHeight=height;return}let firstChanged=-1,lastChanged=-1,maxLines=Math.max(newLines.length,this.previousLines.length);",
+	],
+	[
+		"function loadNativeModifiersHelper(){if(nativeModifiersHelper!==void 0)return nativeModifiersHelper??void 0;nativeModifiersHelper=null;",
+		"function loadNativeModifiersHelper(){if(nativeModifiersHelper!==void 0)return nativeModifiersHelper??void 0;nativeModifiersHelper=null;if(process.env.PI_TUI_NO_NATIVE_MODIFIERS)return;",
+	],
 ];
 
 const check = process.argv.includes("--check");

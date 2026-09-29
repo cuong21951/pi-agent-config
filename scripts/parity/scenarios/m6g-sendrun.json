@@ -1,0 +1,13 @@
+{
+ "prompt": "M6G sendrun run.",
+ "fixture": "findings/m6g/fixture",
+ "pi_mock": true,
+ "session": "findings/m6g/sendrun.jsonl",
+ "end": "srdone[\\s\\S]*✻ \\S+ for [^\\n]*· done",
+ "steps": [
+  {"until": "srdone[\\s\\S]*✻ \\S+ for [^\\n]*· done", "timeout": 120},
+  {"sleep": 1},
+  {"snap": "end"}
+ ],
+ "reqdiff": ["tool:SendMessage", "tool:ListAgents", "result:ListAgents", "result:SendMessage", "notifications", "sub:M6G-SUB-SR:steer"]
+}

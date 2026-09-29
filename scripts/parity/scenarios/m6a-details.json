@@ -1,0 +1,47 @@
+{
+ "prompt": "Run exactly one shell command in the background (run_in_background true), with the description \"Print and wait\": python -c \"import time; [print('line', i, flush=True) for i in range(15)]; time.sleep(40)\" . Then reply with exactly: Started. Later, only when a task notification arrives, reply with exactly: Done. Do not write any other text.",
+ "steps": [
+  {
+   "until": "(?m)^\u25cf Started\\.?[\\s\\S]*done[^\\n]*shell still running",
+   "timeout": 90
+  },
+  {
+   "sleep": 2
+  },
+  {
+   "keys": "\u001b[B"
+  },
+  {
+   "sleep": 1.5
+  },
+  {
+   "snap": "focus"
+  },
+  {
+   "keys": "\r"
+  },
+  {
+   "sleep": 2
+  },
+  {
+   "snap": "details"
+  },
+  {
+   "keys": "\u001b"
+  },
+  {
+   "sleep": 1.5
+  },
+  {
+   "snap": "closed"
+  },
+  {
+   "until": "(?m)^\u25cf Done\\.?\\s*\\n\\s*\\n\u273b \\S+ for [^\\n]*\u00b7 done",
+   "timeout": 90
+  },
+  {
+   "sleep": 1.5
+  }
+ ],
+ "end": "(?m)^\u25cf Done\\.?\\s*\\n\\s*\\n\u273b \\S+ for [^\\n]*\u00b7 done"
+}

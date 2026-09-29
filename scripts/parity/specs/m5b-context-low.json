@@ -1,0 +1,16 @@
+{
+  "cwd": "C:/Users/cuong/.pi/sandbox/agent/scripts/parity/fixture",
+  "start": "2026-09-28T19:00:00+00:00",
+  "turns": [
+    {
+      "prompt": "keep going",
+      "steps": [
+        {
+          "assistant": [{ "type": "text", "text": "still here" }],
+          "usage": { "input": 190000, "cacheRead": 0, "cacheWrite": 0 }
+        }
+      ],
+      "done": { "verb": "Chatted" }
+    }
+  ]
+}

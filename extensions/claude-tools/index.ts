@@ -1,3 +1,4 @@
+import { readFileSync } from "node:fs";
 import { readFile } from "node:fs/promises";
 import * as os from "node:os";
 import { resolve } from "node:path";
@@ -16,11 +17,11 @@ import {
 	ToolExecutionComponent,
 } from "@earendil-works/pi-coding-agent";
 import { stripTerminalSequences, truncateToWidth, visibleWidth } from "@earendil-works/pi-tui";
-import { doneLine, editCreation, paint, resultRows, type Roots, type Row, type Style, target, WRITE_TOOLS, wrapRow, writeCallLine } from "./format.ts";
+import { editCreation, paint, previewEdits, resultRows, type Roots, type Row, stampRow, type Style, target, thinkingRows, verboseCallLine, WRITE_TOOLS, wrapRow, writeCallLine } from "./format.ts";
 import { hangElbowRows, patchGenericTools } from "./generic.ts";
 import { highlightClaudeStyle } from "./highlight.ts";
 import "./markdown-highlight.ts";
-import { clip, describeTool, dynamic, failed, finished, groupRow, hasThought, joinOnExecute, retried, shownContent, thoughtId, track, watch } from "./rows.ts";
+import { clip, describeTool, dynamic, failed, finished, groupRow, hasThought, isRejected, joinOnExecute, retried, shownContent, thoughtId, track, watch } from "./rows.ts";
 
 // ponytail: only the render slots change; execute, schema and prompt metadata are the built-in definition's.
 const DEFINITIONS = {
@@ -92,8 +93,34 @@ function editOrCreate(edit: Execute, write: Execute): Execute {
 	};
 }
 
+const declinedDiffs = new Map<string, { diff: string }>();
+
+function declinedDiff(id: string, args: Record<string, unknown>): { diff: string } {
+	const cached = declinedDiffs.get(id);
+	if (cached) return cached;
+	const edits = Array.isArray(args.edits) ? (args.edits as Array<{ oldText: string; newText: string }>) : [];
+	const content = (() => {
+		try {
+			return readFileSync(resolve(process.cwd(), String(args.path ?? "")), "utf8");
+		} catch {
+			return "";
+		}
+	})();
+	const details = { diff: generateDiffString(content, previewEdits(content, edits)).diff };
+	declinedDiffs.set(id, details);
+	return details;
+}
+
 type Reply = { contentContainer: { children: unknown[]; clear(): void }; hideThinkingBlock?: boolean; isStreaming?: boolean };
-type ReplyMessage = { stopReason?: string; timestamp?: number; content?: Array<{ type: string; thinking?: string }> };
+type ReplyMessage = { stopReason?: string; timestamp?: number; model?: string; content?: Array<{ type: string; thinking?: string }> };
+
+const transcript = () => (globalThis as { __claudeTranscript?: boolean }).__claudeTranscript === true;
+
+(globalThis as { __claudeTranscriptStamp?: (message: ReplyMessage, width: number) => string[] }).__claudeTranscriptStamp = (message, width) => {
+	const theme = thoughts.theme;
+	if (!transcript() || !theme || !message.model || message.timestamp === undefined) return [];
+	return [stampRow(message.timestamp, message.model, width, style(theme))];
+};
 
 const thoughts = ((globalThis as any)[Symbol.for("claude-tools:thoughts")] ??= { patched: false, theme: undefined }) as { patched: boolean; theme?: Theme };
 
@@ -110,6 +137,7 @@ function patchThoughts(proto: Record<string, unknown>): void {
 			this.contentContainer.children.unshift(
 				dynamic((width) => {
 					const theme = thoughts.theme;
+					if (theme && transcript()) return ["", ...thinkingRows(shown?.content ?? [], width, style(theme))];
 					const lines = theme ? groupRow(id, width, style(theme)) : [];
 					return lines.length > 0 ? ["", ...lines.map((line) => truncateToWidth(line, width))] : [];
 				}),
@@ -140,7 +168,7 @@ export default function (pi: ExtensionAPI) {
 			renderShell: "self",
 			renderCall(args: Record<string, unknown>, theme: Theme, context: { toolCallId?: string; expanded?: boolean; invalidate?: () => void }) {
 				const s = style(theme);
-				if (WRITE_TOOLS.has(tool)) return dynamic((width) => [truncateToWidth(writeCallLine(tool, args, s, failed.has(context.toolCallId ?? "")), width)]);
+				if (WRITE_TOOLS.has(tool)) return dynamic((width) => [truncateToWidth(writeCallLine(tool, args, s, failed.has(context.toolCallId ?? ""), context.expanded === true), width)]);
 				const id = context.toolCallId ?? "";
 				if (id !== "" && context.invalidate) watch(id, context.invalidate);
 				return dynamic((width) => (context.expanded && finished.has(id) ? [] : groupRow(id, width, s).map((line) => truncateToWidth(line, width))));
@@ -152,9 +180,10 @@ export default function (pi: ExtensionAPI) {
 					.join("\n");
 				// ponytail: pi reports a failed tool through the render context, not on the result.
 				const isError = result.isError === true || context.isError === true || failed.has(context.toolCallId ?? "");
-				const outcome = { text, isError, details: result.details };
+				const declined = tool === "edit" && isError && result.details?.diff === undefined && isRejected(text);
+				const outcome = { text, isError, details: declined ? declinedDiff(context.toolCallId ?? "", context.args) : result.details };
 				const s = style(theme);
-				const head = !WRITE_TOOLS.has(tool) && expanded && !isPartial ? [doneLine(tool, context.args, s)] : [];
+				const head = !WRITE_TOOLS.has(tool) && expanded && !isPartial ? [verboseCallLine(tool, context.args, s, isError)] : [];
 				// ponytail: painted rows are already cut or wrapped to the width, so only the plain lines are truncated;
 				// running them through it again would clip the escape that closes the background.
 				return dynamic((width) => {

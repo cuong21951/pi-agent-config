@@ -1,0 +1,10 @@
+{
+ "prompt": "Call bash twice in the SAME reply, so both run in parallel, with no text before or between them. First call: description \"Print ok\", command: echo ok. Second call: description \"Fail on purpose\", command: echo broken; exit 7. After both finish, reply with exactly: done.",
+ "steps": [
+  {"until": "✻ \\S+ for [^\\n]*· done", "timeout": 120},
+  {"sleep": 1},
+  {"snap": "collapsed"},
+  {"keys": "\u000f"},
+  {"sleep": 1.5}
+ ]
+}

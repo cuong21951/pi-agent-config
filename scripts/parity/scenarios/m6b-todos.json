@@ -1,0 +1,15 @@
+{
+  "bypass": true,
+  "prompt": "Track this with the task list: read the file, fix the bug, write a test.",
+  "steps": [
+    {"until": "✻ \\S+ for [^\\n]*· done", "timeout": 90},
+    {"sleep": 3},
+    {"snap": "expanded"},
+    {"keys": "\u0014"},
+    {"sleep": 2},
+    {"snap": "collapsed"},
+    {"keys": "\u0014"},
+    {"sleep": 2},
+    {"snap": "expanded-again"}
+  ]
+}

@@ -1,0 +1,26 @@
+{
+ "prompt": "",
+ "bypass": true,
+ "steps": [
+  {"keys": "/status"},
+  {"sleep": 1},
+  {"keys": "\r"},
+  {"sleep": 2},
+  {"snap": "status"},
+  {"keys": "\u001b"},
+  {"sleep": 1},
+  {"keys": "/usage"},
+  {"sleep": 1},
+  {"keys": "\r"},
+  {"sleep": 2},
+  {"snap": "usage"},
+  {"keys": "\u001b"},
+  {"sleep": 1},
+  {"keys": "/context"},
+  {"sleep": 1},
+  {"keys": "\r"},
+  {"sleep": 2},
+  {"snap": "context"}
+ ],
+ "end": "/context all to expand"
+}

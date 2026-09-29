@@ -1,0 +1,15 @@
+{
+  "prompt": "In the SAME reply, with no text before or between them, call your Agent tool twice, both with run_in_background false and subagent_type \"general-purpose\". First call: description \"Count files\", prompt \"Call your bash tool to run exactly: ls, then reply with the single word done.\". Second call: description \"Loop forever\", max_turns 1, prompt \"Call your bash tool to run exactly: echo one, then call your bash tool again to run exactly: echo two, then reply with the single word done.\". Then, once both tool results have come back, reply with exactly: allfinished. No other text.",
+  "steps": [
+    {"until": "agents|Running \\d+", "timeout": 60},
+    {"sleep": 1},
+    {"snap": "running"},
+    {"until": "✻ \\S+ for [^\\n]*· done", "timeout": 90},
+    {"sleep": 1},
+    {"snap": "finished"},
+    {"keys": "\u000f"},
+    {"sleep": 0.6},
+    {"snap": "expanded"}
+  ],
+  "end": "."
+}

@@ -1,0 +1,26 @@
+{
+ "bypass": false,
+ "prompt": "Load the skill named show-me using your skill tool. Do not follow its instructions. Then reply with exactly: loaded. No other text.",
+ "steps": [
+  {
+   "until": "(?m)^(?!❯ ).*(proceed|Allow|allow|Yes)",
+   "timeout": 90
+  },
+  {
+   "sleep": 3
+  },
+  {
+   "snap": "asking"
+  },
+  {
+   "keys": "\r"
+  },
+  {
+   "until": "✻ \\S+ for [^\n]*· done",
+   "timeout": 90
+  },
+  {
+   "sleep": 1
+  }
+ ]
+}

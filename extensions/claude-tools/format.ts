@@ -1,4 +1,7 @@
-import { isAbort, thoughtText } from "./rows.ts";
+import { dirname, isAbsolute, join, resolve } from "node:path";
+import { getAgentDir } from "@earendil-works/pi-coding-agent";
+import { visibleWidth, wrapTextWithAnsi } from "@earendil-works/pi-tui";
+import { isAbort, isRejected, thoughtText } from "./rows.ts";
 
 export type Paint = (role: string, text: string) => string;
 export interface Roots {
@@ -32,6 +35,7 @@ export interface Row {
 	text: string;
 	hi?: Span[];
 	fg?: Tint[];
+	dim?: boolean;
 }
 
 const LABEL: Record<string, string> = { write: "Write", edit: "Update" };
@@ -40,7 +44,6 @@ export const WRITE_TOOLS = new Set(["write", "edit"]);
 const ELBOW = "  ⎿  ";
 const RESULT_ELBOW = "  ⎿ \u00a0";
 const WRITE_PREVIEW_LINES = 10;
-const EXPANDED_OUTPUT_LINES = 20;
 
 const SEP = /[\\/]/g;
 const asKey = (path: string) => path.replace(SEP, "/").toLowerCase();
@@ -64,6 +67,13 @@ function shortPath(value: unknown, s: Roots): string {
 	return native(raw);
 }
 
+export function fullPath(value: unknown, s: Roots): string {
+	const raw = typeof value === "string" ? value : "";
+	if (raw === "") return "";
+	const sep = s.home.includes("\\") ? "\\" : "/";
+	return (isAbsolute(raw) ? raw : join(s.cwd, raw)).replace(SEP, sep);
+}
+
 // ponytail: Claude names the thing, not the tool: "Reading a.txt", "Searched "foo"".
 export function target(tool: string, args: Record<string, unknown>, s: Roots): string {
 	switch (tool) {
@@ -81,8 +91,10 @@ export function doneLine(tool: string, args: Record<string, unknown>, s: Style):
 
 const PLAN_FILE = /[\\/]\.pi[\\/]agent[\\/]plans[\\/][^\\/]+\.md$/;
 
-export function isPlanFile(path: unknown): boolean {
-	return typeof path === "string" && PLAN_FILE.test(path);
+const sameFolder = (a: string, b: string) => resolve(a).toLowerCase() === resolve(b).toLowerCase();
+
+export function isPlanFile(path: unknown, plansDir: string = join(getAgentDir(), "plans")): boolean {
+	return typeof path === "string" && path.endsWith(".md") && (PLAN_FILE.test(path) || sameFolder(dirname(path), plansDir));
 }
 
 export function editCreation(args: Record<string, unknown>): { path: string; content: string } | undefined {
@@ -95,10 +107,65 @@ function callLabel(tool: string, args: Record<string, unknown>): string {
 	return tool === "edit" && editCreation(args) ? "Create" : (LABEL[tool] ?? tool);
 }
 
-export function writeCallLine(tool: string, args: Record<string, unknown>, s: Style, failed = false): string {
+export function writeCallLine(tool: string, args: Record<string, unknown>, s: Style, failed = false, verbose = false): string {
 	const dot = s.fg(failed ? "error" : "borderAccent", "● ");
 	if (isPlanFile(args.path)) return dot + s.bold("Updated plan");
-	return dot + s.bold(callLabel(tool, args)) + `(${shortPath(args.path, s)})`;
+	return dot + s.bold(callLabel(tool, args)) + `(${verbose ? fullPath(args.path, s) : shortPath(args.path, s)})`;
+}
+
+const STAMP_TIME = new Intl.DateTimeFormat("en-US", { hour: "2-digit", minute: "2-digit", hourCycle: "h12" });
+const MODEL_TAIL = 8;
+
+export function stampRow(timestamp: number, model: string, width: number, s: Style): string {
+	const text = `${STAMP_TIME.format(new Date(timestamp))} ${model}${" ".repeat(MODEL_TAIL)}`;
+	return " ".repeat(Math.max(0, width - visibleWidth(text))) + s.fg("muted", text.trimEnd()) + " ".repeat(MODEL_TAIL);
+}
+
+function inlineCode(line: string): string {
+	return line.replace(/`([^`]+)`/g, "\x1b[38;2;153;204;255m$1\x1b[39m");
+}
+
+export function thinkingRows(content: ReadonlyArray<{ type: string; thinking?: string }>, width: number, s: Style): string[] {
+	const text = content
+		.filter((block) => block.type === "thinking" && (block.thinking ?? "").trim() !== "")
+		.map((block) => (block.thinking ?? "").trim())
+		.join("\n\n");
+	if (text === "") return [];
+	const room = Math.max(1, width - 2);
+	const dim = (line: string) => (line === "" ? "" : DIM + line + UNDIM);
+	const listed = (line: string, first: boolean) => {
+		const marker = first ? line.match(/^(?:\d+\.|-) /)?.[0] : undefined;
+		return marker ? s.fg("muted", marker) + dim(line.slice(marker.length)) : dim(line);
+	};
+	return text
+		.split("\n")
+		.flatMap((line) => (line.trim() === "" ? [""] : wrapTextWithAnsi(inlineCode(line), room).map((piece, i) => listed(piece, i === 0))))
+		.map((line, i) => (i === 0 ? s.fg("muted", "\x1b[3m∴ \x1b[23m") : "  ") + line);
+}
+
+function searchInput(args: Record<string, unknown>): string {
+	const path = typeof args.path === "string" && args.path !== "" ? `, path: "${args.path}"` : "";
+	return `pattern: "${String(args.pattern ?? "")}"${path}`;
+}
+
+export function verboseCallLine(tool: string, args: Record<string, unknown>, s: Style, failed = false): string {
+	const dot = s.fg(failed ? "error" : "borderAccent", "● ");
+	switch (tool) {
+		case "read":
+			return dot + s.bold("Read") + `(${fullPath(args.path, s)})`;
+		case "grep":
+		case "find":
+			return dot + s.bold("Search") + `(${searchInput(args)})`;
+		case "ls":
+			return dot + s.bold("Bash") + `(ls ${typeof args.path === "string" && args.path !== "" ? args.path : "."})`;
+		default:
+			return dot + s.bold(tool);
+	}
+}
+
+function rejectedLine(tool: string, args: Record<string, unknown>, s: Style): string {
+	const operation = tool === "edit" && !editCreation(args) ? "update" : "write";
+	return s.fg("dim", `User rejected ${operation} to `) + s.fg("dim", s.bold(shortPath(args.path, s)));
 }
 
 function editErrorText(text: string): string {
@@ -119,18 +186,32 @@ function diffLines(details: unknown): string[] {
 	return typeof diff === "string" && diff !== "" ? diff.split("\n") : [];
 }
 
-export function summary(tool: string, args: Record<string, unknown>, outcome: ToolOutcome, s: Style): string {
+const READ_CONTINUATION_NOTE = /\n\n\[Showing lines \d+-\d+ of \d+(?: \([^)]*\))?\. Use offset=\d+ to continue\.\]$/;
+
+function readDisplayText(text: string): string {
+	return text.replace(READ_CONTINUATION_NOTE, "");
+}
+
+function grepDisplayText(outcome: ToolOutcome): string {
+	const limit = (outcome.details as { matchLimitReached?: number } | undefined)?.matchLimitReached;
+	if (typeof limit !== "number") return outcome.text;
+	const notice = `[${limit} matches limit reached. Use limit=${limit * 2} for more, or refine pattern]`;
+	return outcome.text.includes(notice) ? outcome.text.replace(notice, "(Results are truncated. Consider using a more specific path or pattern.)") : outcome.text;
+}
+
+export function summary(tool: string, args: Record<string, unknown>, outcome: ToolOutcome, s: Style, verbose = false): string {
+	const named = (value: unknown) => (verbose ? fullPath(value, s) : shortPath(value, s));
 	switch (tool) {
 		case "read":
-			return `Read ${plural(lineCount(outcome.text), "line")}`;
+			return `Read ${plural(lineCount(readDisplayText(outcome.text)), "line", undefined, s.bold)}`;
 		case "write":
-			return `Wrote ${plural(lineCount(String(args.content ?? "")), "line", undefined, s.bold)} to ${s.bold(shortPath(args.path, s))}`;
+			return `Wrote ${plural(lineCount(String(args.content ?? "")), "line", undefined, s.bold)} to ${s.bold(named(args.path))}`;
 		case "edit": {
 			const lines = diffLines(outcome.details);
 			const added = lines.filter((line) => line.startsWith("+")).length;
 			const removed = lines.filter((line) => line.startsWith("-")).length;
 			// ponytail: a missing diff is not a zero-change edit; saying so would misreport the tool.
-			if (added === 0 && removed === 0) return `Updated ${s.bold(shortPath(args.path, s))}`;
+			if (added === 0 && removed === 0) return `Updated ${s.bold(named(args.path))}`;
 			const counts = [
 				[added, "added"],
 				[removed, "removed"],
@@ -142,9 +223,9 @@ export function summary(tool: string, args: Record<string, unknown>, outcome: To
 				.replace(/^./, (first) => first.toUpperCase());
 		}
 		case "grep":
-			return `Found ${plural(lineCount(outcome.text), "line")}`;
+			return lineCount(outcome.text) === 0 ? "No matches found" : `Found ${plural(lineCount(outcome.text), "line", undefined, s.bold)}`;
 		case "find":
-			return `Found ${plural(lineCount(outcome.text), "file")}`;
+			return lineCount(outcome.text) === 0 ? "No files found" : `Found ${plural(lineCount(outcome.text), "file", undefined, s.bold)}`;
 		default:
 			return `Listed ${plural(lineCount(outcome.text), "entry", "entries")}`;
 	}
@@ -417,7 +498,7 @@ export function paint(row: Row, text: string, pad: number): string {
 		if (from >= to) continue;
 		const nextBg = bg === "" ? "" : changed(from) ? word : bg;
 		const nextFg = tint(from);
-		const nextDim = from < dimEnd;
+		const nextDim = row.dim === true || from < dimEnd;
 		if (nextBg !== shownBg) out += (shownBg = nextBg);
 		if (nextFg !== shownFg) out += (shownFg = nextFg);
 		if (nextDim !== shownDim) out += (shownDim = nextDim) ? DIM : UNDIM;
@@ -428,6 +509,7 @@ export function paint(row: Row, text: string, pad: number): string {
 }
 
 const ROW_GUTTER = /^( *\d+ [-+ ])/;
+const MUTED_INDENT = /^ {4}/;
 
 // ponytail: break at the last space that still fits, keeping that space at the end of the piece so no
 // character is lost and every offset after it stays where the word diff put it. A token wider than the
@@ -453,6 +535,14 @@ function wrapPoints(code: string, room: number): Span[] {
 // the right edge. Measuring in characters rather than display width is the shortcut here — a row of
 // double-width text would overhang by a column.
 export function wrapRow(row: Row, width: number): Row[] {
+	if (row.kind === "muted") {
+		if (row.text.trim() === "...") return [row];
+		const indent = row.text.match(MUTED_INDENT)?.[0] ?? "";
+		const body = row.text.slice(indent.length);
+		const room = width - indent.length;
+		if (room < 1 || visibleWidth(body) <= room) return [row];
+		return wrapTextWithAnsi(body, room).map((text) => ({ kind: "muted", text: indent + text }));
+	}
 	const m = row.kind === "code" ? row.text.match(CODE_GUTTER) : LINE_BG[row.kind] || row.kind === "context" ? row.text.match(ROW_GUTTER) : null;
 	if (!m) return [row];
 	const gutter = m[0];
@@ -495,11 +585,29 @@ function more(hidden: number, hint?: string): Row[] {
 	return hidden > 0 ? [{ kind: "muted", text: `… +${hidden} ${hidden === 1 ? "line" : "lines"}${hint ? ` (${hint})` : ""}` }] : [];
 }
 
-function writeBody(tool: string, args: Record<string, unknown>, outcome: ToolOutcome, view: ResultView, s: Style): Row[] {
+export function previewEdits(content: string, edits: ReadonlyArray<{ oldText: string; newText: string }>): string {
+	for (const edit of edits) {
+		const index = content.indexOf(edit.oldText);
+		if (index === -1) continue;
+		content = content.slice(0, index) + edit.newText + content.slice(index + edit.oldText.length);
+	}
+	return content;
+}
+
+function highlighter(args: Record<string, unknown>, s: Style): Highlight | undefined {
 	// ponytail: Claude syntax-highlights the code inside a diff row, so the file's own path picks the
 	// language; a tool without one just renders plain.
 	const path = String(args.path ?? "");
-	const highlight = s.code && path !== "" ? (code: string) => s.code!(code, path) : undefined;
+	return s.code && path !== "" ? (code: string) => s.code!(code, path) : undefined;
+}
+
+function rejectedBody(tool: string, args: Record<string, unknown>, outcome: ToolOutcome, s: Style): Row[] {
+	if (tool !== "edit" || editCreation(args)) return [];
+	return diffRows(trimDiffContext(diffLines(outcome.details)), highlighter(args, s)).map(({ hi: _changed, ...row }) => ({ ...row, dim: true }));
+}
+
+function writeBody(tool: string, args: Record<string, unknown>, outcome: ToolOutcome, view: ResultView, s: Style): Row[] {
+	const highlight = highlighter(args, s);
 	// ponytail: an edit shows its whole diff, however long - only a write truncates its preview. pi already
 	// cuts the diff down to the changed lines plus context, with a "..." row where it skipped a stretch.
 	if (tool === "edit") return diffRows(trimDiffContext(diffLines(outcome.details)), highlight);
@@ -508,10 +616,11 @@ function writeBody(tool: string, args: Record<string, unknown>, outcome: ToolOut
 	return [...shown, ...more(all.length - shown.length)];
 }
 
-function outputRows(text: string, hint: string): Row[] {
-	const lines = text.replace(/\n$/, "").split("\n");
-	const shown = lines.slice(0, EXPANDED_OUTPUT_LINES);
-	return [...shown.map((line) => ({ kind: "muted" as RowKind, text: `    ${line}` })), ...more(lines.length - shown.length, hint)];
+function outputRows(text: string): Row[] {
+	return text
+		.replace(/\n$/, "")
+		.split("\n")
+		.map((line) => ({ kind: "muted" as RowKind, text: `     ${line}` }));
 }
 
 export interface Result {
@@ -527,6 +636,7 @@ export function resultRows(tool: string, args: Record<string, unknown>, outcome:
 	if (view.isPartial) return write ? { head: s.fg("muted", ELBOW) + s.fg("muted", "…"), rows: [], indent: 0 } : null;
 	const elbow = s.fg("muted", RESULT_ELBOW);
 	if (outcome.isError && isAbort(outcome.text)) return null;
+	if (write && outcome.isError && isRejected(outcome.text)) return { head: elbow + rejectedLine(tool, args, s), rows: rejectedBody(tool, args, outcome, s), indent: RESULT_ELBOW.length };
 	if (!write && !view.expanded) return null;
 	if (outcome.isError && tool === "edit" && !view.expanded) return { head: elbow + s.fg("error", editErrorText(outcome.text)), rows: [], indent: 0 };
 	if (outcome.isError) {
@@ -537,9 +647,9 @@ export function resultRows(tool: string, args: Record<string, unknown>, outcome:
 		return { head: elbow + s.fg("error", first), rows, indent: 0 };
 	}
 	if (write && isPlanFile(args.path)) return { head: s.fg("muted", `${RESULT_ELBOW}/plan to preview`), rows: [], indent: 0 };
-	if (write) return { head: elbow + summary(tool, args, outcome, s), rows: writeBody(tool, args, outcome, view, s), indent: RESULT_ELBOW.length };
-	const output = tool === "read" ? convertLeadingTabs(outcome.text) : outcome.text;
-	return { head: elbow + summary(tool, args, outcome, s), rows: outputRows(output, view.hint), indent: 0 };
+	if (write) return { head: elbow + summary(tool, args, outcome, s, view.expanded), rows: writeBody(tool, args, outcome, view, s), indent: RESULT_ELBOW.length };
+	if (tool === "read" || ((tool === "grep" || tool === "find") && lineCount(outcome.text) === 0)) return { head: elbow + summary(tool, args, outcome, s), rows: [], indent: 0 };
+	return { head: elbow + summary(tool, args, outcome, s), rows: outputRows(tool === "grep" ? grepDisplayText(outcome) : outcome.text), indent: 0 };
 }
 
 if (process.env.CLAUDE_TOOLS_SELFTEST) {
@@ -556,6 +666,25 @@ if (process.env.CLAUDE_TOOLS_SELFTEST) {
 	check(doneLine("read", { path: "/home/me/a.ts" }, tagged) === "<muted>Read ~/a.ts</muted>", "finished read is one grey line without a dot");
 	check(doneLine("ls", {}, plain) === "Listed .", "ls defaults to cwd");
 	check(doneLine("find", { pattern: "**/*.ts" }, plain) === 'Searched "**/*.ts"', "find is a search");
+	const foundFiles = resultRows("find", { pattern: "*.ts" }, ok("a.ts\nb.ts"), view(true), plain)!;
+	check(foundFiles.head === "  ⎿  Found 2 files", "an expanded Glob with matches gets Claude's \"Found N files\" header, which pi's own text never carries");
+	const noFiles = resultRows("find", { pattern: "*.xyz" }, ok("No files found matching pattern"), view(true), plain)!;
+	check(noFiles.head === "  ⎿  No files found" && noFiles.rows.length === 0, "an empty Glob drops pi's \"matching pattern\" extra words and shows no body, matching Claude's plain single line");
+	const foundLines = resultRows("grep", { pattern: "x" }, ok("a.ts:1: x\nb.ts:2: x"), view(true), plain)!;
+	check(foundLines.head === "  ⎿  Found 2 lines", "an expanded Grep with matches gets Claude's \"Found N lines\" header");
+	const noMatches = resultRows("grep", { pattern: "x" }, ok("No matches found"), view(true), plain)!;
+	check(noMatches.head === "  ⎿  No matches found" && noMatches.rows.length === 0, "an empty Grep shows no body under its already-matching \"No matches found\" line");
+	const truncated = resultRows("grep", { pattern: "x" }, ok("a.ts:1: x\n\n[20 matches limit reached. Use limit=40 for more, or refine pattern]", { matchLimitReached: 20 }), view(true), plain)!;
+	check(
+		truncated.rows.at(-1)?.text === "     (Results are truncated. Consider using a more specific path or pattern.)",
+		"pi's own \"N matches limit reached\" notice is swapped for Claude's unknown-total wording, the only variant pi's core can support since it never learns the true total",
+	);
+	const readNote = "line 1\nline 2\n\n[Showing lines 1-2 of 5000. Use offset=2 to continue.]";
+	const readCapped = resultRows("read", { path: "a" }, ok(readNote), view(true), plain)!;
+	check(readCapped.head === "  ⎿  Read 2 lines" && readCapped.rows.length === 0, "a capped Read counts without pi's visible continuation bracket, like Claude's hidden system-reminder the user never sees");
+	const readByteNote = "line 1\n\n[Showing lines 1-1 of 5000 (50KB limit). Use offset=1 to continue.]";
+	check(readDisplayText(readByteNote) === "line 1", "the byte-limited variant of the continuation bracket is dropped too");
+
 	check(writeCallLine("edit", { path: "/home/me/x.ts" }, tagged) === "<borderAccent>● </borderAccent><b>Update</b>(~/x.ts)", "update call: blue dot, bold label, plain path");
 	check(writeCallLine("write", { path: "n.ts" }, plain) === "● Write(n.ts)", "write call");
 	check(writeCallLine("write", { path: "/home/me/proj/src/a.ts" }, plain) === "● Write(src/a.ts)", "a file inside the working directory is named relative to it");
@@ -563,12 +692,36 @@ if (process.env.CLAUDE_TOOLS_SELFTEST) {
 	check(writeCallLine("edit", { path: "C:/Users/me/.pi/x.ts" }, win) === "● Update(~\\.pi\\x.ts)", "Windows: pi's forward slashes still match home, and the row uses backslashes");
 	check(writeCallLine("edit", { path: "C:/Work/src/b.ts" }, win) === "● Update(src\\b.ts)", "Windows: inside the working directory wins over ~");
 
+	const declined = { text: "The user doesn't want to proceed with this tool use. The tool use was rejected (eg. if it was a file edit, the new_string was NOT written to the file). STOP what you are doing and wait for the user to tell you how to proceed.", isError: true };
+	check(resultRows("edit", { path: "/home/me/proj/src/app.ts", edits: [{ oldText: "a", newText: "b" }] }, declined, view(), tagged)!.head === "<muted>  ⎿ \u00a0</muted><dim>User rejected update to </dim><dim><b>src/app.ts</b></dim>", "a declined Update is Claude's grey \"User rejected update to\" + bold path, not an error row");
+	const declinedDiff = { ...declined, details: { diff: " 1 a\n-2 b\n+2 c\n 3 d" } };
+	const declinedRows = resultRows("edit", { path: "/home/me/proj/src/app.ts", edits: [{ oldText: "b", newText: "c" }] }, declinedDiff, view(), plain)!;
+	check(
+		declinedRows.indent === 5 && declinedRows.rows.length === 4 && declinedRows.rows.every((row) => row.dim === true && row.hi === undefined) && declinedRows.rows[1].text === " 2 -b",
+		"a declined Update draws the edit's diff under the rejected line, every row dim and no word highlight (Claude 2.1.283, m4d-decline-edit)",
+	);
+	check(paint(declinedRows.rows[0], declinedRows.rows[0].text, 0).startsWith("\x1b[38;2;248;248;242m\x1b[2m"), "a dim row stays dim past the gutter");
+	check(resultRows("write", { path: "/home/me/proj/n.ts", content: "x" }, declined, view(), plain)!.rows.length === 0, "a declined Write keeps no body (not measured)");
+	check(previewEdits("a b a", [{ oldText: "a", newText: "x" }, { oldText: "zz", newText: "y" }]) === "x b a", "a preview applies each edit once where its old text first appears and skips one that no longer matches");
+	check(resultRows("write", { path: "/home/me/proj/n.ts", content: "x" }, declined, view(), plain)!.head === "  ⎿ \u00a0User rejected write to n.ts" && resultRows("edit", { path: "/home/me/proj/n.ts", edits: [{ oldText: "", newText: "x" }] }, declined, view(), plain)!.head.endsWith("User rejected write to n.ts"), "a declined Write, or an Update that creates a file, says write");
 	check(resultRows("read", { path: "a" }, ok("l1\nl2\nl3\n"), view(), plain) === null, "collapsed read result draws nothing");
 	check(resultRows("read", { path: "a" }, { text: "Operation aborted", isError: true }, view(), plain) === null, "an aborted tool draws no error row (pi core prints Interrupted)");
-	const expanded = resultRows("read", { path: "a" }, ok("l1\nl2"), view(true), plain)!;
-	check(expanded.head === "  ⎿ \u00a0Read 2 lines" && expanded.rows.map((r) => r.text).join("|") === "    l1|    l2", "expanded read shows elbow, summary and output");
-	const tabbedRead = resultRows("read", { path: "a" }, ok("\tx\nl2"), view(true), plain)!;
-	check(tabbedRead.rows.map((r) => r.text).join("|") === "      x|    l2", "an expanded read converts a leading tab in the file content to two spaces, like the Update diff and Write preview");
+	const expanded = resultRows("read", { path: "a" }, ok("l1\nl2"), view(true), tagged)!;
+	check(expanded.head === "<muted>  ⎿ \u00a0</muted>Read <b>2</b> lines" && expanded.rows.length === 0, "ctrl+o on a read is Claude's detailed-transcript Read: the bold count under the elbow and no file body (m5a-measure-ctrlo)");
+	const grepRows = resultRows("grep", { pattern: "x" }, ok(Array.from({ length: 30 }, (_, i) => `a.ts:${i}: x`).join("\n")), view(true), plain)!;
+	check(grepRows.rows.length === 30 && grepRows.rows[0].text === "     a.ts:0: x", "ctrl+o on a search shows every match five columns in, no +N lines cap");
+	check(verboseCallLine("read", { path: "src/a.ts" }, tagged) === "<borderAccent>● </borderAccent><b>Read</b>(/home/me/proj/src/a.ts)", "ctrl+o names a read with its absolute path, Claude's verbose Read(file_path)");
+	check(verboseCallLine("grep", { pattern: "export function", path: "src" }, plain) === '● Search(pattern: "export function", path: "src")' && verboseCallLine("find", { pattern: "*.ts" }, plain) === '● Search(pattern: "*.ts")', "a search is Claude's n7: pattern, then the path as given when there is one");
+	check(verboseCallLine("ls", { path: "src" }, plain) === "● Bash(ls src)" && verboseCallLine("read", { path: "a" }, tagged, true).startsWith("<error>● </error>"), "ls is the Bash(ls …) the harness maps it to; a failed call gets the red dot");
+	check(writeCallLine("edit", { path: "src/b.ts" }, { ...plain, home: "C:\\Users\\me", cwd: "C:\\Work" }, false, true) === "● Update(C:\\Work\\src\\b.ts)", "ctrl+o names an edit by its absolute path with the platform separator");
+	check(stampRow(Date.UTC(2026, 8, 28, 12, 5), "claude-haiku-4.5", 60, plain).length === 60 && stampRow(Date.UTC(2026, 8, 28, 12, 5), "claude-haiku-4.5", 60, plain).endsWith(" claude-haiku-4.5        "), "the transcript stamp sits flush right with Claude's minWidth model box (model + 8 columns)");
+	check(/^ +\d\d:\d\d [AP]M claude-haiku-4\.5 {8}$/.test(stampRow(Date.UTC(2026, 8, 28, 12, 5), "claude-haiku-4.5", 60, plain)), "and reads hh:mm AM/PM, hour two digits (Claude's dR)");
+	const thought = thinkingRows([{ type: "thinking", thinking: "alpha beta gamma" }, { type: "text" }], 12, plain);
+	check(thought.join("|") === "\x1b[3m∴ \x1b[23m\x1b[2malpha beta\x1b[22m|  \x1b[2mgamma\x1b[22m", "ctrl+o shows the thinking: italic ∴, the text dim, continuation rows hang two columns");
+	check(thinkingRows([{ type: "text" }], 40, plain).length === 0, "no thinking, no rows");
+	check(thinkingRows([{ type: "thinking", thinking: "Plan:\n1. Run it" }], 40, tagged)[1] === "  <muted>1. </muted>\x1b[2mRun it\x1b[22m", "a numbered step keeps its number grey and upright, the step itself dim (m4c-long-line)");
+	check(thinkingRows([{ type: "thinking", thinking: "First call:\n- command: echo ok" }], 40, tagged)[1] === "  <muted>- </muted>\x1b[2mcommand: echo ok\x1b[22m", "a bullet keeps its dash grey, the item dim (m5a-parallel-fail, Claude 2.1.283)");
+	check(thinkingRows([{ type: "thinking", thinking: "Plan:\n1. command: `echo ok`" }], 60, tagged)[1] === "  <muted>1. </muted>\x1b[2mcommand: \x1b[38;2;153;204;255mecho ok\x1b[39m\x1b[22m", "inline code in ctrl+o thinking drops its backticks and turns 99ccff, still dim (m5a-parallel-fail suite run, Claude 2.1.283)");
 	check(resultRows("read", { path: "a" }, ok(""), { ...view(), isPartial: true }, tagged) === null, "a running read draws no rows of its own: the active group row carries its hint");
 	check(resultRows("write", { path: "a" }, ok(""), { ...view(), isPartial: true }, plain)!.head === "  ⎿  …", "a running write keeps its own elbow row");
 	check(resultRows("read", {}, { text: "ENOENT\nmore", isError: true, details: undefined }, view(), tagged) === null, "a failed read folds into the group like any other call; its row draws nothing");
@@ -704,6 +857,15 @@ if (process.env.CLAUDE_TOOLS_SELFTEST) {
 	check(wrapRow({ kind: "added", text: " 7 +short" }, 40).length === 1, "a line that fits is not split");
 	check(wrapRow({ kind: "code", text: "3 aaaa bbbb cc" }, 11).every((row) => row.text.length <= 11), "a space right at the edge stays inside the width, so no piece gets cut with an ellipsis");
 	check(wrapRow({ kind: "muted", text: "     ..." }, 4).length === 1, "the gap row is never wrapped");
+	const longOutput = wrapRow({ kind: "muted", text: `    ${"x".repeat(400)}` }, 132);
+	check(
+		longOutput.length === 4 &&
+			longOutput.every((row) => visibleWidth(row.text) <= 132) &&
+			longOutput[0].text === `    ${"x".repeat(128)}` &&
+			longOutput.map((row) => row.text.replace(MUTED_INDENT, "")).join("") === "x".repeat(400),
+		"a bash/grep/read output line longer than the terminal wraps into several rows instead of pi's old hard cut, like Claude's Bash wrap of print('x'*400) (measured live, m4c-long-line)",
+	);
+	check(wrapRow({ kind: "muted", text: "short line" }, 132).length === 1, "an output line that already fits is left alone");
 	check(
 		wrapRow({ kind: "context", text: " 7  const total = a + b;" }, 16).map((row) => row.text).join("|") === " 7  const total |    = a + b;",
 		"the break lands on a space and keeps it, so nothing shifts",
@@ -741,5 +903,6 @@ if (process.env.CLAUDE_TOOLS_SELFTEST) {
 	check(writeCallLine("edit", { path: plan }, plain) === "● Updated plan", "an edit to the plan file too");
 	check(resultRows("write", { path: plan, content: "a\nb" }, ok("done"), view(), tagged)!.head === "<muted>  ⎿ \u00a0/plan to preview</muted>", "the plan file result is \"⎿ /plan to preview\", no content");
 	check(!isPlanFile("/home/me/plans/a.md") && isPlanFile("/home/me/.pi/agent/plans/a.md"), "only pi's own plans folder counts");
+	check(isPlanFile("C:\\sandbox\\agent\\plans\\a.md", "C:/sandbox/agent/plans") && !isPlanFile("C:\\sandbox\\agent\\a.md", "C:/sandbox/agent/plans"), "a PI_CODING_AGENT_DIR elsewhere keeps its own plans folder");
 	console.log("\nAll claude-tools checks passed.");
 }

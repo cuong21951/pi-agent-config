@@ -9,7 +9,7 @@ type Config = { maxInputPerM: number; maxOutputPerM: number; subscriptions: stri
 const DEFAULTS: Config = { maxInputPerM: 1, maxOutputPerM: 3, subscriptions: ["github-copilot/*"], allow: ["commandcode/*"], deny: [] };
 
 function configPath(): string {
-	return path.join(process.env.PI_CODING_AGENT_DIR ?? path.join(os.homedir(), ".pi", "agent"), "cheap-models.json");
+	return process.env.CHEAP_MODELS_CONFIG ?? path.join(process.env.PI_CODING_AGENT_DIR ?? path.join(os.homedir(), ".pi", "agent"), "cheap-models.json");
 }
 
 export function loadConfig(file = configPath()): Config {

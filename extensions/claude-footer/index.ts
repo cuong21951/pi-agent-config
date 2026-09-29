@@ -1,4 +1,5 @@
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
+import { matchesKey, truncateToWidth, visibleWidth } from "@earendil-works/pi-tui";
 
 const ANSI = /\x1b\[[0-9;]*m/g;
 const SEPARATOR = " · ";
@@ -7,7 +8,9 @@ const MODE_STATUS = "modes";
 const VOICE_STATUS = "voice";
 const PONYTAIL_STATUS = "ponytail";
 const TASKS_HINT_STATUS = "tasks-hint";
-const HIDDEN_STATUSES = new Set([MODE_STATUS, VOICE_STATUS, PONYTAIL_STATUS, TASKS_HINT_STATUS, "mcp", "pi-permission-system"]);
+const SHELLS_STATUS = "shells";
+const HIDDEN_STATUSES = new Set([MODE_STATUS, VOICE_STATUS, PONYTAIL_STATUS, TASKS_HINT_STATUS, SHELLS_STATUS, "mcp", "pi-permission-system"]);
+const CYCLE_HINT = /(?:\x1b\[[0-9;]*m)* \(shift\+tab to cycle\)(?:\x1b\[[0-9;]*m)*/;
 const GUTTER = "  ";
 
 function plainWidth(text: string): number {
@@ -40,29 +43,23 @@ export function displayName(model: string): string {
 }
 
 export function composeFooter(f: FooterFacts, _paint: Paint, maxWidth?: number): string {
-	let parts = f.ponytail ? [sgr("38;5;108", f.ponytail)] : [];
+	const parts = f.ponytail ? [sgr("38;5;108", f.ponytail)] : [];
 	parts.push(sgr("38;5;110", displayName(f.model)));
 	if (f.contextPercent !== null) parts.push(sgr(contextCode(f.contextPercent), `ctx ${Math.round(f.contextPercent)}%`));
 	parts.push(...f.statuses);
-	if (maxWidth !== undefined) {
-		const kept: string[] = [];
-		let used = 0;
-		for (const part of parts) {
-			const width = plainWidth(part) + (kept.length ? SEPARATOR.length : 0);
-			if (used + width > maxWidth) break;
-			kept.push(part);
-			used += width;
-		}
-		parts = kept;
-	}
-	return parts.join(sgr("38;5;240", SEPARATOR));
+	const line = parts.join(sgr("38;5;240", SEPARATOR));
+	return maxWidth === undefined ? line : truncateToWidth(line, maxWidth, "…");
+}
+
+export function withShells(mode: string, shells?: string): string {
+	return shells ? `${mode.replace(CYCLE_HINT, "\x1b[0m")}${sgr("38;2;153;153;153", SEPARATOR)}${sgr("38;2;0;204;204", shells)}` : mode;
 }
 
 export function composeModeRow(mode: string, width: number, voice?: string, tasksHint?: string): string {
 	const left = tasksHint ? `${mode}${sgr("38;2;153;153;153", SEPARATOR)}${tasksHint}` : mode;
-	if (!voice) return left;
+	if (!voice) return truncateToWidth(left, width, "…");
 	const gap = width - plainWidth(left) - plainWidth(voice);
-	return gap < 1 ? left : `${left}${" ".repeat(gap)}${voice}`;
+	return gap < 1 ? truncateToWidth(left, width, "…") : `${left}${" ".repeat(gap)}${voice}`;
 }
 
 export function visibleStatuses(statuses: Map<string, string>, _paint: Paint): string[] {
@@ -107,6 +104,27 @@ export function footerRows(line: string, modeRow: string | undefined, fleetHint:
 	return [...(second === undefined ? [line] : [line, second]).map((row) => GUTTER + row), ...fleetLines];
 }
 
+const TRANSCRIPT_STATUS = "verbose ";
+const TRANSCRIPT_KEYS = "↑↓ scroll · v to open in notepad · ? for shortcuts";
+
+export function transcriptOn(): boolean {
+	return (globalThis as { __claudeTranscript?: boolean }).__claudeTranscript === true;
+}
+
+export function transcriptRows(width: number, paint: Paint): string[] {
+	const full = ["Showing detailed transcript", "ctrl+o to toggle", TRANSCRIPT_KEYS].join(SEPARATOR);
+	const keys = GUTTER.length + visibleWidth(full) + TRANSCRIPT_STATUS.length < width ? TRANSCRIPT_KEYS : "? for shortcuts";
+	const hint = truncateToWidth(["Showing detailed transcript", "ctrl+o to toggle", keys].join(SEPARATOR), Math.max(1, width - GUTTER.length - TRANSCRIPT_STATUS.length), "…");
+	const gap = Math.max(0, width - GUTTER.length - visibleWidth(hint) - TRANSCRIPT_STATUS.length);
+	return [`\x1b[2m${"─".repeat(width)}\x1b[22m`, GUTTER + paint("muted", hint) + " ".repeat(gap) + paint("muted", TRANSCRIPT_STATUS.trimEnd()) + " "];
+}
+
+export function transcriptKey(data: string): "exit" | "swallow" | undefined {
+	if (data === "q" || matchesKey(data, "escape")) return "exit";
+	if (matchesKey(data, "up") || matchesKey(data, "down") || matchesKey(data, "enter") || /^[^\x00-\x1f\x7f]+$/.test(data)) return "swallow";
+	return undefined;
+}
+
 export default function (pi: ExtensionAPI) {
 	let usage: Usage | undefined;
 	let dialogOpen = false;
@@ -122,11 +140,18 @@ export default function (pi: ExtensionAPI) {
 	pi.on("session_start", (_event, ctx) => {
 		usage = lastUsage(ctx.sessionManager.getBranch() as Entry[]);
 		if (!ctx.hasUI) return;
+		ctx.ui.onTerminalInput((data: string) => {
+			if (!transcriptOn()) return undefined;
+			const key = transcriptKey(data);
+			if (key === "exit") ctx.ui.setToolsExpanded(false);
+			return key ? { consume: true } : undefined;
+		});
 		ctx.ui.setFooter((_tui, theme, footerData) => {
 			const paint: Paint = (role, text) => theme.fg(role as never, text);
 			return {
 				render(fullWidth: number) {
 					if (dialogOpen) return [];
+					if (transcriptOn()) return transcriptRows(fullWidth, paint);
 					const width = Math.max(1, fullWidth - GUTTER.length);
 					const statuses = footerData.getExtensionStatuses();
 					const line = composeFooter(
@@ -140,9 +165,10 @@ export default function (pi: ExtensionAPI) {
 						width,
 					);
 					const mode = statuses.get(MODE_STATUS);
-					const modeRow = mode ? composeModeRow(mode, width, statuses.get(VOICE_STATUS), statuses.get(TASKS_HINT_STATUS)) : undefined;
 					const fleet = fleetRegistry();
-					return footerRows(line, modeRow, fleet?.fleetHint?.(theme), fleet?.fleetLines?.(fullWidth, theme) ?? []);
+					const fleetLines = fleet?.fleetLines?.(fullWidth, theme) ?? [];
+					const modeRow = mode ? composeModeRow(withShells(mode, statuses.get(SHELLS_STATUS)), width, statuses.get(VOICE_STATUS), fleetLines.length === 0 ? statuses.get(TASKS_HINT_STATUS) : undefined) : undefined;
+					return footerRows(line, modeRow, fleet?.fleetHint?.(theme), fleetLines);
 				},
 				invalidate() {},
 			};
@@ -169,10 +195,12 @@ if (process.env.CLAUDE_FOOTER_SELFTEST) {
 	check(composeFooter(base, plain) === composeFooter(base, plain, 1000), "no overflow = unchanged");
 	const crowded = { ...base, statuses: ["deepseek $24.57", "openrouter $20.38"], model: "DeepSeek V4 Flash Vision Exp" };
 	const at60 = bare(composeFooter(crowded, plain, 60));
-	check(at60.includes("ctx 22%") && !at60.includes("openrouter") && at60.length <= 60, "overflow drops the trailing balances first");
-	check(bare(composeFooter(base, plain, 25)) === "[PONYTAIL] · Haiku 4.5", "overflow drops whole parts");
+	check(at60.includes("ctx 22%") && !at60.includes("openrouter") && at60.length === 60 && at60.endsWith("…"), "overflow hard-truncates the tail (Claude's Ink wrap=\"truncate\"), which happens to cut the trailing balance off first here");
+	const at25 = composeFooter(base, plain, 25);
+	check(bare(at25).endsWith("…") && plainWidth(at25) === 25, "overflow truncates character by character with a trailing …, not by dropping whole parts");
 	check(!/\x1b\[[0-9;]*$/.test(composeFooter(base, plain, 20)), "no cut escape sequence at line end");
-	check(bare(composeFooter({ ...base, statuses: ["x".repeat(60)] }, plain, 40)) === "[PONYTAIL] · Haiku 4.5 · ctx 22%", "a status too wide to fit is dropped, not sliced");
+	const at40 = composeFooter({ ...base, statuses: ["x".repeat(60)] }, plain, 40);
+	check(bare(at40).endsWith("…") && plainWidth(at40) === 40, "a status too wide to fit is truncated with …, not dropped whole");
 	const statuses = new Map([
 		["modes", "⏵⏵ accept edits on"],
 		["pi-permission-system", "yolo"],
@@ -191,6 +219,9 @@ if (process.env.CLAUDE_FOOTER_SELFTEST) {
 	check(bare(hintRow) === "⏵⏵ bypass permissions on (shift+tab to cycle) · /tasks to see subagents", "the tasks-to-see-subagents hint joins the mode with Claude's separator");
 	check(hintRow.includes("\x1b[38;2;153;153;153m \xB7 \x1b[0m"), "the separator before the hint is grey 999999, like the rest of that trailing segment in Claude 2.1.280");
 	check(composeModeRow("⏵⏵ bypass permissions on (shift+tab to cycle)", 80) === "⏵⏵ bypass permissions on (shift+tab to cycle)", "no tasks-hint status = mode row unchanged");
+	const shellRow = withShells("\x1b[38;2;255;102;102m⏵⏵ bypass permissions on\x1b[39m\x1b[38;2;153;153;153m (shift+tab to cycle)\x1b[39m", "1 shell");
+	check(bare(shellRow) === "⏵⏵ bypass permissions on · 1 shell" && shellRow.includes("\x1b[38;2;0;204;204m1 shell"), "a running background shell swaps the cycle hint for Claude's cyan 1 shell pill (m6a-measure-bg: · 1 shell in 00cccc)");
+	check(withShells("⏵⏵ bypass permissions on (shift+tab to cycle)") === "⏵⏵ bypass permissions on (shift+tab to cycle)", "no shell = mode row unchanged");
 	const hintAndVoiceRow = composeModeRow("mode", 40, "voice", "hint");
 	check(bare(hintAndVoiceRow).startsWith("mode \xB7 hint") && bare(hintAndVoiceRow).endsWith("voice") && plainWidth(hintAndVoiceRow) === 40, "the hint sits left of the mode, voice still flush right at the same width");
 	check(visibleStatuses(new Map([["tasks-hint", "/tasks to see subagents"], ["api-balance", "x $1"]]), plain).join("|") === "x $1", "tasks-hint stays out of line one, like modes and voice");
@@ -208,5 +239,10 @@ if (process.env.CLAUDE_FOOTER_SELFTEST) {
 	(globalThis as Record<symbol, unknown>)[Symbol.for("pi-subagents:manager")] = { fleetLines: (width: number) => [`w${width}`], fleetHint: () => "hint" };
 	check(fleetRegistry()?.fleetLines?.(132, {})[0] === "w132" && fleetRegistry()?.fleetHint?.({}) === "hint", "the list and the hint come off the pi-subagents cross-package registry");
 	delete (globalThis as Record<symbol, unknown>)[Symbol.for("pi-subagents:manager")];
+	const bar = transcriptRows(132, plain);
+	check(bar.length === 2 && bar[0] === `\x1b[2m${"─".repeat(132)}\x1b[22m`, "ctrl+o: a dim rule edge to edge where the prompt box was, after the one blank row the transcript already ends with (an overflowing view in m4d-bash-rows: Claude's done line, one blank, the rule)");
+	check(bar[1] === `  Showing detailed transcript · ctrl+o to toggle · ↑↓ scroll · v to open in notepad · ? for shortcuts${" ".repeat(23)}verbose `, "the hint row is Claude 2.1.283's, with verbose flush right one column in (measured m5a-measure-ctrlo)");
+	check(transcriptRows(90, plain)[1].startsWith("  Showing detailed transcript · ctrl+o to toggle · ? for shortcuts ") && visibleWidth(transcriptRows(90, plain)[1]) === 90, "too narrow for the scroll keys: Claude's mN keeps only ? for shortcuts");
+	check(transcriptKey("q") === "exit" && transcriptKey("\x1b") === "exit" && transcriptKey("x") === "swallow" && transcriptKey("\x1b[A") === "swallow" && transcriptKey("\x0f") === undefined && transcriptKey("\x03") === undefined, "q and esc leave the transcript; typing goes nowhere; ctrl+o and ctrl+c still reach pi");
 	console.log("\nAll claude-footer checks passed.");
 }

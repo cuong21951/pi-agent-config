@@ -1,0 +1,13 @@
+{
+  "bypass": false,
+  "prompt": "Use the Edit tool to change the line \"alpha: 1\" to \"alpha: 100\" in notes.txt. Then reply with exactly: edited.",
+  "steps": [
+    {"until": "(?m)^(?!❯ ).*(proceed|Allow|allow|Yes)", "timeout": 90},
+    {"sleep": 1},
+    {"snap": "asking"},
+    {"keys": "1"},
+    {"sleep": 1},
+    {"until": "✻ \\S+ for [^\\n]*· done", "timeout": 60},
+    {"sleep": 1}
+  ]
+}

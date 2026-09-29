@@ -1,0 +1,30 @@
+{
+ "prompt": "",
+ "bypass": true,
+ "pi_args": "--mcp-config {parity}/mcp-pi.json",
+ "claude_args": "--mcp-config {parity}/mcp-claude.json",
+ "steps": [
+  {"keys": "/mcp"},
+  {"sleep": 1},
+  {"keys": "\r"},
+  {"sleep": 1},
+  {"snap": "list"},
+  {"keys": "\r"},
+  {"sleep": 1},
+  {"snap": "actions"},
+  {"keys": "\r"},
+  {"sleep": 1},
+  {"snap": "tools"},
+  {"keys": "\r"},
+  {"sleep": 1},
+  {"snap": "detail"},
+  {"keys": "\u001b"},
+  {"sleep": 1},
+  {"keys": "\u001b"},
+  {"sleep": 1},
+  {"keys": "\u001b"},
+  {"sleep": 1},
+  {"snap": "closed"}
+ ],
+ "end": "https://code.claude.com/docs/en/mcp for help"
+}

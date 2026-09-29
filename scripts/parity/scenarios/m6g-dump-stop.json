@@ -1,0 +1,17 @@
+{
+ "prompt": "M6G stop run.",
+ "fixture": "findings/m6g/fixture",
+ "end": "stopped[\\s\\S]*✻ \\S+ for [^\\n]*· done",
+ "steps": [
+  {
+   "until": "stopped[\\s\\S]*✻ \\S+ for [^\\n]*· done",
+   "timeout": 90
+  },
+  {
+   "sleep": 8
+  },
+  {
+   "snap": "end"
+  }
+ ]
+}

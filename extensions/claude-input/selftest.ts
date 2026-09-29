@@ -13,7 +13,7 @@ const jiti = createJiti(import.meta.url, {
 });
 
 const here = path.dirname(fileURLToPath(import.meta.url));
-const { promptLines, default: install } = await jiti.import(path.join(here, "index.ts"));
+const { promptLines, withArgumentHint, argumentHint, default: install } = await jiti.import(path.join(here, "index.ts"));
 const { CustomEditor } = await jiti.import(path.join(PI_DIR, "dist/index.js"));
 const { KeybindingsManager } = await jiti.import(path.join(PI_DIR, "dist/core/keybindings.js"));
 const { setKeybindings } = await jiti.import(path.join(PI_DIR, "node_modules/@earendil-works/pi-tui/dist/keybindings.js"));
@@ -92,6 +92,48 @@ const id = (t: string) => t;
 	editor.setText("/clear");
 	const commandLine = editor.render(40)[1] as string;
 	assert.ok(commandLine.includes("\x1b[38;2;153;204;255m/clear\x1b[39m"), `real editor row paints a known typed command 99ccff, like Claude 2.1.280's measured '/clear' run: ${JSON.stringify(commandLine)}`);
+}
+
+{
+	const { placeholderText, withPlaceholder } = await jiti.import(path.join(here, "index.ts"));
+	assert.equal(placeholderText("abc"), 'Try "fix lint errors"', "Claude 2.1.283's f4r: the example is picked by (|hash(session id)| >>> 8) % 8, hash being its QJ string hash");
+	assert.equal(placeholderText("session-7"), 'Try "how does <filepath> work?"', "another session id lands on another of the eight examples, <filepath> standing in for the example files Claude never collects on win32");
+	const rows = withPlaceholder(["────────────────────────────", "\x1b_pi:c\x07\x1b[7m \x1b[0m                           ", "────────────────────────────"], 'Try "x"');
+	assert.equal(rows[1], '\x1b_pi:c\x07\x1b[2mTry "x"\x1b[22m' + " ".repeat(21), "the empty row becomes the dim example, the hardware cursor marker kept in front and the inverse-video cursor dropped (Claude parks its real cursor on the T)");
+	assert.equal(plain(rows[1]).replace(/\x1b_[^\x07]*\x07/g, "").length, 28, "the row keeps its width");
+}
+
+{
+	const tui = { requestRender() {}, terminal: { rows: 40, columns: 80 } };
+	const theme = { borderColor: id, selectList: {} };
+	const handlers: Record<string, any> = {};
+	let factory: any;
+	install({ on: (n: string, fn: any) => { handlers[n] = fn; }, getCommands: () => [] });
+	const start = (entries: unknown[]) => handlers.session_start({}, { hasUI: true, sessionManager: { getEntries: () => entries, getSessionId: () => "abc" }, ui: { getEditorComponent: () => undefined, setEditorComponent: (f: any) => { factory = f; }, theme: { fg: (_role: string, text: string) => text } } });
+	const row = () => plain(factory(tui, theme, keybindings).render(40)[1]).replace(/\x1b_[^\x07]*\x07/g, "");
+	start([]);
+	assert.equal(row(), '❯ Try "fix lint errors"'.padEnd(40), "an empty box in a fresh session shows the dim example, like Claude's M0 modes/plan captures");
+	start([{ type: "message" }]);
+	assert.equal(row().trim(), "❯", "a session with messages shows no example (Claude's hasMessages)");
+	start([]);
+	handlers.input({ text: "hi", source: "interactive" });
+	assert.equal(row().trim(), "❯", "after the first submit no example again, even in a new session (Claude's submitCount outlives /clear)");
+	install({ on: (n: string, fn: any) => { handlers[n] = fn; }, getCommands: () => [] });
+	start([]);
+	assert.equal(row().trim(), "❯", "a reloaded extension (pi's /clear starts a fresh runtime) still knows a prompt was sent");
+}
+
+{
+	const box = ["────────────────────", "/model              ", "────────────────────"];
+	const hinted = withArgumentHint(box, "/model ", (t: string) => `<${t}>`);
+	assert.equal(hinted[1], "/model  <[model]>     ", "Claude 2.1.283 draws \"/model  [model]\": the hint starts after the typed space and the cursor cell, muted, the row keeps its width");
+	assert.equal(argumentHint("/effort "), "[low|medium|high|xhigh|max|auto]", "the effort hint is Claude's own text, measured");
+	assert.equal(argumentHint("/model"), undefined, "no trailing space, no hint (Claude shows the menu instead)");
+	assert.equal(argumentHint("/model x"), undefined, "typed arguments hide the hint");
+	assert.equal(argumentHint("/tree "), undefined, "a command Claude has no hint for shows none (measured: /tree, /settings, /hotkeys)");
+	assert.equal(argumentHint("/import "), undefined, "pi's /import takes a session file, so Claude's codex|gemini|cursor hint stays off");
+	assert.equal(withArgumentHint(["──────────", "/resume   ", "──────────"], "/resume ", (t: string) => t)[1], "/resume  …", "a hint wider than the row is cut with an ellipsis (Claude's truncate-end)");
+	assert.deepEqual(withArgumentHint(box, "hello", (t: string) => t), box, "plain text is untouched");
 }
 
 console.log("claude-input selftest: all assertions passed");

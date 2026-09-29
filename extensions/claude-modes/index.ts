@@ -5,7 +5,7 @@ import { join, resolve } from "node:path";
 import { generateDiffString, getAgentDir, getMarkdownTheme, type ExtensionAPI, type ExtensionContext, type Theme } from "@earendil-works/pi-coding-agent";
 import { Markdown, matchesKey, stripTerminalSequences, truncateToWidth, visibleWidth, type Component, type KeybindingsManager, type TUI } from "@earendil-works/pi-tui";
 import { MODAL_EVENT } from "../claude-bottom-input/index.ts";
-import { contentRows, diffRows, paint as paintRow, trimDiffContext, wrapRow, type Row } from "../claude-tools/format.ts";
+import { contentRows, diffRows, paint as paintRow, previewEdits, trimDiffContext, wrapRow, type Row } from "../claude-tools/format.ts";
 import {
 	approvedRows,
 	bashPreviewRows,
@@ -90,16 +90,6 @@ function renderRows(rows: Row[], width: number): string[] {
 	);
 }
 
-function applyEditsPreview(oldContent: string, edits: ReadonlyArray<{ oldText: string; newText: string }>): string {
-	let content = oldContent;
-	for (const edit of edits) {
-		const index = content.indexOf(edit.oldText);
-		if (index === -1) continue;
-		content = content.slice(0, index) + edit.newText + content.slice(index + edit.oldText.length);
-	}
-	return content;
-}
-
 function readFileSafe(path: string): string {
 	try {
 		return readFileSync(path, "utf8");
@@ -109,6 +99,7 @@ function readFileSafe(path: string): string {
 }
 
 interface PreviewSpec {
+	kind: ToolKind;
 	title: string;
 	target: string;
 	rowsFor: (width: number) => string[];
@@ -118,7 +109,7 @@ function buildPreviewSpec(kind: ToolKind, input: Record<string, unknown>, cwd: s
 	if (kind === "bash") {
 		const command = String(input.command ?? "");
 		const description = String(input.description ?? "");
-		return { title: titleFor("bash", false), target: cwd, rowsFor: () => bashPreviewRows(command, description, paint) };
+		return { kind, title: titleFor("bash", false), target: cwd, rowsFor: () => bashPreviewRows(command, description, paint) };
 	}
 	const path = String(input.path ?? "");
 	const exists = existsSync(path);
@@ -126,14 +117,14 @@ function buildPreviewSpec(kind: ToolKind, input: Record<string, unknown>, cwd: s
 	if (kind === "edit") {
 		const edits = Array.isArray(input.edits) ? (input.edits as Array<{ oldText: string; newText: string }>) : [];
 		const oldContent = readFileSafe(path);
-		const newContent = applyEditsPreview(oldContent, edits);
+		const newContent = previewEdits(oldContent, edits);
 		const { diff } = generateDiffString(oldContent, newContent);
 		const lines = trimDiffContext(diff.split("\n"));
-		return { title: titleFor("edit", exists), target: path, rowsFor: (width) => [pathRow, ...renderRows(diffRows(lines), width)] };
+		return { kind, title: titleFor("edit", exists), target: path, rowsFor: (width) => [pathRow, ...renderRows(diffRows(lines), width)] };
 	}
 	const content = String(input.content ?? "");
 	const rows = contentRows(content).slice(0, 10);
-	return { title: titleFor("write", exists), target: path, rowsFor: (width) => [pathRow, ...renderRows(rows, width)] };
+	return { kind, title: titleFor("write", exists), target: path, rowsFor: (width) => [pathRow, ...renderRows(rows, width)] };
 }
 
 type Outcome = "yes" | "always" | "no" | "amend";
@@ -148,7 +139,7 @@ function buildPermissionComponent(tui: TUI, theme: Theme, keybindings: Keybindin
 	const select = (index: number) => done(outcomeFor(index));
 	return {
 		render(width: number): string[] {
-			return dialogRows(spec.title, spec.rowsFor(width), spec.target, selectedIndex, width, paint);
+			return dialogRows(spec.kind, spec.title, spec.rowsFor(width), spec.target, selectedIndex, width, paint);
 		},
 		invalidate(): void {},
 		handleInput(data: string): void {
@@ -231,6 +222,7 @@ function planComponent(tui: TUI, theme: Theme, keybindings: KeybindingsManager, 
 	let plan = readFileSafe(planFile);
 	let selected = 0;
 	let feedback = "";
+	let scrollOffset = 0;
 	const onFeedback = () => selected === modes.length;
 	const redraw = () => tui.requestRender();
 	const move = (step: number) => {
@@ -241,9 +233,14 @@ function planComponent(tui: TUI, theme: Theme, keybindings: KeybindingsManager, 
 		feedback = text;
 		redraw();
 	};
+	const scroll = (step: number) => {
+		scrollOffset = Math.max(0, scrollOffset + step);
+		redraw();
+	};
 	const edit = () => {
 		openInEditor(tui, planFile);
 		plan = readFileSafe(planFile) || plan;
+		scrollOffset = 0;
 	};
 	const confirm = () => {
 		if (!onFeedback()) return done({ mode: modes[selected], feedback: "" });
@@ -253,9 +250,10 @@ function planComponent(tui: TUI, theme: Theme, keybindings: KeybindingsManager, 
 		if (index < modes.length) return done({ mode: modes[index], feedback: "" });
 		if (index === modes.length) move(modes.length - selected);
 	};
+	const PLAN_SCROLL_STEP = 10;
 	return {
 		render(width: number): string[] {
-			const dialog = { planRows: markdownRows(plan, width - 6), modes, selected, feedback, editor, path: displayPath(planFile) };
+			const dialog = { planRows: markdownRows(plan, width - 6), modes, selected, feedback, editor, path: displayPath(planFile), scrollOffset };
 			return planDialogRows(dialog, width, Math.max(1, tui.terminal.rows - 2), paint).map((row) => truncateToWidth(row, width));
 		},
 		invalidate(): void {},
@@ -263,6 +261,8 @@ function planComponent(tui: TUI, theme: Theme, keybindings: KeybindingsManager, 
 			if (keybindings.matches(data, "tui.select.cancel")) return done(undefined);
 			if (matchesKey(data, "shift+tab")) return done({ mode: modes[0], feedback: feedback.trim() });
 			if (matchesKey(data, "ctrl+g")) return edit();
+			if (keybindings.matches(data, "tui.select.pageUp")) return scroll(-PLAN_SCROLL_STEP);
+			if (keybindings.matches(data, "tui.select.pageDown")) return scroll(PLAN_SCROLL_STEP);
 			if (onFeedback() && matchesKey(data, "backspace")) return type(feedback.slice(0, -1));
 			if (onFeedback() && !/[\x00-\x1f\x7f]/.test(data)) return type(feedback + data);
 			if (keybindings.matches(data, "tui.select.up")) return move(-1);
@@ -473,11 +473,12 @@ export default function (pi: ExtensionAPI) {
 		if (!ctx.hasUI) return;
 		const kind = event.toolName as ToolKind;
 		const outcome = await askPermission(ctx, kind, input);
-		if (outcome === "no") return { block: true, reason: "Declined. Press shift+tab for bypass mode to stop being asked." };
+		if (outcome === "no") return { block: true, terminate: true, reason: rejectedResult("") };
 		if (outcome === "amend") {
 			if (kind === "bash") ctx.ui.setEditorText(command);
 			return { block: true, reason: "Amend the command, then resend it." };
 		}
+		if (outcome === "always" && kind !== "bash") setMode("acceptEdits", ctx);
 	});
 }
 

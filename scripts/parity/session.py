@@ -47,7 +47,9 @@ for turn in spec["turns"]:
                 calls.append(block)
             blocks.append(block)
         stop = step.get("stopReason", "toolUse" if calls else "stop")
-        message = {"role": "assistant", "content": blocks, "api": "anthropic-messages", "provider": "github-copilot", "model": "claude-haiku-4.5", "usage": usage, "stopReason": stop, "timestamp": ms()}
+        step_usage = {**usage, **step["usage"]} if "usage" in step else usage
+        step_usage = {**step_usage, "totalTokens": sum(step_usage[k] for k in ("input", "output", "cacheRead", "cacheWrite"))}
+        message = {"role": "assistant", "content": blocks, "api": "anthropic-messages", "provider": "github-copilot", "model": "claude-haiku-4.5", "usage": step_usage, "stopReason": stop, "timestamp": ms()}
         if step.get("errorMessage"):
             message["errorMessage"] = step["errorMessage"]
         entry("message", step.get("gap", 2), message=message)

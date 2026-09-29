@@ -1,7 +1,10 @@
 {
   "tui.editor.historyPrevious": "ctrl+p",
   "tui.editor.historyNext": "ctrl+n",
+  "tui.editor.undo": ["ctrl+z", "ctrl+-"],
   "app.clipboard.pasteImage": "ctrl+alt+v",
+  "app.model.select": "alt+p",
+  "app.model.cycleBackward": [],
   "app.thinking.cycle": "ctrl+alt+t",
   "app.thinking.toggle": "ctrl+shift+t",
   "app.thinking.save": "ctrl+alt+s",

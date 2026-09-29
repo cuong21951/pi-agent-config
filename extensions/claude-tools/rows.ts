@@ -1,6 +1,6 @@
 import { runningDescription } from "./verbs.ts";
 
-type Kind = "search" | "read" | "list" | "bash" | "write" | "own" | "other" | "thought" | `mcp:${string}`;
+type Kind = "search" | "read" | "list" | "bash" | "write" | "own" | "other" | "thought" | "none" | `mcp:${string}`;
 type Args = Record<string, unknown>;
 export type Brush = { fg: (role: string, text: string) => string; bold: (text: string) => string };
 export type Describe = (args: Args) => { activity?: string; hint?: string };
@@ -24,6 +24,7 @@ const joinedAt = slot("joinedAt", () => new Map<string, number>());
 const startedAt = slot("startedAt", () => new Map<string, number>());
 const born = slot("born", () => new Map<string, number>());
 const live = slot("live", () => new Set<string>());
+const seeded = slot("seeded", () => new Set<string>());
 const tools = slot("tools", () => new Map<string, string>());
 const inputs = slot("inputs", () => new Map<string, Args>());
 const outputLines = slot("outputLines", () => new Map<string, number>());
@@ -42,6 +43,8 @@ const THOUGHT_HINT_HOLD_MS = 3000;
 const HINT_THROTTLE_MS = 700;
 const ELAPSED_SHOWN_AFTER_MS = 2000;
 const PROGRESS_SHOWN_AFTER_MS = 3000;
+const BACKGROUND_HINT_AFTER_MS = 2000;
+const BACKGROUND_HINT = "(ctrl+b to run in background)";
 const ACTIVITY_CHARS = 50;
 const THOUGHT_HINT_LINES = 10;
 const ELBOW = "  ⎿  ";
@@ -64,11 +67,19 @@ const KIND: Record<string, Kind> = {
 	skill: "own",
 	Agent: "own",
 	SubagentWorkflow: "own",
+	Workflow: "own",
+	SendMessage: "own",
+	ListAgents: "own",
 	ask_user_question: "own",
 	fetch_content: "own",
 	web_search: "own",
 	exit_plan_mode: "own",
 	enter_plan_mode: "own",
+	TaskStop: "own",
+	task_create: "none",
+	task_get: "none",
+	task_list: "none",
+	task_update: "none",
 };
 const OWN_ROW: ReadonlySet<Kind> = new Set(["write", "own"]);
 const CLASSIFY_SEPARATOR = /\|\||&&|[;\n|]/;
@@ -152,6 +163,10 @@ export function isAbort(text: string | undefined): boolean {
 	return /^(Error: )?(This operation was|Operation|Command) aborted\.?$/i.test((text ?? "").trim());
 }
 
+export function isRejected(text: string | undefined): boolean {
+	return (text ?? "").startsWith("The user doesn't want to proceed with this tool use.");
+}
+
 export function blinkOn(now = Date.now()): boolean {
 	return Math.floor(now / BLINK_MS) % 2 === 0;
 }
@@ -213,6 +228,10 @@ export function describeTool(toolName: string, describe: Describe): void {
 
 function place(id: string, kind: Kind, at: number): void {
 	if (kinds.has(id) || dropped.has(id)) return;
+	if (kind === "none") {
+		dropped.add(id);
+		return;
+	}
 	position.set(id, order.length);
 	order.push(id);
 	kinds.set(id, kind);
@@ -327,7 +346,7 @@ function sentence(group: string[], active: boolean, bold: (text: string) => stri
 	const bashReadonly = (member: string): Kind | undefined =>
 		kinds.get(member) === "bash" ? bashReadonlyKind(String(inputs.get(member)?.command ?? "")) : undefined;
 	const unclassifiedBash = (member: string): boolean => kinds.get(member) === "bash" && bashReadonly(member) === undefined;
-	const classifiedShell = (member: string): boolean => bashReadonly(member) !== undefined || tools.get(member) === "ls";
+	const classifiedShell = (member: string): boolean => !seeded.has(member) && (bashReadonly(member) !== undefined || tools.get(member) === "ls");
 	const count = (kind: Kind) =>
 		group.filter((member) => kinds.get(member) === kind).length +
 		(kind === "search" || kind === "read" || kind === "list" ? group.filter((member) => bashReadonly(member) === kind).length : 0);
@@ -374,7 +393,13 @@ export function taskOf(toolName: string, args: Args): string {
 	return text.replace(/\s+/g, " ").trim();
 }
 
+function viewingAgent(): boolean {
+	const registry = (globalThis as Record<symbol, { agentView?: () => unknown } | undefined>)[Symbol.for("pi-subagents:manager")];
+	return registry?.agentView?.() !== undefined;
+}
+
 function taskFor(group: string[]): string | undefined {
+	if (viewingAgent()) return undefined;
 	const task = shared.task as Task | undefined;
 	return task !== undefined && task.at >= (joinedAt.get(group[0]) ?? Number.POSITIVE_INFINITY) ? task.text : undefined;
 }
@@ -435,7 +460,12 @@ function hintRows(group: string[], width: number, brush: Brush, now: number): st
 	const thought = thoughtHint(group, now);
 	if (thought !== undefined) return thoughtLines(thought, room).map((line, i) => (i === 0 ? brush.fg("muted", ELBOW) : HANG) + thoughtText(line));
 	if (display === undefined) return [];
-	return wrapWords(display + progress(group, now), room).map((line, i) => brush.fg("muted", (i === 0 ? ELBOW : HANG) + line));
+	const hint = backgroundable(group, now) ? [brush.fg("muted", HANG + BACKGROUND_HINT)] : [];
+	return [...wrapWords(display + progress(group, now), room).map((line, i) => brush.fg("muted", (i === 0 ? ELBOW : HANG) + line)), ...hint];
+}
+
+function backgroundable(group: string[], now: number): boolean {
+	return !viewingAgent() && group.some((id) => running(id) && tools.get(id) === "bash" && now - (startedAt.get(id) ?? now) >= BACKGROUND_HINT_AFTER_MS);
 }
 
 export function groupRow(id: string, width: number, brush: Brush, now = Date.now()): string[] {
@@ -523,6 +553,7 @@ export function seed(entries: Iterable<Entry>): void {
 					const args = (block.arguments ?? {}) as Args;
 					tools.set(block.id!, block.name ?? "");
 					inputs.set(block.id!, args);
+					seeded.add(block.id!);
 					place(block.id!, kindFor(block.id!, block.name ?? "", args), at);
 				}
 		}
@@ -674,6 +705,11 @@ if (process.env.CLAUDE_ROWS_SELFTEST) {
 	run("nestedor", "bash", { command: "cd $(dirname $(find . -name tsconfig.json 2>/dev/null | head -1) 2>/dev/null || pwd) 2>/dev/null; ls; npx tsc --noEmit 2>&1 | head -50" }, "no errors");
 	check(summaryFor("nestedor") === "  Ran 1 shell command", "an unrecognized leading word (cd) voids classification for the whole call, leaving just 1 shell command (Claude 2.1.280)");
 	calls.agent_start({}, {});
+	run("taskskip1", "task_create", { subject: "Read the file" }, "Task #1 created successfully: Read the file");
+	run("taskskip2", "task_update", { taskId: "1", status: "in_progress" }, "Updated task #1 status");
+	run("taskbash", "bash", { command: "python -c \"import time; time.sleep(8)\"" }, "");
+	check(!summaryFor("taskskip1") && summaryFor("taskbash") === "  Ran 1 shell command", "Task tools count as nothing in a group, so a bash call after them reads only its own clause (Claude 2.1.283, m6b-midturn)");
+	calls.agent_start({}, {});
 	run("catalone", "bash", { command: "cat src/util.ts" }, "export function clamp() {}");
 	check(summaryFor("catalone") === "  Read 1 file", "a classified bash call alone in its group (Claude's TASK.md `ls src` / `ls ./missing-folder` steps) shows only its clause, no shell-command credit (Claude 2.1.280)");
 	calls.agent_start({}, {});
@@ -711,6 +747,13 @@ if (process.env.CLAUDE_ROWS_SELFTEST) {
 		{ type: "message", message: { role: "toolResult", toolCallId: "old2", isError: false } },
 	]);
 	check(summaryFor("old1") === "" && summaryFor("old2") === "  Searched for 1 pattern, read 1 file", "replayed sessions group from their entries");
+	seed([
+		{ type: "message", message: { role: "user", content: "credit" } },
+		{ type: "message", message: { role: "assistant", content: [{ type: "toolCall", id: "oldgit", name: "bash", arguments: { command: "git status" } }, { type: "toolCall", id: "oldls", name: "bash", arguments: { command: "ls -la" } }] } },
+		{ type: "message", message: { role: "assistant", content: [{ type: "toolCall", id: "oldcat", name: "bash", arguments: { command: "cat notes.txt" } }] } },
+		{ type: "message", message: { role: "assistant", content: [{ type: "toolCall", id: "oldlstool", name: "ls", arguments: { path: "src" } }] } },
+	]);
+	check(summaryFor("oldlstool") === "  Read 1 file, listed 2 directories, ran 1 shell command", "a group drawn from history counts only its unclassified bash calls: resumed, Claude 2.1.283 has no streaming peak (shell-credit replay cases B-E)");
 	seed([
 		{ type: "message", message: { role: "user", content: "again" } },
 		{ type: "message", message: { role: "assistant", content: [{ type: "toolCall", id: "err1", name: "read", arguments: {} }] } },
@@ -764,6 +807,7 @@ if (process.env.CLAUDE_ROWS_SELFTEST) {
 	check(summaryFor(thoughtId({ timestamp: 1 })) === "" && summaryFor("t2") === "" && summaryFor(thoughtId({ timestamp: 3 })) === "  Thought for 2s, read 1 file", "the last member draws the line, even when it is the thought");
 	check(summaryFor(thoughtId({ timestamp: 4 })) === null && !hasThought([thinking(" ")]), "a blank thinking block is no thought");
 	check(!isAbort("boom") && isAbort("Operation aborted\n") && isAbort("Command aborted") && isAbort("This operation was aborted") && !isAbort(undefined), "abort text");
+	check(isRejected("The user doesn't want to proceed with this tool use. The tool use was rejected.") && !isRejected("boom") && !isRejected(undefined), "a declined permission ask is recognised by Claude's rejection text");
 	const resumed = [
 		{ type: "message", timestamp: at(20), message: { role: "user", content: "go" } },
 		{ type: "message", timestamp: at(22), message: { role: "assistant", timestamp: 5, content: [thinking("run it"), { type: "toolCall", id: "live1", name: "bash", arguments: { command: "sleep 5" } }] } },
@@ -833,7 +877,8 @@ if (process.env.CLAUDE_ROWS_SELFTEST) {
 	execute("q2", { command: "sleep 15 && echo built", description: "Wait for the build" });
 	const t4 = Date.now();
 	check(groupRow("q1", 80, plain).length === 0, "a finished call in a group with a running one draws nothing");
-	check(groupRow("q2", 80, plain, on(t4 + 3000)).join("|") === "● Waiting for the build · 3s|  ⎿  $ sleep 15 && echo built (3s)", "a later reply's running bash appends \"(Ns)\" from 3 s, Claude's first bash_progress tick");
+	check(groupRow("q2", 80, plain, on(t4 + 3000)).join("|") === "● Waiting for the build · 3s|  ⎿  $ sleep 15 && echo built (3s)|     (ctrl+b to run in background)", "a later reply's running bash appends \"(Ns)\" from 3 s, Claude's first bash_progress tick");
+	check(groupRow("q2", 80, plain, on(t4 + 1000)).length === 2 && groupRow("q2", 80, plain, on(t4 + 2000))[2] === "     (ctrl+b to run in background)", "from 2 s a running bash offers Claude's (ctrl+b to run in background) under its hint, five columns in (p3t = 2000, m6a-measure-ctrlb)");
 	calls.tool_execution_update({ toolCallId: "q2", toolName: "bash", partialResult: { content: [{ type: "text", text: "one\ntwo\n" }] } }, {});
 	check(groupRow("q2", 80, plain, t4 + 4200)[1] === "  ⎿  $ sleep 15 && echo built (4s · 2 lines)", "and counts its output lines once it has some");
 	calls.tool_execution_end({ toolCallId: "q2", toolName: "bash", isError: true, result: { content: [{ type: "text", text: "Command exited with code 1" }] } }, {});

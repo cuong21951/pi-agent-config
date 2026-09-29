@@ -1,6 +1,13 @@
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
 
-const DOUBLE_TAP_WINDOW_MS = 600;
+const DOUBLE_TAP_WINDOW_MS = 800;
+const ESC_NOTICE_MS = 1000;
+const ESC_NOTICE = "Esc again to clear";
+const NOTICE_MARGIN = 2;
+
+export function noticeRow(text: string, width: number, paint: (text: string) => string): string {
+	return " ".repeat(Math.max(0, width - text.length - NOTICE_MARGIN)) + paint(text);
+}
 
 export function secondTap(previousAt: number | null, now: number, windowMs: number): boolean {
 	return previousAt !== null && now - previousAt <= windowMs;
@@ -25,6 +32,20 @@ export default function (pi: ExtensionAPI) {
 		if (!ctx.hasUI) return;
 		const { matchesKey } = await import("@earendil-works/pi-tui");
 		let lastEscapeAt: number | null = null;
+		let noticeUntil = 0;
+		let requestRender = () => {};
+		const setNotice = (until: number) => {
+			noticeUntil = until;
+			requestRender();
+			if (until > 0) setTimeout(() => requestRender(), until - Date.now()).unref?.();
+		};
+		ctx.ui.setWidget("claude-keys", (tui, theme) => {
+			requestRender = () => tui.requestRender();
+			return {
+				render: (width: number) => (Date.now() < noticeUntil ? [noticeRow(ESC_NOTICE, width, (text) => theme.fg("muted" as never, text))] : []),
+				invalidate() {},
+			};
+		});
 
 		ctx.ui.onTerminalInput((data: string) => {
 			if (!matchesKey(data, "escape")) return undefined;
@@ -35,10 +56,12 @@ export default function (pi: ExtensionAPI) {
 			const now = Date.now();
 			if (secondTap(lastEscapeAt, now, DOUBLE_TAP_WINDOW_MS)) {
 				lastEscapeAt = null;
+				setNotice(0);
 				ctx.ui.setEditorText("");
 				return { consume: true };
 			}
 			lastEscapeAt = now;
+			setNotice(now + ESC_NOTICE_MS);
 			return undefined;
 		});
 	});
@@ -60,6 +83,9 @@ if (process.env.CLAUDE_KEYS_SELFTEST) {
 		if (!ok) throw new Error(`FAIL: ${msg}`);
 		console.log(`ok - ${msg}`);
 	};
+	check(secondTap(1000, 1600, DOUBLE_TAP_WINDOW_MS) === true, "Claude 2.1.283 clears on a second esc 600 ms after the first ($j window 800 ms, measured)");
+	check(secondTap(1000, 1801, DOUBLE_TAP_WINDOW_MS) === false, "past Claude's 800 ms window the second esc only re-arms");
+	check(noticeRow(ESC_NOTICE, 132, (t) => t) === " ".repeat(112) + "Esc again to clear", "the notice sits right-aligned two columns in, column 112 at 132, like Claude's");
 	check(secondTap(null, 1000, 600) === false, "no previous tap is not a second tap");
 	check(secondTap(1000, 1500, 600) === true, "tap within window counts as second tap");
 	check(secondTap(1000, 1700, 600) === false, "tap outside window does not count");

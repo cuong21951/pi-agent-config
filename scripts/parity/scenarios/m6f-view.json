@@ -1,0 +1,151 @@
+{
+  "prompt": "Use your Agent tool to start one background agent with description \"Check files\", subagent_type \"general-purpose\" and prompt \"Do these steps in order, one tool call per step: read the file notes.txt; run the shell command python -c 'import time; time.sleep(8)'; search the src folder for the text export; run the shell command python -c 'import time; time.sleep(30)'; then reply with exactly: All checked.\". Then reply with exactly: Started. No other text. Later, only when a task notification arrives, reply with exactly: Checker finished.",
+  "steps": [
+    {
+      "until": "Waiting for 1 background agent",
+      "timeout": 90
+    },
+    {
+      "until": "Check files +\\d+s · . [\\d.k]+ tokens",
+      "timeout": 60
+    },
+    {
+      "sleep": 1
+    },
+    {
+      "keys": "\u001b[B"
+    },
+    {
+      "until": "(?m)^  ↑/↓ to select *$",
+      "timeout": 5
+    },
+    {
+      "sleep": 0.5
+    },
+    {
+      "snap": "sel-main"
+    },
+    {
+      "keys": "\u001b[B"
+    },
+    {
+      "until": "Enter to view · x to stop",
+      "timeout": 5
+    },
+    {
+      "sleep": 0.5
+    },
+    {
+      "snap": "sel-agent"
+    },
+    {
+      "keys": "\r"
+    },
+    {
+      "until": "Message @general-purpose",
+      "timeout": 5
+    },
+    {
+      "until": "Running 1 shell command · \\d+s…\\s+⎿\\s+\\$ python -c 'import time; time\\.sleep\\(30\\)'",
+      "timeout": 90
+    },
+    {
+      "sleep": 0.5
+    },
+    {
+      "until": "time\\.sleep\\(30\\)' \\(\\d+s\\)",
+      "timeout": 10
+    },
+    {
+      "snap": "view"
+    },
+    {
+      "keys": "\u001b[A"
+    },
+    {
+      "until": "(?m)Enter to view *$",
+      "timeout": 5
+    },
+    {
+      "sleep": 0.5
+    },
+    {
+      "snap": "view-up"
+    },
+    {
+      "keys": "\r"
+    },
+    {
+      "until": "Waiting for 1 background agent",
+      "timeout": 5
+    },
+    {
+      "sleep": 0.8
+    },
+    {
+      "snap": "back-main"
+    },
+    {
+      "keys": "\u001b"
+    },
+    {
+      "sleep": 0.5
+    },
+    {
+      "keys": "/tasks"
+    },
+    {
+      "sleep": 0.8
+    },
+    {
+      "keys": "\r"
+    },
+    {
+      "until": "general-purpose › Check files",
+      "timeout": 5
+    },
+    {
+      "sleep": 0.8
+    },
+    {
+      "snap": "tasks"
+    },
+    {
+      "keys": "f"
+    },
+    {
+      "until": "Message @general-purpose",
+      "timeout": 5
+    },
+    {
+      "sleep": 0.8
+    },
+    {
+      "snap": "view-nosel"
+    },
+    {
+      "until": "(?m)\\A(?![\\s\\S]*^[·✢*✶✻✽] \\S+…)[\\s\\S]*Message @general-purpose",
+      "timeout": 120
+    },
+    {
+      "sleep": 32
+    },
+    {
+      "snap": "view-done"
+    },
+    {
+      "keys": "\u001b"
+    },
+    {
+      "until": "(?m)^● Checker finished",
+      "timeout": 60
+    },
+    {
+      "sleep": 1.5
+    },
+    {
+      "snap": "done"
+    }
+  ],
+  "end": "(?m)^● Checker finished"
+}

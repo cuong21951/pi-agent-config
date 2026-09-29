@@ -1,0 +1,11 @@
+{
+ "prompt": "Reply with exactly: ok. No other text.",
+ "bypass": true,
+ "cols": 60,
+ "rows": 30,
+ "steps": [
+  {"until": "✻ \\S+ for [^\\n]*· done", "timeout": 90},
+  {"sleep": 1},
+  {"snap": "narrow"}
+ ]
+}

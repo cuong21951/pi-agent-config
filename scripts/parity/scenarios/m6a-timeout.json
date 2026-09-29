@@ -1,0 +1,23 @@
+{
+ "prompt": "Run exactly these two shell commands as two separate bash calls, in order, with no text before or between them: (1) description \"Wait for the timer\", timeout 3 seconds: python -c \"import time; time.sleep(12); print('finished')\" (2) description \"Sleep a while\", timeout 2 seconds: sleep 10 . As soon as both calls have returned, reply with exactly: Both ran. Later, only when a task notification arrives, reply with exactly: The timer finished. Do not write any other text.",
+ "steps": [
+  {
+   "until": "(?m)^\u25cf Both ran\\.[\\s\\S]*done[^\\n]*shell still running",
+   "timeout": 120
+  },
+  {
+   "sleep": 1
+  },
+  {
+   "snap": "after"
+  },
+  {
+   "until": "(?m)^\u25cf The timer finished\\.[\\s\\S]*\u273b \\S+ for [^\\n]*\u00b7 done",
+   "timeout": 90
+  },
+  {
+   "sleep": 1.5
+  }
+ ],
+ "end": "(?m)^\u25cf The timer finished\\.[\\s\\S]*\u273b \\S+ for [^\\n]*\u00b7 done"
+}

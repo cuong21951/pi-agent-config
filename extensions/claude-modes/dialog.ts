@@ -1,3 +1,4 @@
+import { truncateToWidth, visibleWidth, wrapTextWithAnsi } from "@earendil-works/pi-tui";
 import type { Mode } from "./modes.ts";
 
 export type Paint = (role: string, text: string) => string;
@@ -29,6 +30,10 @@ export function titleRow(title: string): string {
 
 export const QUESTION_ROW = " Do you want to proceed?";
 
+export function questionRow(kind: ToolKind, target: string): string {
+	return kind === "edit" ? ` Do you want to make this edit to ${BOLD}${target}${RESET}?` : QUESTION_ROW;
+}
+
 export function footerRow(paint: Paint): string {
 	return ` ${paint("muted", "Esc to cancel · Tab to amend")}`;
 }
@@ -39,12 +44,17 @@ export function bashPreviewRows(command: string, description: string, paint: Pai
 	return rows;
 }
 
-export function optionTokens(target: string): Token[][] {
-	return [
-		[{ text: "Yes" }],
-		[{ text: "Yes, and always allow access to " }, { text: target, bold: true }, { text: " from this project" }],
-		[{ text: "No" }],
-	];
+const ACCEPT_EDITS_OPTION: Token[] = [
+	{ text: "Yes, and switch to " },
+	{ text: "accept edits (auto-approve file edits and common file commands)", bold: true },
+	{ text: " for this session " },
+	{ text: "(shift+tab)", bold: true },
+];
+
+export function optionTokens(kind: ToolKind, target: string): Token[][] {
+	const second: Token[] =
+		kind === "bash" ? [{ text: "Yes, and always allow access to " }, { text: target, bold: true }, { text: " from this project" }] : ACCEPT_EDITS_OPTION;
+	return [[{ text: "Yes" }], second, [{ text: "No" }]];
 }
 
 function paintToken(token: Token, selected: boolean): string {
@@ -52,11 +62,24 @@ function paintToken(token: Token, selected: boolean): string {
 	return `${selected ? ACCENT : ""}${token.bold ? BOLD : ""}${token.text}${RESET}`;
 }
 
-export function optionRow(index: number, tokens: Token[], selected: boolean, paint: Paint): string {
+function optionPrefix(index: number, selected: boolean, paint: Paint): string {
 	const arrow = selected ? `${ACCENT}❯${RESET}` : " ";
-	const number = paint("muted", `${index + 1}.`);
-	const label = tokens.map((token) => paintToken(token, selected)).join("");
-	return ` ${arrow} ${number} ${label}`;
+	return ` ${arrow} ${paint("muted", `${index + 1}.`)} `;
+}
+
+function optionLabel(tokens: Token[], selected: boolean): string {
+	return tokens.map((token) => paintToken(token, selected)).join("");
+}
+
+export function optionRow(index: number, tokens: Token[], selected: boolean, paint: Paint): string {
+	return optionPrefix(index, selected, paint) + optionLabel(tokens, selected);
+}
+
+const OPTION_HANG = "      ";
+
+export function optionRows(index: number, tokens: Token[], selected: boolean, paint: Paint, width: number): string[] {
+	const [first = "", ...rest] = wrapTextWithAnsi(optionLabel(tokens, selected), Math.max(1, width - OPTION_HANG.length));
+	return [optionPrefix(index, selected, paint) + first, ...rest.map((line) => OPTION_HANG + line)];
 }
 
 export function titleFor(kind: ToolKind, exists: boolean): string {
@@ -66,6 +89,7 @@ export function titleFor(kind: ToolKind, exists: boolean): string {
 }
 
 export function dialogRows(
+	kind: ToolKind,
 	title: string,
 	previewRows: string[],
 	target: string,
@@ -73,15 +97,15 @@ export function dialogRows(
 	width: number,
 	paint: Paint,
 ): string[] {
-	const tokens = optionTokens(target);
+	const tokens = optionTokens(kind, target);
 	return [
 		ruleRow(width),
 		titleRow(title),
 		"",
 		...previewRows,
 		"",
-		QUESTION_ROW,
-		...tokens.map((token, index) => optionRow(index, token, index === selectedIndex, paint)),
+		questionRow(kind, target),
+		...tokens.flatMap((token, index) => optionRows(index, token, index === selectedIndex, paint, width)),
 		"",
 		footerRow(paint),
 	];
@@ -121,6 +145,17 @@ export interface PlanDialog {
 	feedback: string;
 	editor: string;
 	path: string;
+	scrollOffset?: number;
+}
+
+export function planScrollArrow(row: string, arrow: string, width: number, paint: Paint): string {
+	const budget = Math.max(0, width - visibleWidth(arrow));
+	const clipped = truncateToWidth(row, budget);
+	return clipped + " ".repeat(Math.max(0, budget - visibleWidth(clipped))) + paint("muted", arrow);
+}
+
+export function planMaxScrollOffset(planRowCount: number, bodyRoom: number): number {
+	return Math.max(0, planRowCount - bodyRoom);
 }
 
 export function planDialogRows(dialog: PlanDialog, width: number, height: number, paint: Paint): string[] {
@@ -138,7 +173,16 @@ export function planDialogRows(dialog: PlanDialog, width: number, height: number
 		`   ${paint("muted", `ctrl+g to edit in ${dialog.editor} · ${dialog.path}`)}`,
 	];
 	const room = Math.max(0, height - head.length - bottom.length - 1);
-	const plan = dialog.planRows.slice(0, room).map((row) => `   ${row}`);
+	const total = dialog.planRows.length;
+	const offset = Math.min(Math.max(0, dialog.scrollOffset ?? 0), planMaxScrollOffset(total, room));
+	const plan = dialog.planRows.slice(offset, offset + room).map((row) => `   ${row}`);
+	const hasAbove = offset > 0;
+	const hasBelow = offset + plan.length < total;
+	if (plan.length > 0 && hasAbove) plan[0] = planScrollArrow(plan[0]!, "↑", width, paint);
+	if (plan.length > 0 && hasBelow) {
+		const last = plan.length - 1;
+		plan[last] = last === 0 && hasAbove ? planScrollArrow(plan[last]!, "↑↓", width, paint) : planScrollArrow(plan[last]!, "↓", width, paint);
+	}
 	return [...head, ...plan, dashed, ...Array<string>(room - plan.length).fill(""), ...bottom];
 }
 
@@ -198,6 +242,7 @@ if (process.env.CLAUDE_MODES_DIALOG_SELFTEST) {
 		console.log(`ok - ${msg}`);
 	};
 	const tag: Paint = (role, text) => `<${role}>${text}</${role}>`;
+	const plain = (text: string) => text.replace(/\x1b\[[0-9;]*m|<\/?[a-z]+>/g, "");
 
 	check(ruleRow(5) === `${ACCENT}─────${RESET}`, "rule row is accent-coloured dashes at the given width");
 	check(ruleRow(0) === `${ACCENT}${RESET}`, "rule row never repeats a negative count");
@@ -215,7 +260,7 @@ if (process.env.CLAUDE_MODES_DIALOG_SELFTEST) {
 		"an empty description draws no second row",
 	);
 
-	const tokens = optionTokens("/repo");
+	const tokens = optionTokens("bash", "/repo");
 	check(
 		optionRow(0, tokens[0]!, true, tag) === ` ${ACCENT}❯${RESET} <muted>1.</muted> ${ACCENT}Yes${RESET}`,
 		"selected option 1: accent arrow, muted number, accent label",
@@ -236,17 +281,37 @@ if (process.env.CLAUDE_MODES_DIALOG_SELFTEST) {
 		"selected always-allow option keeps the bold target and turns the rest accent",
 	);
 
+	const narrow = optionRows(1, optionTokens("bash", "C:\\a\\very\\long\\work\\folder")[1]!, false, (_role, text) => text, 40);
+	check(
+		narrow.every((row) => row.replace(/\x1b\[[0-9;]*m/g, "").length <= 40) && narrow[1]!.startsWith("      ") && narrow.length > 1,
+		"an option longer than the dialog wraps under its label instead of overflowing the terminal (pi exited on a 136-column row at 132)",
+	);
 	check(titleFor("bash", false) === "Bash command", "bash title never varies by file existence");
 	check(titleFor("edit", false) === "Edit file", "edit title");
 	check(titleFor("write", false) === "Create file", "write title for a new file");
 	check(titleFor("write", true) === "Overwrite file", "write title for an existing file");
 
-	const rows = dialogRows("Bash command", ["   echo parity > marker.txt", "   <muted>Write a marker file</muted>"], "/repo", 0, 10, tag);
+	const rows = dialogRows("bash", "Bash command", ["   echo parity > marker.txt", "   <muted>Write a marker file</muted>"], "/repo", 0, 80, tag);
 	check(rows.length === 12, "dialog assembles rule, title, blank, 2 preview rows, blank, question, 3 options, blank, footer");
-	check(rows[0] === ruleRow(10) && rows[1] === titleRow("Bash command") && rows[2] === "", "rule, title, blank open the dialog");
+	check(rows[0] === ruleRow(80) && rows[1] === titleRow("Bash command") && rows[2] === "", "rule, title, blank open the dialog");
 	check(rows[6] === QUESTION_ROW && rows[11] === footerRow(tag), "question sits after the preview, footer closes the dialog");
 
-	const plain = (text: string) => text.replace(/\x1b\[[0-9;]*m|<\/?[a-z]+>/g, "");
+	check(questionRow("bash", "/repo") === QUESTION_ROW, "bash keeps Claude's generic question (measured via run.py --scenario permission, port 20097)");
+	check(
+		questionRow("edit", "notes.txt") === ` Do you want to make this edit to ${BOLD}notes.txt${RESET}?`,
+		"edit names the file, bold, in its own question (measured via run.py --scenario m2-edit-permission, port 20098: diff.py's colour compare caught the filename bold in Claude and plain in pi)",
+	);
+	check(questionRow("write", "new.ts") === QUESTION_ROW, "write's question is unmeasured, left on the generic wording rather than guessed");
+
+	const editTokens = optionTokens("edit", "notes.txt");
+	check(
+		plain(optionRow(1, editTokens[1]!, false, tag)) === "   2. Yes, and switch to accept edits (auto-approve file edits and common file commands) for this session (shift+tab)",
+		"edit's second option offers Claude's real acceptEdits mode switch, not a per-file \"always allow\" grant (measured live, m2-edit-permission)",
+	);
+	check(plain(optionRow(2, editTokens[2]!, false, tag)) === "   3. No", "edit's decline option is a bare \"No\", same as bash's — the long network-dialog wording does not apply here");
+	const writeTokens = optionTokens("write", "new.ts");
+	check(JSON.stringify(writeTokens[1]) === JSON.stringify(editTokens[1]), "write shares edit's acceptEdits option by the same accept-edits mode both already gate on (modes.ts: WRITE_TOOLS)");
+
 	const planDialog: PlanDialog = { planRows: ["Rename", "", "- one"], modes: ["bypass", "manual"], selected: 0, feedback: "", editor: "Notepad", path: "~\\p.md" };
 	const modal = planDialogRows(planDialog, 40, 30, tag);
 	check(modal.length === 30, "the approval dialog fills the height it is given");
@@ -264,8 +329,20 @@ if (process.env.CLAUDE_MODES_DIALOG_SELFTEST) {
 	check(focused[26] === `   ${ACCENT}❯${RESET} <muted>3.</muted> ${FAINT}${FEEDBACK_PLACEHOLDER}${NORMAL}`, "a focused empty keep-planning row shows the placeholder faint");
 	const typed = planDialogRows({ ...planDialog, selected: 2, feedback: "Add a test step" }, 40, 30, tag);
 	check(typed[26] === `   ${ACCENT}❯${RESET} <muted>3.</muted> Add a test step`, "typed feedback is plain text");
-	const tight = planDialogRows({ ...planDialog, planRows: Array<string>(40).fill("x") }, 40, 20, tag);
-	check(tight.length === 20 && tight[9] === "   x" && tight[10] === tight[6], "a plan taller than the room is cut so the dashed rule still closes it");
+	const tallPlan = { ...planDialog, planRows: Array<string>(40).fill("x") };
+	const tight = planDialogRows(tallPlan, 40, 20, tag);
+	check(
+		tight.length === 20 && tight[7] === "   x" && tight[8] === "   x" && tight[9] === planScrollArrow("   x", "↓", 40, tag) && tight[10] === tight[6],
+		"a plan taller than the room shows a bare arrow on the last visible row, no extra row reserved for it (Claude's plan pane is a bounded scrollable viewport, measured via run.py --scenario m5c-plan-tall), and the dashed rule still closes it",
+	);
+	check(plain(tight[9]!).endsWith("↓"), "the down arrow sits at the end of the boundary row, not on a line of its own");
+	const scrolled = planDialogRows({ ...tallPlan, scrollOffset: 5 }, 40, 20, tag);
+	check(scrolled[7] === planScrollArrow("   x", "↑", 40, tag), "scrolling down moves an up arrow onto the new top row");
+	check(scrolled[9] === planScrollArrow("   x", "↓", 40, tag), "the bottom row keeps its down arrow while more content remains below");
+	const atEnd = planDialogRows({ ...tallPlan, scrollOffset: 999 }, 40, 20, tag);
+	check(!plain(atEnd[9]!).includes("↓") && plain(atEnd[7]!).endsWith("↑"), "the offset clamps to the last page: no down arrow once nothing more is below");
+	check(plain(planScrollArrow("x", "↓", 10, tag)) === "x        ↓", "the arrow is right-aligned to the given width");
+	check(planMaxScrollOffset(40, 2) === 38, "max offset is the plan length minus the visible body room");
 	check(planDialogRows({ ...planDialog, modes: ["acceptEdits", "manual"] }, 40, 30, tag).some((row) => plain(row) === "   ❯ 1. Yes, auto-accept edits"), "accept edits label when bypass is not offered");
 	check(plain(APPROVAL_LABEL.auto!.map((t) => t.text).join("")) === "Yes, and use auto mode", "auto label");
 

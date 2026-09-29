@@ -1,0 +1,45 @@
+{
+ "prompt": "Run exactly one shell command in the foreground (do not set run_in_background), with the description \"Wait for the timer\": python -c \"import time; time.sleep(15); print('finished')\" . Do not write any text before the tool call. When a message from me arrives, reply with exactly: Got your message. When you are notified that the command finished, reply with exactly: The timer finished. Do not write any other text.",
+ "steps": [
+  {
+   "until": "\\(ctrl\\+b to run in background\\)",
+   "timeout": 90
+  },
+  {
+   "sleep": 1
+  },
+  {
+   "keys": "second message"
+  },
+  {
+   "sleep": 0.5
+  },
+  {
+   "keys": "\r"
+  },
+  {
+   "sleep": 1.5
+  },
+  {
+   "keys": "\u0018\u0013"
+  },
+  {
+   "until": "(?m)^\u25cf Got your message\\.[\\s\\S]*done[^\\n]*shell still running",
+   "timeout": 60
+  },
+  {
+   "sleep": 1
+  },
+  {
+   "snap": "sent-now"
+  },
+  {
+   "until": "(?m)^\u25cf The timer finished\\.[\\s\\S]*\u273b \\S+ for [^\\n]*\u00b7 done",
+   "timeout": 90
+  },
+  {
+   "sleep": 1.5
+  }
+ ],
+ "end": "(?m)^\u25cf The timer finished\\.[\\s\\S]*\u273b \\S+ for [^\\n]*\u00b7 done"
+}

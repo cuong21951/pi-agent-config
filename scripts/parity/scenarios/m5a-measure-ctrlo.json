@@ -1,0 +1,25 @@
+{
+ "steps": [
+  {"until": "✻ \\S+ for [^\\n]*· done", "timeout": 240},
+  {"sleep": 1},
+  {"keys": "\u000f"},
+  {"sleep": 2},
+  {"snap": "bottom"},
+  {"keys": "g"},
+  {"sleep": 1.5},
+  {"snap": "top"},
+  {"keys": " "},
+  {"sleep": 1.5},
+  {"snap": "page2"},
+  {"keys": " "},
+  {"sleep": 1.5},
+  {"snap": "page3"},
+  {"keys": "?"},
+  {"sleep": 1.5},
+  {"snap": "help"},
+  {"keys": "?"},
+  {"sleep": 1},
+  {"keys": "q"},
+  {"sleep": 2}
+ ]
+}

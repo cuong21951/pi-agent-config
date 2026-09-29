@@ -1,0 +1,26 @@
+{
+ "prompt": "M6G fable run.",
+ "fixture": "findings/m6g/fixture",
+ "pi_mock": true,
+ "session": "findings/m6g/fable.jsonl",
+ "end": "fgseen[\\s\\S]*✻ \\S+ for [^\n]*· done",
+ "steps": [
+  {
+   "until": "fgseen[\\s\\S]*✻ \\S+ for [^\n]*· done",
+   "timeout": 120
+  },
+  {
+   "sleep": 1
+  },
+  {
+   "snap": "end"
+  }
+ ],
+ "reqdiff": [
+  "sub:M6G-SUB-FE:model",
+  "sub:M6G-SUB-FP:model",
+  "sub:M6G-SUB-FG:model"
+ ],
+ "claude_model": "fable",
+ "pi_mock_model": "claude-fable-5-1"
+}

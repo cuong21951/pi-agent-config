@@ -1,0 +1,27 @@
+{
+ "prompt": "M6G nest run.",
+ "fixture": "findings/m6g/fixture",
+ "pi_mock": true,
+ "session": "findings/m6g/nest.jsonl",
+ "end": "nested[\\s\\S]*✻ \\S+ for [^\n]*· done",
+ "steps": [
+  {
+   "until": "nested[\\s\\S]*✻ \\S+ for [^\n]*· done",
+   "timeout": 120
+  },
+  {
+   "sleep": 1
+  },
+  {
+   "snap": "end"
+  }
+ ],
+ "reqdiff": [
+  "result:Agent",
+  "notifications",
+  "sub:M6G-SUB-NE:tool:Agent",
+  "sub:M6G-SUB-NE:tool:SendMessage",
+  "sub:M6G-SUB-NE:tool:TaskStop",
+  "sub:M6G-SUB-NE:nested"
+ ]
+}

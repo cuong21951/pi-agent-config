@@ -1,0 +1,29 @@
+{
+  "bypass": false,
+  "prompt": "First read src/app.ts with the read tool. Then use the edit tool to replace the text `return a + b;` with `return a - b;` in src/app.ts. Do not run any shell command. Then reply with exactly: edited. No other text.",
+  "steps": [
+    {
+      "until": "(?m)^(?!❯ ).*(proceed|Allow|allow|Yes|make this edit)",
+      "timeout": 90
+    },
+    {
+      "sleep": 1
+    },
+    {
+      "keys": "3"
+    },
+    {
+      "sleep": 1.5
+    },
+    {
+      "snap": "declined"
+    },
+    {
+      "until": "✻ \\S+ for [^\\n]*· done|What should Claude do instead",
+      "timeout": 40
+    },
+    {
+      "sleep": 1
+    }
+  ]
+}

@@ -1,0 +1,12 @@
+{
+ "prompt": "",
+ "bypass": true,
+ "steps": [
+  {"keys": "/totallynotacommand123"},
+  {"sleep": 1},
+  {"keys": "\r"},
+  {"sleep": 2},
+  {"snap": "result"}
+ ],
+ "end": "Unknown command"
+}

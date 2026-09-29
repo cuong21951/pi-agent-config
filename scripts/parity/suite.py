@@ -7,7 +7,11 @@ DIFF = os.path.join(HERE, "diff.py")
 REPLAYS = os.path.join(HERE, "replays")
 
 LIVE = ["task", "interrupt", "mcp", "skill", "question", "question-multi", "question-chat", "permission", "clear", "web", "agent", "modes", "modes-default", "retry-live", "plan",
-        "spinner-states", "bash-no-thinking", "group-second-running", "parallel-calls", "slow-search", "stream-lines", "highlight", "slash-colour", "question-afk"]
+        "spinner-states", "bash-no-thinking", "group-second-running", "parallel-calls", "slow-search", "stream-lines", "highlight", "slash-colour", "question-afk", "m4a-keys", "m4a-exit",
+        "m4b-unknown-command", "m4b-typo-command", "m4b-narrow-footer", "m2-permission-decline",
+        "m4c-long-line", "m4d-bash-rows", "m5a-parallel-fail", "m4d-decline-edit", "m6c-resume-empty",
+        "m6a-bg", "m6a-timeout", "m6a-ctrlb", "m6a-stop", "m6a-details", "m6f-view",
+        "m6g-notify", "m6g-types", "m6g-sendrun", "m6g-resume", "m6g-stop", "m6g-cap", "m6g-fable", "m6g-fork", "m6g-nest", "m6g-nofork", "m6j-input-clear"]
 REPLAYED = {
     "thinking.jsonl": "Thinking sample.",
     "markdown.jsonl": "Show the markdown sample.",
@@ -18,6 +22,11 @@ REPLAYED = {
     "shell-credit.jsonl": "Shell credit sample.",
     "edit-create.jsonl": "Edit create sample.",
     "question-invalid.jsonl": "Question invalid sample.",
+    "m5b-context-low.jsonl": "keep going",
+}
+REPLAYED_SCENARIOS = {
+    "m6b-todos.jsonl": "m6b-todos",
+    "m6b-midturn.jsonl": "m6b-midturn",
 }
 
 ap = argparse.ArgumentParser(description="Run every parity scenario (live pi on Copilot, Claude replaying it) and every replay fixture, diff each, exit 0 only when all are clean.")
@@ -33,6 +42,8 @@ def cases():
         yield name, [] if name == "task" else ["--scenario", name]
     for file, prompt in REPLAYED.items():
         yield file.removesuffix(".jsonl") + "-replay", ["--replay", os.path.join(REPLAYS, file), "--prompt", prompt]
+    for file, scenario in REPLAYED_SCENARIOS.items():
+        yield scenario + "-replay", ["--replay", os.path.join(REPLAYS, file), "--scenario", scenario]
 
 
 def run(index, name, args):

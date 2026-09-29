@@ -4,6 +4,7 @@ auth.json.bak
 # caches and runtime state
 sessions/
 plans/
+/history.jsonl
 models-store.json
 mcp-cache.json
 mcp-npx-cache.json
@@ -20,7 +21,7 @@ node_modules/
 # backups and scratch
 *.bak
 __pycache__/
-mcp.json
+/mcp.json
 extensions/pi-permission-system/logs/
 
 # serena leftover, caches, suffixed backups

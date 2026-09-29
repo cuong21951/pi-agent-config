@@ -1,0 +1,13 @@
+{
+ "prompt": "M6G background run.",
+ "fixture": "findings/m6g/fixture",
+ "pi_mock": true,
+ "session": "findings/m6g/bg.jsonl",
+ "end": "smdone[\\s\\S]*✻ \\S+ for [^\\n]*· done",
+ "steps": [
+  {"until": "smdone[\\s\\S]*✻ \\S+ for [^\\n]*· done", "timeout": 150},
+  {"sleep": 1},
+  {"snap": "end"}
+ ],
+ "reqdiff": ["result:Agent", "result:SendMessage", "notifications", "sub:M6G-SUB-BG:steer"]
+}
