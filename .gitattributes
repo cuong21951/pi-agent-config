@@ -1,3 +1,4 @@
 *.patch text eol=lf
 *.sh text eol=lf
 scripts/parity/fixture/** text eol=lf
+scripts/parity/findings/m6g/** text eol=lf
