@@ -3,7 +3,12 @@ import datetime, json, os, sys, uuid
 HERE = os.path.dirname(os.path.abspath(__file__))
 
 
+SELECTED = sys.argv[1:]
+
+
 def session(name, turns):
+    if SELECTED and name not in SELECTED:
+        return
     entries = [{"type": "session", "version": 3, "id": str(uuid.uuid4()), "timestamp": "2026-09-29T10:00:00.000Z", "cwd": HERE}]
     parent, clock = None, 1790650000000
     for prompt, replies in turns:
@@ -43,4 +48,8 @@ session("stop", [
 session("clear", [
     ("M6G clear run.", [[("Agent", {"description": "Clear sleeper", "subagent_type": "general-purpose", "prompt": "M6G-SUB-CL: run the long timer, then reply with the word clreport."})], ["started"], ["late"]]),
     ("M6G-SUB-CL: run the long timer, then reply with the word clreport.", [[("bash", {"command": "python -c 'import time; time.sleep(25)'", "description": "Long timer"})], ["clreport"]]),
+])
+session("notify", [
+    ("M6G notify run.", [[("Agent", {"description": "Sleep briefly", "subagent_type": "general-purpose", "prompt": "M6G-SUB-NO: run sleep 2, then reply with the word noreport."})], ["started"], ["notified"]]),
+    ("M6G-SUB-NO: run sleep 2, then reply with the word noreport.", [[("bash", {"command": "sleep 2", "description": "Sleep"})], ["noreport"]]),
 ])

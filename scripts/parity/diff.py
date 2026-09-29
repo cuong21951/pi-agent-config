@@ -214,6 +214,15 @@ for screen, claude_name, pi_name in screens:
             report.append(f"- {line}")
         report.append("")
 
+reqdiff_config = os.path.join(a.out, "reqdiff.json")
+if os.path.exists(reqdiff_config) and json.load(open(reqdiff_config, encoding="utf-8")).get("checks"):
+    import subprocess
+    requests = subprocess.run([sys.executable, os.path.join(os.path.dirname(os.path.abspath(__file__)), "reqdiff.py"), "--out", a.out], capture_output=True, text=True)
+    found = re.match(r"(\d+) request differences", requests.stdout.strip())
+    total += int(found.group(1)) if found else 1
+    reqdiff_report = os.path.join(a.out, "reqdiff.md")
+    report += (open(reqdiff_report, encoding="utf-8").read().splitlines() if os.path.exists(reqdiff_report) else [f"## Model-facing requests: reqdiff failed: {requests.stderr.strip()[-300:]}"]) + [""]
+
 if applied:
     report += ["## Accepted exceptions (README ledger, \"Not matched: pi cannot produce\")", ""] + [f"- {name}" for name in sorted(applied)] + [""]
 report.insert(1, f"**{total} differences** over {len(screens)} screen(s) (claude = `-`, pi = `+`). Header rows above the first prompt are not compared.")

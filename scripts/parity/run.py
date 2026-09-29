@@ -3,6 +3,8 @@ import argparse, glob, json, os, re, shutil, socket, subprocess, sys, time, uuid
 HERE = os.path.dirname(os.path.abspath(__file__))
 CAPTURE = os.path.join(HERE, "..", "pty-capture.py")
 MOCK = os.path.join(HERE, "mock.py")
+PI_MOCK_PROVIDER = os.path.join(HERE, "pi-mock-provider.ts")
+PI_MOCK_MODEL = "parity-mock/claude-haiku-4-5"
 PROMPT = "Follow the instructions in TASK.md exactly."
 DONE = r"✻ \S+ for [^\n]*· done"
 SUBMITTED = r"(?m)^❯\s*$"
@@ -25,6 +27,7 @@ ap.add_argument("--port", type=int, default=18471)
 ap.add_argument("--pi-env", action="append", default=[], help="NAME=VALUE for the pi process, e.g. PI_TUI_DEBUG_REDRAW=1")
 ap.add_argument("--raw", action="store_true", help="also save each side's raw terminal output as <side>.raw")
 ap.add_argument("--dump-requests", action="store_true", help="save every main-loop request Claude sends as <out>/request-<n>.json")
+ap.add_argument("--pi-mock", action="store_true", help="pi talks to mock.py too (scenario key pi_mock): both sides replay --session, both dump their requests as <out>/req-<side>-<n>.json")
 ap.add_argument("--keep-claude-session", action="store_true", help="leave Claude's transcript of the replay in ~/.claude/projects (delete it yourself)")
 ap.add_argument("--fresh-claude", action="store_true", help="with --replay, capture Claude's live replay instead of resuming a copy of it (pi's side is always a resume)")
 a = ap.parse_args()
@@ -40,6 +43,11 @@ fixture = os.path.join(HERE, scenario.get("fixture", "fixture"))
 a.pi_model = scenario.get("pi_model", a.pi_model)
 a.claude_model = scenario.get("claude_model", a.claude_model)
 a.rows = scenario.get("rows", a.rows)
+pi_mock = a.pi_mock or scenario.get("pi_mock", False)
+scripted = a.session or (os.path.join(HERE, scenario["session"]) if scenario.get("session") else None)
+if pi_mock:
+    a.pi_model = PI_MOCK_MODEL
+    a.dump_requests = True
 a.cols = scenario.get("cols", a.cols)
 
 
@@ -104,6 +112,29 @@ def wait_port(port, seconds=10):
     raise SystemExit(f"mock.py did not open port {port}")
 
 
+def start_mock(session, prefix, log_name, extra=()):
+    with socket.socket() as probe:
+        if probe.connect_ex(("127.0.0.1", a.port)) == 0:
+            raise SystemExit(f"port {a.port} is already in use; stop the old mock or pass --port")
+    mock_log = os.path.join(a.out, log_name)
+    open(mock_log, "w").close()
+    dump = ["--dump", os.path.join(a.out, prefix)] if a.dump_requests else []
+    mock = subprocess.Popen([sys.executable, MOCK, "--session", session, "--workdir", WORKDIR, "--port", str(a.port), "--log", mock_log, *extra] + dump)
+    wait_port(a.port)
+    return mock
+
+
+def stop_mock(mock):
+    mock.terminate()
+    mock.wait(10)
+    deadline = time.time() + 10
+    while time.time() < deadline:
+        with socket.socket() as s:
+            if s.connect_ex(("127.0.0.1", a.port)) != 0:
+                return
+        time.sleep(0.2)
+
+
 def claude_project_dir():
     return os.path.join(os.environ["CLAUDE_CONFIG_DIR"], "projects", re.sub(r"[^A-Za-z0-9]", "-", WORKDIR))
 
@@ -125,11 +156,17 @@ def resumable_copy():
     return new
 
 
+with open(os.path.join(a.out, "reqdiff.json"), "w", encoding="utf-8") as f:
+    json.dump({"prompt": prompt, "checks": scenario.get("reqdiff", []) if pi_mock else []}, f)
 with open(os.path.join(a.out, "perm-throwaway.json"), "w", encoding="utf-8") as f:
     json.dump({"yoloMode": bypass}, f)
-for stale in glob.glob(os.path.join(a.out, "claude*.json")) + glob.glob(os.path.join(a.out, "pi*.json")):
+for stale in glob.glob(os.path.join(a.out, "claude*.json")) + glob.glob(os.path.join(a.out, "pi*.json")) + glob.glob(os.path.join(a.out, "request-*.json")):
     if a.only in (None, os.path.basename(stale).split("-")[0].split(".")[0]):
         os.remove(stale)
+for side in ("claude", "pi"):
+    if a.only in (None, side):
+        for stale in glob.glob(os.path.join(a.out, f"req-{side}-*.json")):
+            os.remove(stale)
 
 if a.replay and a.only in (None, "pi"):
     copy = os.path.join(a.out, "replay.jsonl")
@@ -137,29 +174,32 @@ if a.replay and a.only in (None, "pi"):
     capture("pi", ["--args", f"--model {a.pi_model} --session {slash(copy)}"], PI_SANDBOX_ENV + a.pi_env, steps=steps_for("pi", typed=False) if scenario.get("steps") else None)
 elif a.only in (None, "pi"):
     shutil.rmtree(SESSIONS, ignore_errors=True)
-    capture("pi", ["--args", f"--model {a.pi_model} --models {a.pi_model} --session-dir {slash(SESSIONS)} {scenario.get('pi_args', '')}"], PI_SANDBOX_ENV + a.pi_env + scenario.get("pi_env", []), steps=steps_for("pi"))
+    pi_args = f"--model {a.pi_model} --models {a.pi_model} --session-dir {slash(SESSIONS)} {scenario.get('pi_args', '')}"
+    if pi_mock:
+        if not scripted:
+            raise SystemExit("pi_mock needs --session or a scenario session")
+        mock = start_mock(scripted, "req-pi", "pi-mock.log", ["--pi"])
+        try:
+            capture("pi", ["--args", f"-e {slash(PI_MOCK_PROVIDER)} {pi_args}"], PI_SANDBOX_ENV + a.pi_env + scenario.get("pi_env", []) + [f"PARITY_MOCK_URL=http://127.0.0.1:{a.port}"], steps=steps_for("pi"))
+        finally:
+            stop_mock(mock)
+    else:
+        capture("pi", ["--args", pi_args], PI_SANDBOX_ENV + a.pi_env + scenario.get("pi_env", []), steps=steps_for("pi"))
 
 if a.only in (None, "claude"):
     if not os.environ.get("CLAUDE_CONFIG_DIR"):
         raise SystemExit("set CLAUDE_CONFIG_DIR to a throwaway Claude config (source ~/.pi/sandbox/env.sh): a killed Claude launch records a fullscreen boot strike in the real ~/.claude.json, and two strikes turn Cuong's fullscreen renderer off")
-    session = a.replay or a.session or newest_session()
+    session = a.replay or scripted or newest_session()
     if not session and not prompt:
         session = os.path.join(a.out, "empty.jsonl")
         open(session, "w").close()
     if not session:
         raise SystemExit("no pi session to replay; run the pi side first")
-    with socket.socket() as probe:
-        if probe.connect_ex(("127.0.0.1", a.port)) == 0:
-            raise SystemExit(f"port {a.port} is already in use; stop the old mock or pass --port")
-    mock_log = os.path.join(a.out, "mock.log")
-    open(mock_log, "w").close()
-    dump = ["--dump", os.path.join(a.out, "request")] if a.dump_requests else []
-    mock = subprocess.Popen([sys.executable, MOCK, "--session", session, "--workdir", WORKDIR, "--port", str(a.port), "--log", mock_log] + dump)
+    mock = start_mock(session, "req-claude" if pi_mock else "request", "mock.log")
     permission = "--dangerously-skip-permissions" if bypass else "--permission-mode default --allow-dangerously-skip-permissions"
     try:
-        wait_port(a.port)
         command = f'"{slash(a.claude)}" --model {a.claude_model} {permission} {scenario.get("claude_args", "")}'
-        claude_env = [f"ANTHROPIC_BASE_URL=http://127.0.0.1:{a.port}", "ANTHROPIC_AUTH_TOKEN=parity-mock", "ENABLE_CLAUDEAI_MCP_SERVERS=false", "CLAUDE_CODE_ALWAYS_ENABLE_EFFORT=1", f"CLAUDE_CONFIG_DIR={os.environ['CLAUDE_CONFIG_DIR']}", *scenario.get("claude_env", [])]
+        claude_env = [f"ANTHROPIC_BASE_URL=http://127.0.0.1:{a.port}", "ANTHROPIC_AUTH_TOKEN=parity-mock", "ENABLE_CLAUDEAI_MCP_SERVERS=false", "CLAUDE_CODE_ALWAYS_ENABLE_EFFORT=1", "DISABLE_AUTOUPDATER=1", f"CLAUDE_CONFIG_DIR={os.environ['CLAUDE_CONFIG_DIR']}", *scenario.get("claude_env", [])]
         if a.replay and not a.fresh_claude:
             capture("claude", ["--cmd", command], claude_env, steps=[{"until": ready, "timeout": 90}, {"sleep": 1.5}, {"keys": prompt}, {"sleep": 1.5}, {"keys": "\r"}, {"until": SUBMITTED, "timeout": 6, "retries": 2, "retry_keys": "\r"}], until=DONE, out=os.path.join(a.out, "claude-live"))
             resumed = steps_for("claude", typed=False) if scenario.get("steps") else [{"until": ready, "timeout": 90}, {"sleep": 1.5}]
@@ -167,6 +207,6 @@ if a.only in (None, "claude"):
         else:
             capture("claude", ["--cmd", command], claude_env, steps=steps_for("claude"))
     finally:
-        mock.terminate()
+        stop_mock(mock)
         if not a.keep_claude_session:
             shutil.rmtree(claude_project_dir(), ignore_errors=True)

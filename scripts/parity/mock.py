@@ -9,6 +9,7 @@ ap.add_argument("--log", default=None)
 ap.add_argument("--context-tokens", type=int, default=None, help="input tokens reported on every reply")
 ap.add_argument("--no-pace", action="store_true", help="stream at once instead of taking as long as pi's reply took")
 ap.add_argument("--dump", default=None, help="write every main-loop request body to <dump>-<n>.json")
+ap.add_argument("--pi", action="store_true", help="the client is pi: serve pi tool names and arguments unchanged")
 a = ap.parse_args()
 
 LOG = open(a.log, "a", encoding="utf-8") if a.log else None
@@ -237,6 +238,18 @@ def to_claude(name, args, claude_tools, plan_file=None, schemas=None):
     return [(name, args)]
 
 
+AGENT_ID = re.compile(r"(?:agentId|Agent ID): (\w+)")
+
+
+def with_first_agent(args, body):
+    found = AGENT_ID.findall(json.dumps(body.get("messages", []), ensure_ascii=False))
+    return {k: (found[0] if found and v == "@FIRST" else v) for k, v in args.items()}
+
+
+def to_pi(name, args, schemas):
+    return [(name, schema_args(args, (schemas or {}).get(name)))]
+
+
 def blocks_for_claude(reply, claude_tools, plan_file=None, schemas=None):
     blocks = []
     for c in reply.get("content", []):
@@ -245,7 +258,7 @@ def blocks_for_claude(reply, claude_tools, plan_file=None, schemas=None):
         elif c["type"] == "text" and c.get("text"):
             blocks.append({"type": "text", "text": c["text"]})
         elif c["type"] == "toolCall":
-            for name, args in to_claude(c["name"], c.get("arguments") or {}, claude_tools, plan_file, schemas):
+            for name, args in (to_pi(c["name"], c.get("arguments") or {}, schemas) if a.pi else to_claude(c["name"], c.get("arguments") or {}, claude_tools, plan_file, schemas)):
                 blocks.append({"type": "tool_use", "id": "toolu_" + uuid.uuid4().hex[:24], "name": name, "input": args})
     return blocks
 
@@ -324,7 +337,8 @@ class Handler(BaseHTTPRequestHandler):
         if "count_tokens" in self.path:
             return self.send_json(200, {"input_tokens": a.context_tokens or 1000})
         tools = [t.get("name") for t in body.get("tools", [])]
-        if "web_search" in tools and "Read" not in tools:
+        main_tool = "read" if a.pi else "Read"
+        if "web_search" in tools and main_tool not in tools:
             found = search_for(body)
             log({"kind": "search", "query": found["query"], "sources": len(found["sources"])})
             time.sleep(min(found["ms"], PACE_CAP_MS) / 1000)
@@ -333,7 +347,7 @@ class Handler(BaseHTTPRequestHandler):
             return self.stream(body, [{"type": "server_tool_use", "id": tool_id, "name": "web_search", "input": {"query": found["query"]}},
                                       {"type": "web_search_tool_result", "tool_use_id": tool_id, "content": results},
                                       {"type": "text", "text": "Search results above."}], "end_turn")
-        if "Read" not in tools:
+        if main_tool not in tools:
             log({"kind": "side", "tools": tools[:8]})
             return self.stream(body, [{"type": "text", "text": "OK"}], "end_turn")
         if a.dump:
@@ -376,6 +390,7 @@ class Handler(BaseHTTPRequestHandler):
         schemas = {t.get("name"): t.get("input_schema") for t in body.get("tools", [])}
         blocks = blocks_for_claude(reply, tools, plan_file_of(body), schemas) or [{"type": "text", "text": ""}]
         blocks = [dict(b, input=with_claude_task_id(b["input"], body)) if b.get("name") == "TaskStop" else b for b in blocks]
+        blocks = [dict(b, input=with_first_agent(b["input"], body)) if b.get("type") == "tool_use" else b for b in blocks]
         log({"kind": "reply", "step": step, "blocks": [b["type"] + (":" + b["name"] if b["type"] == "tool_use" else "") for b in blocks]})
         pace = 0 if a.no_pace else min(reply.get("_duration_ms", 0), PACE_CAP_MS) / 1000
         time.sleep(pace * 0.3)
