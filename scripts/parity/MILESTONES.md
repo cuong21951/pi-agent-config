@@ -58,4 +58,4 @@ Merge `parity-sandbox` into `main`, update the README ledger, push `origin main`
 
 ## Next round (deferred by Cuong 2026-09-29)
 
-Claude's `Monitor` tool; MCP and Fetch permission dialogs in manual mode (pi asks nothing, Claude asks); light theme and `NO_COLOR`; the send-now screen's queued-message placement (`m6a-sendnow` out of the suite); suite-diffed cases for the `/context`, `/usage`, `/status`, `/mcp` panels (selftest-only now); `/btw`; thinking markdown (inline code, nested lists) in the ctrl+o view; M6b.
+Claude's `Monitor` tool; the Workflow tool and cron/wakeup tools (CronCreate/List/Delete, ScheduleWakeup; measured by M6-F); MCP and Fetch permission dialogs in manual mode (pi asks nothing, Claude asks); light theme and `NO_COLOR`; the send-now screen's queued-message placement (`m6a-sendnow` out of the suite); suite-diffed cases for the `/context`, `/usage`, `/status`, `/mcp` panels (selftest-only now); `/btw`; thinking markdown (inline code, nested lists) in the ctrl+o view; M6b.
