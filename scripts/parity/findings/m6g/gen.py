@@ -45,7 +45,7 @@ session("types", [
     ("M6G-SUB-CU: reply with the word cureport.", [["cureport"]]),
 ])
 session("stop", [
-    ("M6G stop run.", [[("Agent", {"description": "Long sleeper", "subagent_type": "general-purpose", "prompt": "M6G-SUB-ST: run the long timer, then reply with the word streport."})], [("ListAgents", {})], [("TaskStop", {"task_id": "@FIRST"})], ["stopped"], ["afterstop"]]),
+    ("M6G stop run.", [[("Agent", {"description": "Long sleeper", "subagent_type": "general-purpose", "prompt": "M6G-SUB-ST: run the long timer, then reply with the word streport."})], [("ListAgents", {}), 3000], [("TaskStop", {"task_id": "@FIRST"})], ["stopped"], ["afterstop"]]),
     ("M6G-SUB-ST: run the long timer, then reply with the word streport.", [[("bash", {"command": "python -c 'import time; time.sleep(40)'", "description": "Long timer"})], ["streport"]]),
 ])
 session("clear", [

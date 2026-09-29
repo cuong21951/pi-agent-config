@@ -124,11 +124,14 @@
       "snap": "view-nosel"
     },
     {
-      "until": "(?m)^● All checked",
-      "timeout": 90
+      "until": "(?m)\\A(?![\\s\\S]*^[·✢*✶✻✽] \\S+…)[\\s\\S]*Message @general-purpose",
+      "timeout": 120
     },
     {
-      "sleep": 1.5
+      "sleep": 32
+    },
+    {
+      "snap": "view-done"
     },
     {
       "keys": "\u001b"
