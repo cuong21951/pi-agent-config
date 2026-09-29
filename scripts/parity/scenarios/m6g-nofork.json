@@ -1,0 +1,29 @@
+{
+ "prompt": "M6G foreground run.",
+ "fixture": "findings/m6g/fixture",
+ "pi_mock": true,
+ "session": "findings/m6g/fg.jsonl",
+ "end": "fgdone[\\s\\S]*✻ \\S+ for [^\n]*· done",
+ "steps": [
+  {
+   "until": "fgdone[\\s\\S]*✻ \\S+ for [^\n]*· done",
+   "timeout": 150
+  },
+  {
+   "sleep": 1
+  },
+  {
+   "snap": "end"
+  }
+ ],
+ "claude_env": [
+  "CLAUDE_CODE_FORK_SUBAGENT=false"
+ ],
+ "pi_env": [
+  "CLAUDE_CODE_FORK_SUBAGENT=false"
+ ],
+ "reqdiff": [
+  "tool:Agent",
+  "result:Agent"
+ ]
+}

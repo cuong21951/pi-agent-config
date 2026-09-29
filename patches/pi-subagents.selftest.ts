@@ -152,6 +152,23 @@ const DOWN = "\x1b[B";
 
 {
   const contract = await jiti.import(path.join(here, "../npm/node_modules/@tintinweb/pi-subagents/src/claude-contract.ts"));
+  const samples = readFileSync(path.join(here, "../scripts/parity/findings/m6g/claude/results.txt"), "utf-8");
+  const handBack = samples.split(/^########## /m).find((part) => part.includes("[Subagent hand-back]"))!.split("\n").slice(2).join("\n").split("\n\n<system-reminder>\n<total_tokens>")[0].trim();
+  const session = { messages: [{ role: "assistant", usage: { input: 10, output: 5 } }] };
+  const record = { id: "ae92eb56cbd44dd0b", description: "List files", status: "completed", result: "fgreport", toolUses: 1, startedAt: 1000, completedAt: 7153, session };
+  assert.equal(contract.formatHandBack(record, "general-purpose"), handBack);
+  const frame = handBack.split("\nagentId: ")[0];
+  assert.equal(contract.formatHandBack({ ...record, result: "a\n\nb" }, "Explore"), frame.replace("\n  fgreport", "\n  a\n  \n  b"));
+  const kept = { ...record, worktreeResult: { hasChanges: true, path: "C:/wt", branch: "pi-agent-x" } };
+  assert.ok(contract.formatHandBack(kept, "Explore").includes("\nagentId: ae92eb56cbd44dd0b (use SendMessage with to: 'ae92eb56cbd44dd0b', summary: '<5-10 word recap>' to continue this agent)\nworktreePath: C:/wt\nworktreeBranch: pi-agent-x\n<usage>"));
+  assert.ok(contract.formatTaskNotification({ ...kept, outputFile: "o" }).endsWith("</duration_ms></usage>\n<worktree><worktreePath>C:/wt</worktreePath><worktreeBranch>pi-agent-x</worktreeBranch></worktree>\n</task-notification>\n</system-reminder>"));
+  assert.equal(contract.forkGateOff({ CLAUDE_CODE_FORK_SUBAGENT: "false" }), true);
+  assert.equal(contract.forkGateOff({}), false);
+  console.log("PASS: the foreground hand-back frame is Claude 2.1.283's (every report line indented 2, Explore/Plan without the trailer), and a kept worktree adds worktreePath/worktreeBranch to the frame and a <worktree> block to the notification (bundle @215152961, brt)");
+}
+
+{
+  const contract = await jiti.import(path.join(here, "../npm/node_modules/@tintinweb/pi-subagents/src/claude-contract.ts"));
   assert.equal(contract.concurrentLimitError(20), "Concurrent subagent limit reached. You can run 20 subagents at once. Do not retry. If the user wants more concurrent subagents, ask them to increase CLAUDE_CODE_MAX_CONCURRENT_SUBAGENTS.");
   assert.equal(contract.turnLimitNote(3, "general-purpose"), "NOTE: this agent stopped at its 3-turn limit before finishing. The text below is PARTIAL output; treat it as incomplete. Send the agent a message (SendMessage) to let it continue from where it stopped.");
   assert.equal(contract.turnLimitNote(3, "Explore"), "NOTE: this agent stopped at its 3-turn limit before finishing. The text below is PARTIAL output; treat it as incomplete.");
