@@ -159,6 +159,8 @@ def resumable_copy():
 
 with open(os.path.join(a.out, "reqdiff.json"), "w", encoding="utf-8") as f:
     json.dump({"prompt": prompt, "checks": scenario.get("reqdiff", []) if pi_mock else []}, f)
+with open(os.path.join(a.out, "checks.json"), "w", encoding="utf-8") as f:
+    json.dump({"gap": scenario.get("gap")}, f)
 with open(os.path.join(a.out, "perm-throwaway.json"), "w", encoding="utf-8") as f:
     json.dump({"yoloMode": bypass}, f)
 CHEAP_MODELS_MOCK = os.path.join(a.out, "cheap-models-mock.json")

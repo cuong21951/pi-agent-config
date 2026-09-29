@@ -61,6 +61,7 @@ ROWS = [
 
 DETAILED = re.compile(r"^  Showing detailed transcript · ctrl\+o to toggle")
 DETAILED_NAME = "detailed transcript viewport: Claude's ctrl+o transcript scrolls inside its own screen (g/PgUp reach the prompt, measured m5d-measure-bash-top), pi's lies in terminal scrollback (M6b), so only the visible screen is compared"
+SCROLLBACK_NAME = "terminal scrollback (M6b): Claude keeps the overflow off the terminal's scrollback (pyte history stays empty), pi writes it there, so only the visible screen is compared"
 
 
 def detailed(lines):
@@ -113,11 +114,11 @@ def normalise(text, transcript=False):
     return text
 
 
-def regions(lines):
+def regions(lines, cut=False):
     texts = [line["text"].rstrip() for line in lines]
     boxed = any(t.startswith("❯") and i > 0 and texts[i - 1].startswith("─") for i, t in enumerate(texts))
     prompt = max((i for i, t in enumerate(texts) if t.strip() == "❯" or PLACEHOLDER.match(t) or AGENT_PLACEHOLDER.match(t)), default=len(texts))
-    start = next((i for i, t in enumerate(texts[:prompt]) if re.match(r"^❯ \S", t)), prompt if boxed else 0)
+    start = next((i for i, t in enumerate(texts[:prompt]) if re.match(r"^❯ \S", t)), prompt if boxed and not cut else 0)
     start = max((i for i, t in enumerate(texts[:prompt]) if t.startswith("▔")), default=start)
     rule = prompt - 1 if prompt > 0 and texts[prompt - 1].startswith("─") else prompt
     above = max(start, rule - 2)
@@ -125,6 +126,17 @@ def regions(lines):
     while end > start and not texts[end - 1].strip():
         end -= 1
     return lines[:start], lines[start:end], lines[above:]
+
+
+def gap_above_box(lines):
+    texts = [line["text"].rstrip() for line in lines]
+    top = max((i for i in range(len(texts) - 1) if texts[i].startswith("─") and texts[i + 1].startswith("❯")), default=None)
+    if top is None:
+        return None
+    blank = 0
+    while blank < top and not texts[top - 1 - blank].strip():
+        blank += 1
+    return blank
 
 
 def styles(line):
@@ -201,16 +213,23 @@ def compare(claude, pi, applied, footer=False):
 snaps = sorted(os.path.basename(p)[len("claude-"):-len(".json")] for p in glob.glob(os.path.join(a.out, "claude-*.json")))
 screens = [("final", "claude", "pi")] + [(s, f"claude-{s}", f"pi-{s}") for s in snaps if os.path.exists(os.path.join(a.out, f"pi-{s}.json"))]
 
+checks_path = os.path.join(a.out, "checks.json")
+gap = json.load(open(checks_path, encoding="utf-8")).get("gap") if os.path.exists(checks_path) else None
 report = ["# pi vs Claude Code parity report", ""]
 total = 0
 applied = set()
 for screen, claude_name, pi_name in screens:
     c_raw, p_raw = raw(claude_name), raw(pi_name)
-    viewport = len(c_raw) if detailed(c_raw) and detailed(p_raw) and len(p_raw) > len(c_raw) else None
+    viewport = len(c_raw) if len(p_raw) > len(c_raw) else None
     if viewport:
-        applied.add(DETAILED_NAME)
-    _, c_body, c_foot = regions(load(claude_name, "claude", applied))
-    _, p_body, p_foot = regions(load(pi_name, "pi", applied, viewport))
+        applied.add(DETAILED_NAME if detailed(c_raw) and detailed(p_raw) else SCROLLBACK_NAME)
+    if gap is not None:
+        gaps = (gap_above_box(c_raw), gap_above_box(p_raw))
+        if gaps != (gap, gap):
+            total += 1
+            report += [f"## {screen} · gap: {gaps[0]} blank row(s) above the prompt box on Claude's side, {gaps[1]} on pi's (the case wants {gap})", ""]
+    _, c_body, c_foot = regions(load(claude_name, "claude", applied), bool(viewport))
+    _, p_body, p_foot = regions(load(pi_name, "pi", applied, viewport), bool(viewport))
     for name, c, p in (("Transcript", c_body, p_body), ("Prompt and footer", c_foot, p_foot)):
         text_diffs, colour_diffs = compare(c, p, applied, name == "Prompt and footer")
         total += len(text_diffs) + len(colour_diffs)

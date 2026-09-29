@@ -23,6 +23,7 @@ a = ap.parse_args()
 
 env = dict(os.environ)
 env["PI_SKIP_VERSION_CHECK"] = "1"
+env["PI_TUI_NO_NATIVE_MODIFIERS"] = "1"
 env["CLAUDE_MODES_PERMISSION_CONFIG"] = os.path.join(os.path.dirname(a.out), "perm-throwaway.json")
 env.pop("TMUX", None)
 env.pop("HERDR_ENV", None)
@@ -123,7 +124,7 @@ def wait_for(pattern, timeout):
 def snapshot():
     with lock:
         hist = list(screen.history.top)
-        return [render_line(l, a.cols) for l in hist] + [render_line(screen.buffer[y], a.cols) for y in range(a.rows)]
+        return [render_line(l, screen.columns) for l in hist] + [render_line(screen.buffer[y], screen.columns) for y in range(screen.lines)]
 
 
 def write(lines, out, json_path):
@@ -182,6 +183,10 @@ for step in json.loads(a.steps) if a.steps else []:
             missed.append(step["until"])
     if "sleep" in step:
         time.sleep(step["sleep"])
+    if "resize" in step:
+        with lock:
+            screen.resize(*step["resize"])
+        p.setwinsize(*step["resize"])
     if "keys" in step and not send(step["keys"]):
         break
     if "snap" in step:

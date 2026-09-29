@@ -1,5 +1,5 @@
 {
- "prompt": "Call bash twice in the SAME reply, so both run in parallel, with no text before or between them. First call: description \"Wait for service A\", command: sleep 15 && echo a. Second call: description \"Wait for service B\", command: sleep 18 && echo b.",
+ "prompt": "Call bash twice in the SAME reply, so both run in parallel, with no text before or between them. First call: description \"Wait for service A\", command: sleep 15 && echo a. Second call: description \"Wait for service B\", command: sleep 18 && echo b. Run both in the foreground, not in the background.",
  "steps": [
   {
    "until": "(?m)^● .*Waiting for service B · \\d+s *\\n +⎿ +\\$ sleep 18 && echo b \\([3-9]s\\)",
