@@ -121,6 +121,10 @@ export function stampRow(timestamp: number, model: string, width: number, s: Sty
 	return " ".repeat(Math.max(0, width - visibleWidth(text))) + s.fg("muted", text.trimEnd()) + " ".repeat(MODEL_TAIL);
 }
 
+function inlineCode(line: string): string {
+	return line.replace(/`([^`]+)`/g, "\x1b[38;2;153;204;255m$1\x1b[39m");
+}
+
 export function thinkingRows(content: ReadonlyArray<{ type: string; thinking?: string }>, width: number, s: Style): string[] {
 	const text = content
 		.filter((block) => block.type === "thinking" && (block.thinking ?? "").trim() !== "")
@@ -135,7 +139,7 @@ export function thinkingRows(content: ReadonlyArray<{ type: string; thinking?: s
 	};
 	return text
 		.split("\n")
-		.flatMap((line) => (line.trim() === "" ? [""] : wrapTextWithAnsi(line, room).map((piece, i) => listed(piece, i === 0))))
+		.flatMap((line) => (line.trim() === "" ? [""] : wrapTextWithAnsi(inlineCode(line), room).map((piece, i) => listed(piece, i === 0))))
 		.map((line, i) => (i === 0 ? s.fg("muted", "\x1b[3m∴ \x1b[23m") : "  ") + line);
 }
 
@@ -717,6 +721,7 @@ if (process.env.CLAUDE_TOOLS_SELFTEST) {
 	check(thinkingRows([{ type: "text" }], 40, plain).length === 0, "no thinking, no rows");
 	check(thinkingRows([{ type: "thinking", thinking: "Plan:\n1. Run it" }], 40, tagged)[1] === "  <muted>1. </muted>\x1b[2mRun it\x1b[22m", "a numbered step keeps its number grey and upright, the step itself dim (m4c-long-line)");
 	check(thinkingRows([{ type: "thinking", thinking: "First call:\n- command: echo ok" }], 40, tagged)[1] === "  <muted>- </muted>\x1b[2mcommand: echo ok\x1b[22m", "a bullet keeps its dash grey, the item dim (m5a-parallel-fail, Claude 2.1.283)");
+	check(thinkingRows([{ type: "thinking", thinking: "Plan:\n1. command: `echo ok`" }], 60, tagged)[1] === "  <muted>1. </muted>\x1b[2mcommand: \x1b[38;2;153;204;255mecho ok\x1b[39m\x1b[22m", "inline code in ctrl+o thinking drops its backticks and turns 99ccff, still dim (m5a-parallel-fail suite run, Claude 2.1.283)");
 	check(resultRows("read", { path: "a" }, ok(""), { ...view(), isPartial: true }, tagged) === null, "a running read draws no rows of its own: the active group row carries its hint");
 	check(resultRows("write", { path: "a" }, ok(""), { ...view(), isPartial: true }, plain)!.head === "  ⎿  …", "a running write keeps its own elbow row");
 	check(resultRows("read", {}, { text: "ENOENT\nmore", isError: true, details: undefined }, view(), tagged) === null, "a failed read folds into the group like any other call; its row draws nothing");

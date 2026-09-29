@@ -213,7 +213,7 @@
    session: AgentSession;
    /** True if the agent was hard-aborted (max_turns + grace exceeded). */
    aborted: boolean;
-@@ -593,6 +600,58 @@
+@@ -593,6 +600,54 @@
   * Wire an AbortSignal to abort a session.
   * Returns a cleanup function to remove the listener.
   */
@@ -242,10 +242,6 @@
 +  };
 +}
 +
-+async function nextChildNotifications(children: { next(): Promise<string[]> } | undefined): Promise<string[]> {
-+  return children ? children.next() : [];
-+}
-+
 +function forkSessionManager(cwd: string, fork: ForkContext): SessionManager {
 +  const manager = SessionManager.inMemory(cwd, undefined, fork.entries as never);
 +  for (const call of fork.pendingToolCallIds) {
@@ -272,7 +268,7 @@
  function forwardAbortSignal(session: AgentSession, signal?: AbortSignal): () => void {
    if (!signal) return () => {};
    const onAbort = () => session.abort();
-@@ -671,16 +730,16 @@
+@@ -671,16 +726,16 @@
    }
  
    // Build system prompt from agent config
@@ -299,7 +295,7 @@
  
    // When skills is string[], we've already preloaded them into the prompt.
    // Still pass noSkills: true since we don't need the skill loader to load them again.
-@@ -744,6 +803,7 @@
+@@ -744,6 +799,7 @@
            };
          };
  
@@ -307,7 +303,7 @@
    const loader = new DefaultResourceLoader({
      cwd: configCwd,
      agentDir,
-@@ -753,9 +813,13 @@
+@@ -753,9 +809,13 @@
      noSkills,
      noPromptTemplates: true,
      noThemes: true,
@@ -322,7 +318,7 @@
    });
    await runInChildSessionContext(() => loader.reload());
  
-@@ -852,15 +916,18 @@
+@@ -852,15 +912,18 @@
    const nestedRuntime = options.nestedRuntime && options.nestedRuntime.depth < effectiveMaxDepth
      ? options.nestedRuntime
      : undefined;
@@ -343,7 +339,7 @@
        })
      : [];
    const nestedToolNames = new Set(nestedTools.map(tool => tool.name));
-@@ -918,7 +985,7 @@
+@@ -918,7 +981,7 @@
  
    let sessionTools: string[] | undefined;
    let sessionExcludeTools: string[] | undefined;
@@ -352,7 +348,7 @@
      // Strict allowlist: built-ins the agent asked for, plus any opt-in nested
      // tools (whose names would otherwise be dropped as EXCLUDED_TOOL_NAMES).
      sessionTools = [
-@@ -959,7 +1026,9 @@
+@@ -959,7 +1022,9 @@
    // which `rememberAgents` supplies for top-level agents only. Same precedence
    // as `outputTranscript`.
    const persistSession = agentConfig?.persistSession ?? (options.nested ? false : rememberAgents);
@@ -363,7 +359,7 @@
      // Reopening an existing conversation: the file already carries its own
      // header (cwd, parent) and history, so none of the create-time options
      // apply. `sessionDir` still matters for a later /new or /branch off it.
-@@ -1039,6 +1108,8 @@
+@@ -1039,6 +1104,8 @@
        extNames,
        narrowing,
        readmitToolNames,
@@ -372,7 +368,7 @@
      });
    }
  
-@@ -1055,14 +1126,9 @@
+@@ -1055,14 +1122,9 @@
      if (event.type === "turn_end") {
        turnCount++;
        options.onTurnEnd?.(turnCount);
@@ -390,7 +386,7 @@
        }
      }
      if (event.type === "message_start") {
-@@ -1096,8 +1162,19 @@
+@@ -1096,8 +1158,19 @@
    const collector = collectResponseText(session);
    const cleanupAbort = forwardAbortSignal(session, options.signal);
  
@@ -412,7 +408,7 @@
    if (options.inheritContext) {
      const parentContext = buildParentContext(ctx);
      if (parentContext) {
-@@ -1109,6 +1186,7 @@
+@@ -1109,6 +1182,7 @@
    // on counts as this run's output (a fresh session, so usually 0).
    const startLen = session.messages.length;
    let structuredRetried = false;
@@ -420,18 +416,18 @@
    try {
      await session.prompt(effectivePrompt);
  
-@@ -1122,6 +1200,10 @@
+@@ -1122,6 +1196,10 @@
        structuredRetried = true;
        await session.prompt(structuredRetryPrompt(structuredCapture));
      }
-+    for (let ready = await nextChildNotifications(children); ready.length > 0 && !aborted && options.signal?.aborted !== true; ready = await nextChildNotifications(children)) {
++    for (let ready = await (children?.next() ?? []); ready.length > 0 && !aborted && options.signal?.aborted !== true; ready = await (children?.next() ?? [])) {
 +      renotified = true;
 +      await session.prompt(ready.join("\n\n"));
 +    }
    } finally {
      unsubTurns();
      collector.unsubscribe();
-@@ -1142,6 +1224,7 @@
+@@ -1142,6 +1220,7 @@
      session,
      aborted,
      steered: softLimitReached,
@@ -1297,7 +1293,7 @@
    };
  
 +  function backgroundRunningCount(): number {
-+    return manager.listAgents().filter(r => r.workflowId === undefined && r.isBackground === true && (r.status === "running" || r.status === "queued")).length;
++    return manager.listAgents().filter(r => r.workflowId === undefined && r.isBackground === true && !r.resumed && (r.status === "running" || r.status === "queued")).length;
 +  }
 +
    const registryEntry = {
@@ -1390,7 +1386,15 @@
    /**
     * Launch a detached resume of an existing agent and wire everything a
     * re-running agent needs: transcript anchoring, activity tracking, join-mode
-@@ -1327,12 +1276,6 @@
+@@ -1288,6 +1237,7 @@
+     // id left by the spawn that created the record. Keeping it would point the
+     // orchestrator's new result at a tool call that was answered runs ago.
+     existing.toolCallId = opts.toolCallId;
++    existing.resumed = true;
+     if (joinMode) existing.joinMode = joinMode;
+     // Reuse the agent's transcript rather than starting a fresh one: the
+     // path is deterministic per agent+session, so writing an initial entry
+@@ -1327,12 +1277,6 @@
      });
      if (!record) return undefined;
  
@@ -1403,7 +1407,7 @@
      agentActivity.set(id, bgState);
      // This agent already finished once, so the widget holds a finished-age
      // for it that is past the linger limit — without clearing it, the
-@@ -1429,6 +1372,7 @@
+@@ -1429,6 +1373,7 @@
      },
      (event, payload) => pi.events.emit(event, payload),
    );
@@ -1411,7 +1415,7 @@
  
    // ---- Agent tool ----
  
-@@ -1572,16 +1516,46 @@
+@@ -1572,16 +1517,46 @@
        if (custom) return custom;
        console.warn('[pi-subagents] toolDescriptionMode is "custom" but no agent-tool-description.md found — using "full"');
      }
@@ -1460,7 +1464,7 @@
      promptSnippet: "Launch autonomous sub-agents for complex multi-step tasks",
      promptGuidelines: [
        "Use Agent with specialized agents when the task matches an agent type's description. Subagents are valuable for parallelizing independent queries or for protecting the main context window from excessive results, but should not be used excessively when not needed. Importantly, avoid duplicating work that subagents are already doing — if you delegate research to a subagent, do not also perform the same searches yourself.",
-@@ -1589,84 +1563,36 @@
+@@ -1589,84 +1564,36 @@
        "When an agent runs in the background, you will be notified on completion — do not poll or sleep waiting for it. Continue with other work instead.",
        "Trust but verify: an agent's summary describes intent, not outcome. When an agent writes or edits code, check the actual changes before reporting work as done.",
      ],
@@ -1570,7 +1574,7 @@
      },
  
      renderResult(result, { expanded, isPartial }, theme, renderContext) {
-@@ -1675,6 +1601,7 @@
+@@ -1675,6 +1602,7 @@
        // Pi reports pre-execution failures (extension block, abort, argument
        // validation) as `{ content: [reason], details: {} }` with isError set —
        // no status to render, so show the reason instead of inventing one (#199).
@@ -1578,7 +1582,7 @@
        if (renderContext.isError || !details?.status) {
          return new Text(text, 0, 0);
        }
-@@ -1703,9 +1630,10 @@
+@@ -1703,9 +1631,10 @@
          return renderRunningAgentStatus(frame, s, details.activity ?? "thinking…", theme);
        }
  
@@ -1590,7 +1594,7 @@
        }
  
        // ---- Completed / Steered ----
-@@ -1729,8 +1657,10 @@
+@@ -1729,8 +1658,10 @@
              }
            }
          } else {
@@ -1603,7 +1607,7 @@
          }
          return new Text(line, 0, 0);
        }
-@@ -1771,18 +1701,21 @@
+@@ -1771,18 +1702,21 @@
        // Reload custom agents so new project/global .md files are picked up without restart
        reloadCustomAgents();
  
@@ -1627,7 +1631,7 @@
        const subagentType = dispatch.ok ? dispatch.type : rawType;
        // What the caller actually asked for, named once: `fellBackFrom` is "" for
        // a blank request, so reading it inline invites the `??`-vs-`||` slip that
-@@ -1802,18 +1735,23 @@
+@@ -1802,18 +1736,23 @@
        // Get agent config (if any)
        const customConfig = getAgentConfig(subagentType);
  
@@ -1655,7 +1659,7 @@
          } else {
            model = resolved;
          }
-@@ -1832,8 +1770,11 @@
+@@ -1832,8 +1771,11 @@
        });
        if (scopeVerdict.kind === "error") return textResult(scopeVerdict.message);
        if (scopeVerdict.kind === "warn") ctx.ui.notify(scopeVerdict.message, "warning");
@@ -1668,7 +1672,7 @@
        const inheritContext = resolvedConfig.inheritContext;
        const runInBackground = resolvedConfig.runInBackground;
        const isolated = resolvedConfig.isolated;
-@@ -2064,6 +2005,7 @@
+@@ -2064,6 +2006,7 @@
            isolation,
            invocation: agentInvocation,
            rootSessionId: ctx.sessionManager.getSessionId(),
@@ -1676,7 +1680,7 @@
            ...bgCallbacks,
          });
  
-@@ -2083,17 +2025,6 @@
+@@ -2083,17 +2026,6 @@
          // call instead of being reported as a subagent that ran (#179).
          await manager.awaitStartup(id);
  
@@ -1694,7 +1698,7 @@
          agentActivity.set(id, bgState);
          widget.ensureTimer();
          widget.update();
-@@ -2108,17 +2039,8 @@
+@@ -2108,17 +2040,8 @@
            isBackground: true,
          });
  
@@ -1713,7 +1717,7 @@
            { ...detailBaseFor(record), toolUses: 0, tokens: "", durationMs: 0, status: "background" as const, agentId: id },
          );
        }
-@@ -2253,18 +2175,7 @@
+@@ -2253,18 +2176,7 @@
          return textResult(`${fallbackNote}Agent failed: ${record.error}${partialOutputSuffix(record)}`, details);
        }
  
@@ -1733,7 +1737,7 @@
      },
    });
    /**
-@@ -2292,13 +2203,17 @@
+@@ -2292,13 +2204,17 @@
        },
      };
    }
@@ -1752,7 +1756,7 @@
    pi.registerTool(registeredAgentTool);
  
    // ---- Workflow tool ----
-@@ -2407,11 +2322,11 @@
+@@ -2407,11 +2323,11 @@
    // switch changes exactly one thing: whether pi is ever told about the tool.
    const workflowTool = defineTool({
      name: SUBAGENT_TOOL_NAMES.WORKFLOW,
@@ -1766,7 +1770,7 @@
        "Prefer `pipeline` over `parallel` — a barrier costs wall-clock whenever the stages are unevenly sized.",
        "A workflow runs in the background and notifies you when it finishes — do not poll or sleep waiting for it.",
      ],
-@@ -2458,9 +2373,11 @@
+@@ -2458,9 +2374,11 @@
        ),
      }),
  
@@ -1779,7 +1783,7 @@
          0,
          0,
        );
-@@ -2572,14 +2489,17 @@
+@@ -2572,14 +2490,17 @@
                  ? `Nothing to replay from ${params.resumeFromRunId} — every agent runs live.\n`
                  : "") +
              `\nYou will be notified when it finishes — do NOT poll or sleep waiting for it.\n` +
@@ -1799,7 +1803,7 @@
  
    /**
     * Act on {@link decideWorkflowCollision} — the half that needs the host.
-@@ -2729,7 +2649,7 @@
+@@ -2729,7 +2650,7 @@
  
    // ---- get_subagent_result tool ----
  
@@ -1808,7 +1812,7 @@
      name: SUBAGENT_TOOL_NAMES.GET_RESULT,
      label: "Get Agent Result",
      description:
-@@ -2819,6 +2739,59 @@
+@@ -2819,6 +2740,59 @@
    // ---- steer_subagent tool ----
  
    registerToolReportingUsage(defineTool({
@@ -1868,7 +1872,7 @@
      name: SUBAGENT_TOOL_NAMES.STEER,
      label: "Steer Agent",
      description:
-@@ -3052,33 +3025,10 @@
+@@ -3052,33 +3026,10 @@
      if (!record) return;
  
      await viewAgentConversation(ctx, record);
@@ -2098,16 +2102,17 @@
    result?: string;
    error?: string;
    toolUses: number;
-@@ -205,7 +212,7 @@
+@@ -205,7 +212,8 @@
    /** Worktree info if the agent is running in an isolated worktree. */
    worktree?: { path: string; branch: string; baseSha: string; workPath: string };
    /** Worktree cleanup result after agent completion. */
 -  worktreeResult?: { hasChanges: boolean; branch?: string };
 +  worktreeResult?: { hasChanges: boolean; branch?: string; path?: string };
++  resumed?: boolean;
    /** The tool_use_id from the original Agent tool call. */
    toolCallId?: string;
    /** Path to the streaming output transcript file. */
-@@ -280,6 +287,15 @@
+@@ -280,6 +288,15 @@
   */
  export type EffectiveThinkingLevel = ThinkingLevel | "off";
  
@@ -2123,7 +2128,7 @@
  export interface AgentInvocation {
    /** Short display name for tight rows, e.g. "haiku 4.5". Always set once known. */
    modelName?: string;
-@@ -307,6 +323,7 @@
+@@ -307,6 +324,7 @@
  /** Details attached to custom notification messages for visual rendering. */
  export interface NotificationDetails {
    id: string;
