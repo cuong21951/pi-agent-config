@@ -57,7 +57,7 @@ session("notify", [
     ("M6G-SUB-NO: run sleep 2, then reply with the word noreport.", [[("bash", {"command": "sleep 2", "description": "Sleep"})], ["noreport"]]),
 ])
 session("types2", [
-    ("M6G types2 run.", [[("Agent", {"description": "Explore", "subagent_type": "Explore", "prompt": "M6G-SUB-EX2: reply with the word exreport."}), ("Agent", {"description": "Plan", "subagent_type": "Plan", "prompt": "M6G-SUB-PL2: reply with the word plreport."}), ("Agent", {"description": "Custom", "subagent_type": "m6g-custom", "prompt": "M6G-SUB-CU2: reply with the word cureport."})], ["typesdone"], ["exseen"], ["plseen"], ["cuseen"]]),
+    ("M6G types2 run.", [[("Agent", {"description": "Explore", "subagent_type": "Explore", "prompt": "M6G-SUB-EX2: reply with the word exreport."})], [("Agent", {"description": "Plan", "subagent_type": "Plan", "prompt": "M6G-SUB-PL2: reply with the word plreport."})], [("Agent", {"description": "Custom", "subagent_type": "m6g-custom", "prompt": "M6G-SUB-CU2: reply with the word cureport."})], ["typesdone"], ["exseen"], ["plseen"], ["cuseen"]]),
     ("M6G-SUB-EX2: reply with the word exreport.", [["exreport", 2000]]),
     ("M6G-SUB-PL2: reply with the word plreport.", [["plreport", 5000]]),
     ("M6G-SUB-CU2: reply with the word cureport.", [["cureport", 8000]]),

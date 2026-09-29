@@ -1,0 +1,41 @@
+--- a/src/exposure/tool-surface-prompt.ts
++++ b/src/exposure/tool-surface-prompt.ts
+@@ -87,7 +87,7 @@
+     AVAILABLE_TOOLS_SECTION_HEADER,
+     GUIDELINES_SECTION_HEADER,
+   ]) {
+-    const section = findSection(remaining, header);
++    const section = findToolSurfaceSection(remaining, header);
+     if (section) {
+       remaining = [
+         ...remaining.slice(0, section.start),
+@@ -101,6 +101,18 @@
+   );
+ }
+ 
++function findToolSurfaceSection(lines: readonly string[], header: string): LineSection | null {
++  for (let section = findSection(lines, header); section; section = findSection(lines, header, section.start + 1)) {
++    if (header !== GUIDELINES_SECTION_HEADER || isPiGuidelines(lines, section)) return section;
++  }
++  return null;
++}
++
++function isPiGuidelines(lines: readonly string[], section: LineSection): boolean {
++  const body = lines.slice(section.start + 1, section.end).map((line) => line.trim());
++  return UNIVERSAL_GUIDELINES.every((guideline) => body.includes(`- ${guideline}`));
++}
++
+ /** This session's tool surface, as Pi would have rendered it. */
+ function renderToolSurfaceBlock(inputs: ToolSurfaceInputs): string {
+   const sections: string[] = [];
+@@ -227,8 +239,9 @@
+ function findSection(
+   lines: readonly string[],
+   header: string,
++  from = 0,
+ ): LineSection | null {
+-  const start = lines.findIndex((line) => line.trim() === header);
++  const start = lines.findIndex((line, index) => index >= from && line.trim() === header);
+   if (start === -1) {
+     return null;
+   }

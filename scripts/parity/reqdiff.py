@@ -39,8 +39,6 @@ EXCEPTIONS = [
      re.compile(r"(?<=this note is about report files\.\))\n[\s\S]*$")),
     ("skills list: pi puts the skills in the system prompt (its session builder), Claude in a first-message reminder", "claude",
      re.compile(r"(?m)^The following skills are available for use with the Skill t.*\n")),
-    ("pi-permission-system removes every `Guidelines:` section from a system prompt (meant for pi's default preamble), so Claude's Explore guidelines never reach the pi subagent", "claude",
-     re.compile(r"\nGuidelines:\n- Use Glob for broad file pattern matching\n(?:- .*\n)+")),
     ("SendMessage pin: Claude's cross-session address (id/name/ref) for its own transcript row; pi has no cross-session bus", "claude",
      re.compile(r',"pin":\{[^}]*\}')),
     ("ListAgents: Claude's own-session line and Peer sessions list; pi has no cross-session registry", "claude",

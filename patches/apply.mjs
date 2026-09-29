@@ -20,6 +20,7 @@ const DIFFS = [
 	["@juicesharp/rpiv-ask-user-question", "rpiv-ask-user-question.patch", "rpiv-ask-user-question.selftest.ts"],
 	["@tintinweb/pi-subagents", "pi-subagents.patch", "pi-subagents.selftest.ts"],
 	["@dietrichgebert/ponytail", "ponytail.patch", "ponytail.selftest.ts"],
+	["@gotgenes/pi-permission-system", "pi-permission-system.patch", "pi-permission-system.selftest.ts"],
 ];
 
 const PI_INSTALLS = piInstalls();

@@ -1240,13 +1240,16 @@
 +        return new Text(launchedGroupLines(calls, theme).join("\n"), 0, 0);
 +      }
        const desc = args.description ?? "";
-       const name = renderAgentName(args.subagent_type, theme, {
+-      const name = renderAgentName(args.subagent_type, theme, {
 -        fallbackColor: "toolTitle",
 -        restoreBackground: rowBackground,
-+        restoreBackground: "",
-         bold: true,
-       });
+-        bold: true,
+-      });
 -      return new Text(rowBackground + "▸ " + name + (desc ? "  " + theme.fg("muted", desc) : ""), 0, 0);
++      const badge = args.subagent_type ? getConfig(args.subagent_type).color : undefined;
++      const name = badge
++        ? renderAgentNameLabel(args.subagent_type, agentViewColor(badge), theme, { bold: true, padded: false })
++        : renderAgentName(args.subagent_type, theme, { restoreBackground: "", bold: true });
 +      const shownModel = agentCallModel.get(context.toolCallId) ?? (typeof args.model === "string" && args.model !== "" ? args.model : "");
 +      const model = shownModel ? theme.fg("muted", ` ${shownModel}`) : "";
 +      return new Text(theme.fg("borderAccent", "● ") + name + (desc ? `(${desc})` : "") + model, 0, 0);
