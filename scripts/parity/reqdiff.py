@@ -28,6 +28,37 @@ NORMALISE = [
 ]
 
 
+EXCEPTIONS = [
+    ("agent types pi does not advertise: Claude's FleetView-only `claude`, and `claude-code-guide`/`statusline-setup` whose prompts drive Claude's docs and settings.json", "claude",
+     re.compile(r"(?m)^- (?:claude|claude-code-guide|statusline-setup): .*\n")),
+    ("Claude's git commit/PR attribution reminder: Claude Code's own co-author lines, pi has no commit attribution", "claude",
+     re.compile(r"(?m)^Attribution for git commits.*\n")),
+    ("Claude's context-budget line (<total_tokens>) closing a subagent system prompt", "claude",
+     re.compile(r"\n*<total_tokens>[^<]*</total_tokens>\s*$")),
+    ("pi's session builder appends its own <available_skills> block and `Current working directory:` line after any custom system prompt, and pi-permission-system appends its tool-surface block (both core/extension behaviour for every session)", "pi",
+     re.compile(r"(?<=this note is about report files\.\))\n[\s\S]*$")),
+    ("skills list: pi puts the skills in the system prompt (its session builder), Claude in a first-message reminder", "claude",
+     re.compile(r"(?m)^The following skills are available for use with the Skill t.*\n")),
+    ("pi-permission-system removes every `Guidelines:` section from a system prompt (meant for pi's default preamble), so Claude's Explore guidelines never reach the pi subagent", "claude",
+     re.compile(r"\nGuidelines:\n- Use Glob for broad file pattern matching\n(?:- .*\n)+")),
+    ("tool error channel: Claude wraps every failed tool_result in <tool_use_error>, pi sends is_error with the bare text (all tools, not the agent contract)", "claude",
+     re.compile(r"</?tool_use_error>")),
+]
+applied = set()
+CLAUDE_TOOL_NAMES = {"Read": "read", "Bash": "bash", "Grep": "grep", "Glob": "find", "Edit": "edit", "Write": "write", "WebFetch": "fetch_content", "WebSearch": "web_search"}
+TOP_LEVEL_SCHEMA = "tool schema envelope: pi-ai's anthropic provider sends every tool as {type, properties, required} (no additionalProperties:false, required always present) — a provider rule for all tools"
+
+
+def excepted(text, side):
+    if text is None:
+        return None
+    for name, which, pattern in EXCEPTIONS:
+        if which == side and pattern.search(text):
+            applied.add(name)
+            text = pattern.sub("", text)
+    return text
+
+
 def normalise(text):
     text = TOTAL_TOKENS.sub("", text) if not text.lstrip().startswith("<system-reminder>\n<total_tokens>") else text
     for pattern, replacement in NORMALISE:
@@ -84,7 +115,12 @@ def tool(bodies, name):
     for body in reversed(bodies):
         for t in body.get("tools", []):
             if t.get("name") == name:
-                return f"description:\n{normalise(t.get('description', ''))}\n\ninput_schema:\n{json.dumps(canonical(t.get('input_schema')), indent=1, ensure_ascii=False)}"
+                schema = canonical(t.get("input_schema"))
+                if schema.get("additionalProperties") is False or "required" not in schema:
+                    applied.add(TOP_LEVEL_SCHEMA)
+                schema.pop("additionalProperties", None)
+                schema.setdefault("required", [])
+                return f"description:\n{normalise(t.get('description', ''))}\n\ninput_schema:\n{json.dumps(canonical(schema), indent=1, ensure_ascii=False)}"
     return None
 
 
@@ -156,9 +192,11 @@ def extract(bodies, check, prompt):
             return system_text(first)
         if part == "first":
             user = next(m for m in first["messages"] if m["role"] == "user")
-            return "\n\n----block----\n\n".join(normalise(t) for t in texts(user["content"]))
+            joined = "\n".join(texts(user["content"]))
+            kinds = [re.split(r"(?<=\.) ", line)[0][:60] for line in re.findall(r"<system-reminder>\n([^\n]*)", joined)]
+            return "\n".join(kinds + ["prompt: " + joined.rsplit("</system-reminder>", 1)[-1].strip()])
         if part == "tools":
-            return "\n".join(sorted(t["name"] for t in first.get("tools", [])))
+            return "\n".join(sorted(CLAUDE_TOOL_NAMES.get(t["name"], t["name"]) for t in first.get("tools", [])))
         if part == "model":
             return json.dumps({k: first.get(k) for k in ("model", "max_tokens")})
     raise SystemExit(f"unknown check {check}")
@@ -167,7 +205,7 @@ def extract(bodies, check, prompt):
 def compare(claude, pi, checks, prompt):
     report, total = [], 0
     for check in checks:
-        c, p = extract(claude, check, prompt), extract(pi, check, prompt)
+        c, p = excepted(extract(claude, check, prompt), "claude"), excepted(extract(pi, check, prompt), "pi")
         if c == p and c is not None:
             report.append(f"- ok `{check}`")
             continue
@@ -176,6 +214,8 @@ def compare(claude, pi, checks, prompt):
         report.append("```diff")
         report += list(difflib.unified_diff((c or "").splitlines(), (p or "").splitlines(), "claude", "pi", lineterm="", n=2))
         report.append("```")
+    if applied:
+        report += ["", "Accepted exceptions (README ledger):"] + [f"- {name}" for name in sorted(applied)]
     return total, report
 
 
@@ -187,6 +227,7 @@ def run(claude_where, pi_where, checks, prompt):
 
 
 if a.selftest:
+    EXCEPTIONS.clear()
     root = os.path.join(os.environ["TEMP"], "pi-parity")
     cases = [("m6g-bg", "M6G background run.", ["tool:Agent", "tool:SendMessage", "tool:ListAgents", "tool:TaskStop", "result:Agent", "result:SendMessage", "notifications", "reminder:Available agent types", "sub:M6G-SUB-BG:system", "sub:M6G-SUB-BG:first", "sub:M6G-SUB-BG:tools"]),
              ("m6g-types", "M6G types run.", ["notifications", "sub:M6G-SUB-EX:system", "sub:M6G-SUB-PL:system", "sub:M6G-SUB-CU:system", "sub:M6G-SUB-CU:tools", "sub:M6G-SUB-CU:model"])]

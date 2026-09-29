@@ -14,13 +14,16 @@ def session(name, turns):
     for prompt, replies in turns:
         steps = [{"role": "user", "content": [{"type": "text", "text": prompt}]}]
         for reply in replies:
+            pace = sum(r for r in reply if isinstance(r, int))
+            reply = [r for r in reply if not isinstance(r, int)]
             content = [{"type": "text", "text": r} if isinstance(r, str) else {"type": "toolCall", "id": "toolu_" + uuid.uuid4().hex[:24], "name": r[0], "arguments": r[1]} for r in reply]
-            steps.append({"role": "assistant", "content": content, "stopReason": "toolUse" if any(not isinstance(r, str) for r in reply) else "stop", "usage": {"input": 10, "output": 5}})
+            steps.append({"role": "assistant", "content": content, "stopReason": "toolUse" if any(not isinstance(r, str) for r in reply) else "stop", "usage": {"input": 10, "output": 5}, "_pace": pace})
         for message in steps:
             clock += 200
             eid = uuid.uuid4().hex[:8]
             message["timestamp"] = clock
-            entries.append({"type": "message", "id": eid, "parentId": parent, "timestamp": datetime.datetime.fromtimestamp(clock / 1000, datetime.timezone.utc).isoformat(timespec="milliseconds").replace("+00:00", "Z"), "message": message})
+            done = clock + message.pop("_pace", 0)
+            entries.append({"type": "message", "id": eid, "parentId": parent, "timestamp": datetime.datetime.fromtimestamp(done / 1000, datetime.timezone.utc).isoformat(timespec="milliseconds").replace("+00:00", "Z"), "message": message})
             parent = eid
     with open(os.path.join(HERE, f"{name}.jsonl"), "w", encoding="utf-8", newline="\n") as f:
         for e in entries:
@@ -52,4 +55,10 @@ session("clear", [
 session("notify", [
     ("M6G notify run.", [[("Agent", {"description": "Sleep briefly", "subagent_type": "general-purpose", "prompt": "M6G-SUB-NO: run sleep 2, then reply with the word noreport."})], ["started"], ["notified"]]),
     ("M6G-SUB-NO: run sleep 2, then reply with the word noreport.", [[("bash", {"command": "sleep 2", "description": "Sleep"})], ["noreport"]]),
+])
+session("types2", [
+    ("M6G types2 run.", [[("Agent", {"description": "Explore", "subagent_type": "Explore", "prompt": "M6G-SUB-EX2: reply with the word exreport."}), ("Agent", {"description": "Plan", "subagent_type": "Plan", "prompt": "M6G-SUB-PL2: reply with the word plreport."}), ("Agent", {"description": "Custom", "subagent_type": "m6g-custom", "prompt": "M6G-SUB-CU2: reply with the word cureport."})], ["typesdone"], ["exseen"], ["plseen"], ["cuseen"]]),
+    ("M6G-SUB-EX2: reply with the word exreport.", [["exreport", 2000]]),
+    ("M6G-SUB-PL2: reply with the word plreport.", [["plreport", 5000]]),
+    ("M6G-SUB-CU2: reply with the word cureport.", [["cureport", 8000]]),
 ])

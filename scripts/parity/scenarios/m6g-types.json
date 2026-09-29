@@ -1,0 +1,31 @@
+{
+ "prompt": "M6G types2 run.",
+ "fixture": "findings/m6g/fixture",
+ "pi_mock": true,
+ "session": "findings/m6g/types2.jsonl",
+ "end": "cuseen[\\s\\S]*✻ \\S+ for [^\\n]*· done",
+ "steps": [
+  {
+   "until": "cuseen[\\s\\S]*✻ \\S+ for [^\\n]*· done",
+   "timeout": 90
+  },
+  {
+   "sleep": 1
+  },
+  {
+   "snap": "end"
+  }
+ ],
+ "reqdiff": [
+  "tool:Agent",
+  "reminder:Available agent types",
+  "result:Agent",
+  "notifications",
+  "sub:M6G-SUB-CU2:tools",
+  "sub:M6G-SUB-EX2:system",
+  "sub:M6G-SUB-PL2:system",
+  "sub:M6G-SUB-CU2:system",
+  "sub:M6G-SUB-EX2:first",
+  "sub:M6G-SUB-CU2:first"
+ ]
+}
