@@ -162,3 +162,10 @@ const DOWN = "\x1b[B";
   assert.deepEqual(placed.map((m: { content: { text: string }[] }) => m.content.map((b) => b.text)), [["launched", "n1"], [], ["n2", "n3"]]);
   console.log("PASS: the concurrency refusal, the turn-limit note and summary verbs are Claude 2.1.283's (bundle lLn/g6e/brt); a notification ready inside a tool round joins the last tool_result, notifications ready together share one user message (m6g-types)");
 }
+
+{
+  const { withoutReminders } = await jiti.import(path.join(here, "../npm/node_modules/@tintinweb/pi-subagents/src/ui/fleet-list.ts"));
+  const shown = withoutReminders({ role: "user", content: [{ type: "text", text: "<system-reminder>\n# Environment\nx\n</system-reminder>\n<system-reminder>\nToday's date is 2026-09-29.\n</system-reminder>\nDo the task." }] });
+  assert.equal(shown.content[0].text, "Do the task.");
+  console.log("PASS: the agent view shows the subagent's prompt without the first-message reminders, as Claude's view does (m6f-view)");
+}

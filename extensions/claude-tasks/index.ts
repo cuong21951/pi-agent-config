@@ -106,7 +106,7 @@ export function taskOf(record: Record, now: number): Task {
 		elapsedMs: Math.max(0, (status === "running" ? now : (record.completedAt ?? now)) - record.startedAt),
 		tokens: context + record.lifetimeUsage.output,
 		tools: record.toolUses,
-		prompt: textOf(messages.find((m) => m.role === "user")?.content).trim(),
+		prompt: textOf(messages.find((m) => m.role === "user")?.content).replace(/^(?:<system-reminder>\n[\s\S]*?\n<\/system-reminder>\n)+/, "").trim(),
 		activities: calls.slice(-RECENT).map((c) => activity(c.name, c.arguments ?? {})),
 		...(record.error ? { error: record.error } : {}),
 	};

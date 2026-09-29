@@ -1612,7 +1612,7 @@
    notify(message: string, type?: "info" | "warning" | "error"): void;
    custom<T>(
      factory: (tui: any, theme: Theme, keybindings: any, done: (result: T) => void) => { render(width: number): string[]; invalidate(): void; dispose?(): void },
-@@ -69,31 +74,118 @@
+@@ -69,31 +74,128 @@
  type WorkflowEntry = { kind: "workflow"; workflow: FleetWorkflow };
  type FleetEntry = MainEntry | WorkflowEntry | AgentEntry;
  
@@ -1697,6 +1697,16 @@
 +
 +type ChatView = { show(messages: readonly unknown[]): void; hide(): void };
 +
++const LEADING_REMINDERS = /^(?:<system-reminder>\n[\s\S]*?\n<\/system-reminder>\n)+/;
++
++export function withoutReminders<M>(message: M): M {
++  const m = message as { role?: string; content?: unknown };
++  if (m.role !== "user") return message;
++  if (typeof m.content === "string") return { ...m, content: m.content.replace(LEADING_REMINDERS, "") } as M;
++  if (!Array.isArray(m.content)) return message;
++  return { ...m, content: m.content.map((b: any) => (b?.type === "text" ? { ...b, text: b.text.replace(LEADING_REMINDERS, "") } : b)) } as M;
++}
++
 +function chatView(): ChatView | undefined {
 +  return (globalThis as { __claudeChatView?: ChatView }).__claudeChatView;
 +}
@@ -1750,7 +1760,7 @@
  }
  
  export class FleetList {
-@@ -108,8 +200,6 @@
+@@ -108,8 +210,6 @@
    private active = false;
    /** 0 = `main`, 1..N = subagents. */
    private selectedIndex = 0;
@@ -1759,7 +1769,7 @@
    private viewingAgentId: string | undefined;
    /** Injected by the extension; absent until workflows are wired (or at all). */
    private workflowSource: (() => readonly FleetWorkflow[]) | undefined;
-@@ -117,11 +207,14 @@
+@@ -117,11 +217,14 @@
    /**
     * Set while the workflow inspector is up.
     *
@@ -1777,7 +1787,7 @@
  
    constructor(
      private manager: AgentManager,
-@@ -132,18 +225,6 @@
+@@ -132,18 +235,6 @@
       * `showCost` setting.
       */
      private showCost: () => boolean = () => false,
@@ -1796,7 +1806,7 @@
    ) {}
  
    // ---- Lifecycle ----
-@@ -174,7 +255,8 @@
+@@ -174,7 +265,8 @@
     * Called when an agent finishes. The viewer (if open on it) stays open so the
     * final output remains readable, and the row lingers in the list — just refresh.
     */
@@ -1806,7 +1816,7 @@
      this.update();
    }
  
-@@ -182,7 +264,7 @@
+@@ -182,7 +274,7 @@
      if (this.timer) { clearInterval(this.timer); this.timer = undefined; }
      this.inputUnsub?.();
      this.inputUnsub = undefined;
@@ -1815,7 +1825,7 @@
      this.viewingAgentId = undefined;
      // No handle to close the workflow inspector with, but the list is going
      // away — leaving the id set would keep it swallowing input forever.
-@@ -191,7 +273,6 @@
+@@ -191,7 +283,6 @@
      this.widgetRegistered = false;
      this.tui = undefined;
      this.active = false;
@@ -1823,7 +1833,7 @@
      this.ui = undefined;
    }
  
-@@ -206,6 +287,7 @@
+@@ -206,6 +297,7 @@
  
      if (!hasRows) {
        if (this.widgetRegistered) {
@@ -1831,7 +1841,7 @@
          this.ui.setWidget(FLEET_KEY, undefined);
          this.widgetRegistered = false;
          this.tui = undefined;
-@@ -220,10 +302,10 @@
+@@ -220,10 +312,10 @@
      this.ensureTimer(); // keep stats ticking whenever the list is shown (e.g. after a re-enable)
  
      if (!this.widgetRegistered) {
@@ -1844,7 +1854,7 @@
            invalidate: () => { this.widgetRegistered = false; this.tui = undefined; },
          };
        }, { placement: "belowEditor" });
-@@ -235,21 +317,13 @@
+@@ -235,21 +327,13 @@
  
    // ---- Roster ----
  
@@ -1869,7 +1879,7 @@
        ))
        .sort((a, b) => a.startedAt - b.startedAt);
    }
-@@ -278,21 +352,16 @@
+@@ -278,21 +362,16 @@
        .filter(run =>
          run.status === "running"
          || run.status === "paused"
@@ -1893,7 +1903,7 @@
      ];
    }
  
-@@ -314,7 +383,7 @@
+@@ -314,7 +393,7 @@
      // While an overlay is open, let it own all input. Checked before the focus
      // test below, which would otherwise read the dialog holding the keyboard as
      // "the user left the list" and reset the selection out from under it.
@@ -1902,7 +1912,7 @@
      // Input listeners fire BEFORE the focused component, and dialogs
      // (ctx.ui.select/confirm/input, pi's own menus) swap the prompt editor out
      // while getEditorText() still reads the detached — empty — editor. So when
-@@ -324,6 +393,34 @@
+@@ -324,6 +403,34 @@
        return undefined;
      }
  
@@ -1937,7 +1947,7 @@
      if (!this.active) {
        // Activate: ↓ or ← at an empty prompt moves focus into the list.
        const isActivator = matchesKey(data, "down") || matchesKey(data, "left");
-@@ -354,6 +451,7 @@
+@@ -354,6 +461,7 @@
      }
      if (matchesKey(data, "escape")) { this.deactivate(); return { consume: true }; }
      if (matchesKey(data, Key.enter)) { this.openSelected(); return { consume: true }; }
@@ -1945,7 +1955,7 @@
  
      // Any other key cancels navigation and flows to the editor.
      this.deactivate();
-@@ -382,14 +480,18 @@
+@@ -382,14 +490,18 @@
    private openSelected(): void {
      const entry = this.roster()[this.selectedIndex];
      if (!entry || entry.kind === "main") {
@@ -1967,7 +1977,7 @@
        this.viewingWorkflowId = entry.workflow.id;
        void Promise.resolve(this.openWorkflow?.(entry.workflow.id)).then(
          () => this.clearViewer(),
-@@ -397,147 +499,149 @@
+@@ -397,147 +509,149 @@
        );
        return;
      }
@@ -2052,7 +2062,7 @@
 +    const record = this.viewingAgentId !== undefined ? this.manager.getRecord(this.viewingAgentId) : undefined;
 +    if (!record) return;
 +    if (!this.viewUnsub && record.session) this.viewUnsub = record.session.subscribe(() => this.scheduleViewRefresh());
-+    chatView()?.show(record.session?.messages ?? []);
++    chatView()?.show((record.session?.messages ?? []).map(withoutReminders));
 +  }
 +
 +  private leaveView(): void {
