@@ -1,13 +1,14 @@
 import { execFileSync } from "node:child_process";
 import type { ExtensionAPI, ExtensionCommandContext, Theme } from "@earendil-works/pi-coding-agent";
 import { SessionManager } from "@earendil-works/pi-coding-agent";
-import { matchesKey, type Component, type KeybindingsManager, type TUI } from "@earendil-works/pi-tui";
+import { matchesKey, truncateToWidth, type Component, type KeybindingsManager, type TUI } from "@earendil-works/pi-tui";
 import {
 	displayTitle,
 	emptyRow,
 	entryRows,
 	filterResumeEntries,
 	footerRows,
+	isSubagentSession,
 	metaLine,
 	modalRule,
 	projectHeaderRow,
@@ -15,6 +16,8 @@ import {
 	scopeSwitchHintRow,
 	searchBoxRows,
 	titleRow,
+	visibleEntryCount,
+	windowStart,
 	type ResumeEntry,
 	type ResumeScope,
 } from "./store.ts";
@@ -47,6 +50,7 @@ function resumeComponent(
 	let query = "";
 	let scope: ResumeScope = "project";
 	let selected = 0;
+	let top = 0;
 	const branchCache = new Map<string, string>();
 	const branchFor = (dir: string) => {
 		if (!branchCache.has(dir)) branchCache.set(dir, gitBranch(dir));
@@ -65,21 +69,25 @@ function resumeComponent(
 		render(width: number): string[] {
 			const matches = filtered();
 			const now = Date.now();
-			const rows: string[] = [modalRule(width), titleRow(), ...searchBoxRows(query, width - 6, paint)];
-			if (scope === "project") rows.push(projectHeaderRow(projectLabel(cwd), paint));
-			rows.push("");
+			const fit = (text: string) => truncateToWidth(text, Math.max(1, width - 5), "…").replaceAll("\x1b[0m", "");
+			const head: string[] = [modalRule(width), titleRow(), ...searchBoxRows(query, width - 6, paint)];
+			if (scope === "project") head.push(projectHeaderRow(projectLabel(cwd), paint));
+			head.push("");
+			const foot = ["", ...footerRows(fit(scopeHint(scope, matches.length > 0)), paint)];
+			const height = tui.terminal.rows - 3;
+			const visible = visibleEntryCount(height - head.length - foot.length);
+			top = windowStart(top, selected, visible);
+			const list: string[] = [];
 			if (matches.length === 0) {
-				rows.push(emptyRow(paint));
-				if (scope === "project") rows.push(scopeSwitchHintRow(paint));
-			} else {
-				matches.forEach((entry, i) => {
-					rows.push(...entryRows(displayTitle(entry), metaLine(entry, now, branchFor(entry.cwd), Buffer.byteLength(entry.allMessagesText, "utf8")), i === selected, paint));
-					if (i < matches.length - 1) rows.push("");
-				});
+				list.push(emptyRow(paint));
+				if (scope === "project") list.push(scopeSwitchHintRow(paint));
 			}
-			rows.push("", ...footerRows(scopeHint(scope, matches.length > 0), paint));
-			const height = Math.max(rows.length, tui.terminal.rows - 3);
-			return [...Array<string>(height - rows.length).fill(""), ...rows];
+			matches.slice(top, top + visible).forEach((entry, i) => {
+				if (i > 0) list.push("");
+				list.push(...entryRows(fit(displayTitle(entry)), fit(metaLine(entry, now, branchFor(entry.cwd), Buffer.byteLength(entry.allMessagesText, "utf8"))), top + i === selected, paint));
+			});
+			const rows = [...head, ...list, ...foot];
+			return [...Array<string>(Math.max(0, height - rows.length)).fill(""), ...rows];
 		},
 		invalidate() {},
 		handleInput(data: string) {
@@ -123,9 +131,12 @@ async function openResumePicker(ctx: ExtensionCommandContext): Promise<void> {
 		messageCount: info.messageCount,
 		firstMessage: info.firstMessage,
 		allMessagesText: info.allMessagesText,
+		name: info.name,
+		parentSessionPath: info.parentSessionPath,
 	});
+	const conversations = (infos: typeof projectInfos) => infos.map(toEntry).filter((entry) => !isSubagentSession(entry));
 	const path = await ctx.ui.custom<string | undefined>(
-		(tui, theme, keybindings, done) => resumeComponent(tui, theme, keybindings, done, projectInfos.map(toEntry), everywhereInfos.map(toEntry), cwd),
+		(tui, theme, keybindings, done) => resumeComponent(tui, theme, keybindings, done, conversations(projectInfos), conversations(everywhereInfos), cwd),
 		{ overlay: true, overlayOptions: { anchor: "bottom-left", width: "100%", margin: 0 } },
 	);
 	if (path) await ctx.switchSession(path);

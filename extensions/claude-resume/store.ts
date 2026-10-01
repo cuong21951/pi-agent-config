@@ -6,6 +6,8 @@ export interface ResumeEntry {
 	messageCount: number;
 	firstMessage: string;
 	allMessagesText: string;
+	name?: string;
+	parentSessionPath?: string;
 }
 
 export type ResumeScope = "project" | "everywhere";
@@ -36,8 +38,28 @@ export function formatSize(bytes: number): string {
 	return `${(bytes / 1024).toFixed(1)}KB`;
 }
 
+const SYSTEM_REMINDER = /<system-reminder>[\s\S]*?<\/system-reminder>/g;
+const SUBAGENT_NAME = /#[0-9a-f]{8}$/;
+
 export function displayTitle(entry: Pick<ResumeEntry, "firstMessage">): string {
-	return entry.firstMessage.trim() === "" ? "(no messages)" : entry.firstMessage.trim();
+	const title = entry.firstMessage.replace(SYSTEM_REMINDER, " ").replace(/\s+/g, " ").trim();
+	return title === "" ? "(no messages)" : title;
+}
+
+export function isSubagentSession(entry: Pick<ResumeEntry, "name" | "parentSessionPath">): boolean {
+	return entry.parentSessionPath !== undefined && SUBAGENT_NAME.test(entry.name ?? "");
+}
+
+export const ENTRY_HEIGHT = 3;
+
+export function visibleEntryCount(listRows: number): number {
+	return Math.max(1, Math.floor((listRows + 1) / ENTRY_HEIGHT));
+}
+
+export function windowStart(top: number, selected: number, visible: number): number {
+	if (selected < top) return selected;
+	if (selected >= top + visible) return selected - visible + 1;
+	return top;
 }
 
 export function metaLine(entry: ResumeEntry, now: number, branch: string, sizeBytes: number): string {
@@ -126,6 +148,19 @@ if (process.env.CLAUDE_RESUME_STORE_SELFTEST) {
 
 	check(displayTitle({ firstMessage: "hi" }) === "hi", "title is the session's first message (measured)");
 	check(displayTitle({ firstMessage: "" }) === "(no messages)", "an empty session gets a placeholder title, not measured live but never left blank");
+	check(displayTitle({ firstMessage: "fix\n\n  the\tbug" }) === "fix the bug", "a multi-line first message is one title row (a row holding a newline broke the frame, 2026-10-01 screenshot)");
+	check(
+		displayTitle({ firstMessage: "<system-reminder>\n# Environment\nYou have been invoked\n</system-reminder>\n<system-reminder>\nmodel\n</system-reminder>\nResearch the harness" }) === "Research the harness",
+		"injected system-reminder blocks are not the title (sessions 2026-09-30T15-35-01-* start with four of them)",
+	);
+
+	check(isSubagentSession({ name: "general-purpose#a9353f6f", parentSessionPath: "p.jsonl" }), "a subagent's own session (parent + <type>#<id> name, 68 of 175 in --C--TimeBlock--) is not a conversation to resume");
+	check(!isSubagentSession({ name: undefined, parentSessionPath: "p.jsonl" }), "a fork the user made keeps its place in the list");
+	check(!isSubagentSession({ name: "general-purpose#a9353f6f", parentSessionPath: undefined }), "a root session is listed whatever its name");
+
+	check(visibleEntryCount(8) === 3 && visibleEntryCount(9) === 3 && visibleEntryCount(11) === 4, "an entry is two rows plus a gap, the last one needs no gap");
+	check(visibleEntryCount(0) === 1, "the selected entry is always drawn");
+	check(windowStart(0, 2, 3) === 0 && windowStart(0, 3, 3) === 1 && windowStart(4, 2, 3) === 2, "the window moves only when the selection leaves it");
 
 	const entry: ResumeEntry = { path: "p", cwd: "C:\\work", created: new Date(now), modified: new Date(now - 3 * HOUR), messageCount: 1, firstMessage: "hi", allMessagesText: "hi" };
 	check(metaLine(entry, now, "HEAD", 412365) === "3 hours ago \xB7 HEAD \xB7 402.7KB \xB7 C:\\work", "meta line field order: time, branch, size, cwd (measured)");
