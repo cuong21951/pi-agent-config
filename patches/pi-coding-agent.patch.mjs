@@ -291,6 +291,10 @@ const EDITS = [
 		"function loadNativeModifiersHelper(){if(nativeModifiersHelper!==void 0)return nativeModifiersHelper??void 0;nativeModifiersHelper=null;",
 		"function loadNativeModifiersHelper(){if(nativeModifiersHelper!==void 0)return nativeModifiersHelper??void 0;nativeModifiersHelper=null;if(process.env.PI_TUI_NO_NATIVE_MODIFIERS)return;",
 	],
+	[
+		"logRedraw(`clearOnShrink (maxLinesRendered=${this.maxLinesRendered})`),fullRender(!0);return}",
+		"logRedraw(`clearOnShrink (maxLinesRendered=${this.maxLinesRendered})`),fullRender(!0);return}if(newLines.length<this.previousLines.length&&this.previousLines.some((line,i)=>i<prevViewportTop&&line!==newLines[i])){logRedraw(`shrink changed scrollback (viewportTop=${prevViewportTop})`),fullRender(!0);return}",
+	],
 ];
 
 const check = process.argv.includes("--check");
