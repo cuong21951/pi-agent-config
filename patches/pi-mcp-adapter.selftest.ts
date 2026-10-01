@@ -403,4 +403,22 @@ function runResult(resultRenderer, result, options, context, theme = plainTheme)
   }
 }
 
+{
+  const { createJsonSchemaValidator } = await jiti.import(path.join(here, "../npm/node_modules/pi-mcp-adapter/json-schema-validator.ts"));
+  const printed = [];
+  const original = { warn: console.warn, log: console.log, error: console.error };
+  console.warn = console.log = console.error = (...args) => printed.push(args.join(" "));
+  try {
+    const rustSchema = { type: "object", properties: { delivered_count: { type: "integer", format: "uint32" }, frame: { type: "integer", format: "uint64" } } };
+    const provider = createJsonSchemaValidator();
+    for (const schema of [rustSchema, { $schema: "http://json-schema.org/draft-07/schema#", ...rustSchema }]) {
+      assert.equal(provider.getValidator(schema)({ delivered_count: 1, frame: 2 }).valid, true, "a schema with an unknown format still validates");
+    }
+  } finally {
+    Object.assign(console, original);
+  }
+  assert.deepEqual(printed, [], "Ajv never writes unknown-format warnings to the terminal, they land on top of the TUI");
+  console.log("PASS: unknown schema formats (uint32/uint64 from cua-computer-use) print nothing");
+}
+
 console.log("\nAll selftest assertions passed.");

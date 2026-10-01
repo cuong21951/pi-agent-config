@@ -1502,3 +1502,22 @@
      };
    }
  
+--- a/json-schema-validator.ts
++++ b/json-schema-validator.ts
+@@ -43,7 +43,7 @@
+       if (dialect.status === "unstamped" || DRAFT_2020_12_SCHEMA_URIS.has(dialect.uri)) {
+         draft2020Validator ??= (() => {
+           const Ajv2020 = Ajv2020Import as unknown as typeof Ajv;
+-          const ajv = new Ajv2020({ strict: false, allErrors: true });
++          const ajv = new Ajv2020({ strict: false, allErrors: true, logger: false });
+           addFormats(ajv);
+           return new AjvJsonSchemaValidator(ajv);
+         })();
+@@ -59,6 +59,7 @@
+           validateFormats: true,
+           validateSchema: false,
+           allErrors: true,
++          logger: false,
+         });
+         addFormats(ajv);
+         return new AjvJsonSchemaValidator(ajv);
