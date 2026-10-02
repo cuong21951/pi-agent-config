@@ -295,6 +295,18 @@ const EDITS = [
 		"logRedraw(`clearOnShrink (maxLinesRendered=${this.maxLinesRendered})`),fullRender(!0);return}",
 		"logRedraw(`clearOnShrink (maxLinesRendered=${this.maxLinesRendered})`),fullRender(!0);return}if(newLines.length<this.previousLines.length&&this.previousLines.some((line,i)=>i<prevViewportTop&&line!==newLines[i])){logRedraw(`shrink changed scrollback (viewportTop=${prevViewportTop})`),fullRender(!0);return}",
 	],
+	[
+		"let bufferLength=Math.max(height,newLines.length);this.previousViewportTop=Math.max(0,bufferLength-height),this.positionHardwareCursor(cursorPos,newLines.length),",
+		"let bufferLength=Math.max(height,newLines.length);this.previousViewportTop=Math.max(0,bufferLength-height),this.claudeScrolledOff=this.previousViewportTop,this.positionHardwareCursor(cursorPos,newLines.length),",
+	],
+	[
+		"this.previousViewportTop=Math.max(prevViewportTop,finalCursorRow-height+1),",
+		"this.previousViewportTop=Math.max(prevViewportTop,finalCursorRow-height+1),this.claudeScrolledOff=Math.max(this.claudeScrolledOff??0,this.previousViewportTop),",
+	],
+	[
+		'for(let i=0;i<maxLines;i++){let oldLine=i<this.previousLines.length?this.previousLines[i]:"",newLine=i<newLines.length?newLines[i]:"";',
+		'let scrolledOff=this.claudeScrolledOff??0;if(reanchorTop>prevViewportTop&&prevViewportTop<scrolledOff&&!this.hasOverlayEntries&&!newLines.some(isImageLine)&&!this.previousLines.some((line,i)=>i<prevViewportTop&&line!==newLines[i])){let top=Math.min(reanchorTop,scrolledOff);logRedraw(`grow re-anchored viewport (${prevViewportTop} -> ${top})`);let out=new BoundedTerminalWriter(data=>this.terminal.write(data));out.append("\\x1B[?2026h");let up=hardwareCursorRow-prevViewportTop;up>0?out.append(`\\x1B[${up}A`):up<0&&out.append(`\\x1B[${-up}B`);out.append("\\r");for(let row=0;row<height;row++){row>0&&out.append("\\x1B[1B\\r");out.append("\\x1B[2K"),out.append(newLines[top+row])}out.append("\\x1B[?2026l"),out.flush();prevViewportTop=viewportTop=top,hardwareCursorRow=top+height-1;this.hardwareCursorRow=hardwareCursorRow,this.previousViewportTop=top,this.maxLinesRendered=Math.max(this.maxLinesRendered,newLines.length),this.previousLines=newLines.slice(0,top+height)}for(let i=0;i<maxLines;i++){let oldLine=i<this.previousLines.length?this.previousLines[i]:"",newLine=i<newLines.length?newLines[i]:"";',
+	],
 ];
 
 const check = process.argv.includes("--check");
