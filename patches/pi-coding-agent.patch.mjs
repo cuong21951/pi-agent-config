@@ -339,6 +339,7 @@ const EDITS = [
 		"dock=new VStack([{component:options.pendingMessages,shrink:1,minSize:0},{component:options.status,shrink:1,minSize:0},...options.widgetsAbove===void 0?[]:[{component:options.widgetsAbove,shrink:1,minSize:0}],{component:options.editor,shrink:1,minSize:3},",
 		"dock=new VStack([{component:margin,shrink:1,minSize:0},{component:options.editor,shrink:1,minSize:0},",
 	],
+	["{component:options.footer,shrink:1,minSize:1}])", "{component:options.footer,shrink:1,minSize:0}])"],
 	[
 		"let column=clip.x+Math.floor((availableWidth-textWidth)/2),result=[...screen];",
 		"let column=clip.x+Math.ceil((availableWidth-textWidth)/2),result=[...screen];",
