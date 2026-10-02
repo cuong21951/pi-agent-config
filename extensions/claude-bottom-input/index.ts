@@ -37,17 +37,34 @@ export function inlineDialog(dialogOpen: boolean, modalOpen: boolean): boolean {
 
 export const MODAL_EVENT = "claude-modes:modal";
 
+type StackEntry = { basis?: number | "auto"; grow?: number; shrink?: number };
+
+export function fullscreenStack(inline: boolean): [StackEntry, StackEntry] {
+	return inline ? [{ basis: "auto", grow: 0 }, { shrink: 0 }] : [{ basis: 0, grow: 1 }, { shrink: 1 }];
+}
+
+function dockFullscreen(inline: boolean): void {
+	const entries = (globalThis as { __claudeViewport?: { root: { entries: StackEntry[] } } }).__claudeViewport?.root.entries;
+	if (!entries) return;
+	const [transcript, dock] = fullscreenStack(inline);
+	Object.assign(entries[0], transcript);
+	Object.assign(entries[1], dock);
+}
+
 export default function (pi: ExtensionAPI) {
 	let dialogOpen = false;
 	let modalOpen = false;
 	pi.events.on(MODAL_EVENT, (open) => {
 		modalOpen = open === true;
+		dockFullscreen(inlineDialog(dialogOpen, modalOpen));
 	});
 	pi.on("ui_prompt_start", (event) => {
 		if (event.kind === "custom") dialogOpen = true;
+		dockFullscreen(inlineDialog(dialogOpen, modalOpen));
 	});
 	pi.on("ui_prompt_end", (event) => {
 		if (event.kind === "custom") dialogOpen = false;
+		dockFullscreen(inlineDialog(dialogOpen, modalOpen));
 	});
 	pi.on("session_start", (_event, ctx) => {
 		if (!ctx.hasUI) return;
@@ -57,7 +74,7 @@ export default function (pi: ExtensionAPI) {
 			let lastRows = 0;
 			return {
 				render(width: number) {
-					if (measuring || tui.mode !== "regular") return [];
+					if (measuring) return [];
 					if (inlineDialog(dialogOpen, modalOpen)) {
 						lastRows = 0;
 						measuring = true;
@@ -68,6 +85,7 @@ export default function (pi: ExtensionAPI) {
 							measuring = false;
 						}
 					}
+					if (tui.mode !== "regular") return [];
 					measuring = true;
 					try {
 						const rows = tui.terminal.rows;
@@ -115,5 +133,7 @@ if (process.env.CLAUDE_BOTTOM_INPUT_SELFTEST) {
 	check(inlineDialog(true, false), "a permission or question dialog sits under the transcript");
 	check(!inlineDialog(true, true), "a plan-mode modal keeps the bottom-anchored pad, like Claude's modal pane");
 	check(!inlineDialog(false, false), "no dialog, no dialog pad");
+	check(fullscreenStack(true)[0].basis === "auto" && fullscreenStack(true)[0].grow === 0 && fullscreenStack(true)[1].shrink === 0, "fullscreen: under a dialog the transcript takes only its own rows and the dock keeps all of its rows, so the dialog sits right below the transcript (Claude 2.1.283)");
+	check(fullscreenStack(false)[0].basis === 0 && fullscreenStack(false)[0].grow === 1 && fullscreenStack(false)[1].shrink === 1, "fullscreen: without a dialog the transcript fills the pane and the prompt stays on the bottom rows");
 	console.log("\nAll claude-bottom-input checks passed.");
 }

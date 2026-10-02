@@ -11,7 +11,8 @@ LIVE = ["task", "interrupt", "mcp", "skill", "question", "question-multi", "ques
         "m4b-unknown-command", "m4b-typo-command", "m4b-narrow-footer", "m2-permission-decline",
         "m4c-long-line", "m4d-bash-rows", "m5a-parallel-fail", "m4d-decline-edit", "m6c-resume-empty",
         "m6a-bg", "m6a-timeout", "m6a-ctrlb", "m6a-stop", "m6a-details", "m6f-view",
-        "m6g-notify", "m6g-types", "m6g-sendrun", "m6g-resume", "m6g-stop", "m6g-cap", "m6g-fable", "m6g-fork", "m6g-nest", "m6g-nofork", "m6j-input-clear"]
+        "m6g-notify", "m6g-types", "m6g-sendrun", "m6g-resume", "m6g-stop", "m6g-cap", "m6g-fable", "m6g-fork", "m6g-nest", "m6g-nofork", "m6j-input-clear",
+        "screen-newmsg", "screen-size-132x60", "screen-size-80x24", "screen-size-60x40", "screen-resize-tool"]
 REPLAYED = {
     "thinking.jsonl": "Thinking sample.",
     "markdown.jsonl": "Show the markdown sample.",
@@ -25,8 +26,10 @@ REPLAYED = {
     "m5b-context-low.jsonl": "keep going",
 }
 REPLAYED_SCENARIOS = {
-    "m6b-todos.jsonl": "m6b-todos",
-    "m6b-midturn.jsonl": "m6b-midturn",
+    "m6b-todos": "m6b-todos.jsonl",
+    "m6b-midturn": "m6b-midturn.jsonl",
+    "screen-scroll": "markdown.jsonl",
+    "screen-sticky": "markdown.jsonl",
 }
 
 ap = argparse.ArgumentParser(description="Run every parity scenario (live pi on Copilot, Claude replaying it) and every replay fixture, diff each, exit 0 only when all are clean.")
@@ -42,7 +45,7 @@ def cases():
         yield name, [] if name == "task" else ["--scenario", name]
     for file, prompt in REPLAYED.items():
         yield file.removesuffix(".jsonl") + "-replay", ["--replay", os.path.join(REPLAYS, file), "--prompt", prompt]
-    for file, scenario in REPLAYED_SCENARIOS.items():
+    for scenario, file in REPLAYED_SCENARIOS.items():
         yield scenario + "-replay", ["--replay", os.path.join(REPLAYS, file), "--scenario", scenario]
 
 

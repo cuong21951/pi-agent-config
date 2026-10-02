@@ -307,6 +307,42 @@ const EDITS = [
 		'for(let i=0;i<maxLines;i++){let oldLine=i<this.previousLines.length?this.previousLines[i]:"",newLine=i<newLines.length?newLines[i]:"";',
 		'let scrolledOff=this.claudeScrolledOff??0;if(reanchorTop>prevViewportTop&&prevViewportTop<scrolledOff&&!this.hasOverlayEntries&&!newLines.some(isImageLine)&&!this.previousLines.some((line,i)=>i<prevViewportTop&&line!==newLines[i])){let top=Math.min(reanchorTop,scrolledOff);logRedraw(`grow re-anchored viewport (${prevViewportTop} -> ${top})`);let out=new BoundedTerminalWriter(data=>this.terminal.write(data));out.append("\\x1B[?2026h");let up=hardwareCursorRow-prevViewportTop;up>0?out.append(`\\x1B[${up}A`):up<0&&out.append(`\\x1B[${-up}B`);out.append("\\r");for(let row=0;row<height;row++){row>0&&out.append("\\x1B[1B\\r");out.append("\\x1B[2K"),out.append(newLines[top+row])}out.append("\\x1B[?2026l"),out.flush();prevViewportTop=viewportTop=top,hardwareCursorRow=top+height-1;this.hardwareCursorRow=hardwareCursorRow,this.previousViewportTop=top,this.maxLinesRendered=Math.max(this.maxLinesRendered,newLines.length),this.previousLines=newLines.slice(0,top+height)}for(let i=0;i<maxLines;i++){let oldLine=i<this.previousLines.length?this.previousLines[i]:"",newLine=i<newLines.length?newLines[i]:"";',
 	],
+	[
+		'if(keybindings.matches(data,"tui.altScreen.pageUp"))return isRelease||this.scrollBy(-Math.max(1,this.getPrimaryScrollView().viewportHeight-PAGE_SCROLL_OVERLAP)),{consume:!0};if(keybindings.matches(data,"tui.altScreen.pageDown"))return isRelease||this.scrollBy(Math.max(1,this.getPrimaryScrollView().viewportHeight-PAGE_SCROLL_OVERLAP)),{consume:!0};',
+		'if(keybindings.matches(data,"tui.altScreen.pageUp"))return isRelease||this.scrollBy(-Math.max(1,Math.floor((this.getPrimaryScrollView().viewportHeight-1)/2))),{consume:!0};if(keybindings.matches(data,"tui.altScreen.pageDown"))return isRelease||this.scrollBy(Math.max(1,Math.floor((this.getPrimaryScrollView().viewportHeight-1)/2))),{consume:!0};',
+	],
+	[
+		"routeWheel(event){let remaining=event.direction*this.getWheelScrollLines(event.button),seen=new Set;",
+		"claudeWheelLines(direction){let state=this.claudeWheel??={time:0,mult:3,dir:0,frac:0},now=Date.now(),gap=now-state.time,same=direction===state.dir;if(state.time=now,state.dir=direction,same&&gap<5)return 1;if(!same||gap>500)state.mult=3,state.frac=0;else{let decay=Math.pow(.5,gap/150);state.mult=Math.min(gap>=80?3:36,1+(state.mult-1)*decay+7*decay)}let total=state.mult+state.frac,lines=Math.floor(total);return state.frac=total-lines,lines}routeWheel(event){let remaining=event.direction*this.claudeWheelLines(event.direction),seen=new Set;",
+	],
+	[
+		'text=truncateToWidth(this.scrollToEndIndicator(),availableWidth,"")',
+		'text=truncateToWidth(this.scrollToEndIndicator(availableWidth),availableWidth,"")',
+	],
+	[
+		'scrollToEndIndicator:()=>{let shortcut=keyDisplayText("tui.altScreen.bottom"),',
+		'scrollToEndIndicator:width=>{if(globalThis.__claudeScrollPill)return globalThis.__claudeScrollPill(width);let shortcut=keyDisplayText("tui.altScreen.bottom"),',
+	],
+	[
+		"screen=this.compositeScrollToEndIndicator(screen,nextLayout,width),",
+		"screen=this.compositeScrollToEndIndicator(screen,nextLayout,width),screen=globalThis.__claudeStickyPrompt?.(screen,nextLayout.primaryScrollView??this.implicitScrollView,getScrollViewBox(nextLayout,nextLayout.primaryScrollView??this.implicitScrollView),width)??screen,",
+	],
+	[
+		'return{transcript,root:new VStack([{component:transcript,basis:0,grow:1,shrink:1,minSize:1},{component:dock,basis:"auto",grow:0,shrink:1,minSize:1}])}',
+		'return globalThis.__claudeViewport={transcript,root:root=new VStack([{component:transcript,basis:0,grow:1,shrink:1,minSize:1},{component:dock,basis:"auto",grow:0,shrink:1,minSize:1}])}',
+	],
+	[
+		'function createChatViewport(options){let transcript=new ScrollView(options.document,{follow:"end",',
+		'function createChatViewport(options){let above=new Container,fillRows=0,aboveRows,root,rows=width=>{if(aboveRows?.width===width)return aboveRows.lines;fillRows=0;let lines=above.render(width),viewportHeight=transcript.viewportHeight;fillRows=root.entries[0].grow?Math.max(0,viewportHeight+1-lines.length):0,fillRows&&(lines=above.render(width));queueMicrotask(()=>{aboveRows=void 0,transcript.viewportHeight!==viewportHeight&&transcript.requestRenderCallback?.()});return(aboveRows={width,lines}).lines};above.addChild(options.document),above.addChild({render:()=>Array(fillRows).fill(""),invalidate(){}});for(let component of[options.pendingMessages,options.status,...options.widgetsAbove===void 0?[]:[options.widgetsAbove]])above.addChild(component);let content={render:width=>rows(width).slice(0,-1),handleMouse:event=>above.handleMouse(event),invalidate:()=>above.invalidate()},margin={render:width=>rows(width).slice(-1),invalidate(){}},transcript=new ScrollView(content,{follow:"end",',
+	],
+	[
+		"dock=new VStack([{component:options.pendingMessages,shrink:1,minSize:0},{component:options.status,shrink:1,minSize:0},...options.widgetsAbove===void 0?[]:[{component:options.widgetsAbove,shrink:1,minSize:0}],{component:options.editor,shrink:1,minSize:3},",
+		"dock=new VStack([{component:margin,shrink:1,minSize:0},{component:options.editor,shrink:1,minSize:0},",
+	],
+	[
+		"let column=clip.x+Math.floor((availableWidth-textWidth)/2),result=[...screen];",
+		"let column=clip.x+Math.ceil((availableWidth-textWidth)/2),result=[...screen];",
+	],
 ];
 
 const check = process.argv.includes("--check");

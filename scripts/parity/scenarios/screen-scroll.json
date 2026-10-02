@@ -1,0 +1,32 @@
+{
+ "prompt": "Show the markdown sample.",
+ "rows": 24,
+ "steps": [
+  {"sleep": 2},
+  {"snap": "bottom"},
+  {"keys": "\u001b[5~"},
+  {"sleep": 1},
+  {"snap": "pgup"},
+  {"keys": "\u001b[5~"},
+  {"sleep": 1},
+  {"snap": "pgup2"},
+  {"keys": "\u001b[6~"},
+  {"sleep": 1},
+  {"snap": "pgdn"},
+  {"keys": "\u001b[1;5H"},
+  {"sleep": 1},
+  {"keys": "\u001b[1;5F"},
+  {"sleep": 1},
+  {"snap": "end"},
+  {"keys": "\u001b[<64;20;8M"},
+  {"sleep": 1},
+  {"snap": "wheel1"},
+  {"keys": "\u001b[<64;20;8M\u001b[<64;20;8M"},
+  {"sleep": 1},
+  {"snap": "wheel3"},
+  {"keys": "x"},
+  {"sleep": 1},
+  {"snap": "typed"}
+ ],
+ "end": "."
+}

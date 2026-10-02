@@ -59,15 +59,6 @@ ROWS = [
 ]
 
 
-DETAILED = re.compile(r"^  Showing detailed transcript · ctrl\+o to toggle")
-DETAILED_NAME = "detailed transcript viewport: Claude's ctrl+o transcript scrolls inside its own screen (g/PgUp reach the prompt, measured m5d-measure-bash-top), pi's lies in terminal scrollback (M6b), so only the visible screen is compared"
-SCROLLBACK_NAME = "terminal scrollback (M6b): Claude keeps the overflow off the terminal's scrollback (pyte history stays empty), pi writes it there, so only the visible screen is compared"
-
-
-def detailed(lines):
-    return any(DETAILED.match(line["text"]) for line in lines[-3:])
-
-
 TIPS_NAME = ROWS[0][0]
 
 
@@ -221,8 +212,9 @@ applied = set()
 for screen, claude_name, pi_name in screens:
     c_raw, p_raw = raw(claude_name), raw(pi_name)
     viewport = len(c_raw) if len(p_raw) > len(c_raw) else None
-    if viewport:
-        applied.add(DETAILED_NAME if detailed(c_raw) and detailed(p_raw) else SCROLLBACK_NAME)
+    if len(p_raw) != len(c_raw):
+        total += 1
+        report += [f"## {screen} · scrollback: Claude's capture is {len(c_raw)} rows, pi's {len(p_raw)} (both keep the overflow inside the screen, none in terminal scrollback)", ""]
     if gap is not None:
         gaps = (gap_above_box(c_raw), gap_above_box(p_raw))
         if gaps != (gap, gap):

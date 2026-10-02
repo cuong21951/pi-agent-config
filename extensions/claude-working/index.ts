@@ -346,15 +346,11 @@ export default function claudeWorking(pi: ExtensionAPI) {
 	};
 	pi.on("thinking_level_select", (event, ctx) => noteEffort(event.level, ctx.model?.id));
 	pi.on("model_select", (event, ctx) => noteEffort(ctx.thinkingLevel ?? "off", event.model?.id));
-	pi.on("ui_prompt_start", (event, ctx) => {
-		if (event.kind !== "custom") return;
-		dialogOpen = true;
-		if (ctx.hasUI) ctx.ui.setWorkingVisible(false);
+	pi.on("ui_prompt_start", (event) => {
+		if (event.kind === "custom") dialogOpen = true;
 	});
-	pi.on("ui_prompt_end", (event, ctx) => {
-		if (event.kind !== "custom") return;
-		dialogOpen = false;
-		if (ctx.hasUI) ctx.ui.setWorkingVisible(true);
+	pi.on("ui_prompt_end", (event) => {
+		if (event.kind === "custom") dialogOpen = false;
 	});
 	pi.on("session_start", (_event, ctx) => {
 		effortShown = effortText(ctx.thinkingLevel ?? "off", ctx.model?.id);
@@ -362,6 +358,7 @@ export default function claudeWorking(pi: ExtensionAPI) {
 		if (!ctx.hasUI) return;
 		ctx.ui.setWorkingIndicator({ frames: [""], intervalMs: TICK_MS });
 		ctx.ui.setWorkingMessage("");
+		ctx.ui.setWorkingVisible(false);
 		ctx.ui.setWidget("claude-working", (tui, theme) => {
 			requestRender = () => tui.requestRender();
 			const viewVerbs = new Map<string, string>();
@@ -595,7 +592,7 @@ if (process.env.CLAUDE_WORKING_SELFTEST) {
 	handlers.ui_prompt_start({ kind: "custom" }, ctx);
 	handlers.ui_prompt_end({ kind: "custom" }, ctx);
 	handlers.ui_prompt_start({ kind: "select" }, ctx);
-	check(workingVisible.join("|") === "false|true", "a permission or question dialog hides the built-in working loader row so it leaves no blank line of its own; a select/input dialog (unpatched editor slot) does not touch it");
+	check(workingVisible.join("|") === "false", "the built-in working loader stays hidden from session start: its two blank rows sat between the transcript and the spinner (measured 2026-10-02 at 16 rows: three blank rows above the spinner where Claude 2.1.283 has one); dialogs no longer toggle it");
 	check(!firstPaint[0]?.includes("("), "a fresh turn's first paint has no kind, no tokens and elapsedMs 0: no parenthesised status at all, matching Claude (measured: 1.5 s in Claude showed the bare verb, pi showed '(esc to interrupt)')");
 	handlers.agent_end({ messages: [{ role: "assistant", stopReason: "error", errorMessage: "Request timed out." }] }, ctx);
 	const rendersBefore = renders;
