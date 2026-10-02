@@ -61,7 +61,9 @@
   "quietStartup": true,
   "treeFilterMode": "no-tools",
   "outputPad": 1,
-  "tuiMode": "regular",
+  "tuiMode": "fullscreen",
+  "fullscreenScrollbar": "hidden",
+  "fullscreenExitOutput": "resume-hint",
   "markdown": {
     "codeBlockIndent": ""
   }

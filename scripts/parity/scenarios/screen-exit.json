@@ -1,0 +1,13 @@
+{
+ "prompt": "Reply with exactly: first. No other text.",
+ "rows": 24,
+ "steps": [
+  {"until": "✻ \\S+ for [^\\n]*· done", "timeout": 90},
+  {"sleep": 1.5},
+  {"keys": "\u0003"},
+  {"sleep": 0.3},
+  {"keys": "\u0003"},
+  {"sleep": 3}
+ ],
+ "end": "."
+}

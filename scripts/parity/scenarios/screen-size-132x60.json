@@ -1,0 +1,64 @@
+{
+ "prompt": "Do not use any tool. Write exactly fourteen paragraphs about lighthouses, separated by blank lines. Each paragraph has four long sentences.",
+ "rows": 60,
+ "cols": 132,
+ "steps": [
+  {
+   "until": "(?m)^● \\S",
+   "timeout": 120
+  },
+  {
+   "resize": [
+    50,
+    110
+   ]
+  },
+  {
+   "until": "✻ \\S+ for [^\n]*· done",
+   "timeout": 240
+  },
+  {
+   "sleep": 2
+  },
+  {
+   "snap": "done"
+  },
+  {
+   "keys": "\u001b[5~"
+  },
+  {
+   "sleep": 1
+  },
+  {
+   "keys": "\u001b[5~"
+  },
+  {
+   "sleep": 1
+  },
+  {
+   "snap": "scrolled"
+  },
+  {
+   "resize": [
+    40,
+    120
+   ]
+  },
+  {
+   "sleep": 2
+  },
+  {
+   "snap": "resized-scrolled"
+  },
+  {
+   "keys": "\u001b[1;5F"
+  },
+  {
+   "sleep": 1
+  },
+  {
+   "snap": "bottom"
+  }
+ ],
+ "end": "."
+}
