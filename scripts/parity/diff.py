@@ -52,7 +52,7 @@ ROWS = [
      re.compile(r"^  ⎿[  ]{2}Tip: "), None, re.compile(r"^ {5}\S")),
     ("out-of-scope model warning: the harness pins Haiku 4.5, which is outside Cuong's enabledModels",
      None, re.compile(r"^ Warning: Agent \".*\" using out-of-scope model "), re.compile(r"^\s*$")),
-    ("slash-menu inventory: Claude's built-ins (/code-review, /doctor) vs Cuong's pi skills fuzzy-matching the same query",
+    ("slash-menu inventory: Claude's built-ins (/code-review, /doctor) vs Cuong's pi skills fuzzy-matching the same query; the blank rows above an open menu follow its height and are not compared",
      re.compile(r"^  /(?:code-review|doctor) "), re.compile(r"^  /skill:\S+ "), re.compile(r"^ {32}\S")),
     ("session-start notice: each harness's own SessionStart line (Claude's agents-md hook, pi's Ponytail loader), drawn after the history on a resume",
      re.compile(r"^● agents-md: "), re.compile(r"^● Ponytail loaded: "), None),
@@ -95,7 +95,20 @@ def load(name, side, applied, keep=None):
                 kept.insert(max(0, len(kept) - 1), {"text": "", "runs": []})
             continue
         kept.append(line)
-    return kept
+    return without_menu_filler(kept)
+
+
+MENU_ROW = re.compile(r"^  /[a-z]")
+
+
+def without_menu_filler(lines):
+    menu = next((i for i, line in enumerate(lines) if MENU_ROW.match(line["text"])), None)
+    if menu is None:
+        return lines
+    top = menu
+    while top > 0 and not lines[top - 1]["text"].strip():
+        top -= 1
+    return lines[:top] + lines[menu:]
 
 
 def normalise(text, transcript=False):
