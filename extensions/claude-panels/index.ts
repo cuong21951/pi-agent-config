@@ -34,7 +34,7 @@ export default function (pi: ExtensionAPI) {
 		}
 	});
 
-	registerContextPanel(pi);
+	registerContextPanel(pi, () => mcpSnapshot);
 	registerStatusPanel(pi, () => mcpSnapshot);
 	registerUsagePanel(pi, tracker, () => sessionStartMs);
 }

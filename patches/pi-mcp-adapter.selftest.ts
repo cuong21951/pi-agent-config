@@ -266,6 +266,7 @@ function runResult(resultRenderer, result, options, context, theme = plainTheme)
   const { createMcpPanel } = panelMod;
   const cacheMod = await jiti.import(path.join(here, "../npm/node_modules/pi-mcp-adapter/metadata-cache.ts"));
   const { computeServerHash } = cacheMod;
+  const { createMcpPanelTheme } = await jiti.import(path.join(here, "../npm/node_modules/pi-mcp-adapter/mcp-panel-theme.ts"));
 
   const trimmedRows = (panel, width = 120) => panel.render(width).map((line) => line.replace(/\s+$/, ""));
 
@@ -298,13 +299,15 @@ function runResult(resultRenderer, result, options, context, theme = plainTheme)
     };
     const tui = { requestRender() {} };
     const state = { done: undefined };
-    const panel = createMcpPanel(config, cache, provenance, callbacks, tui, (result) => { state.done = result; });
+    const panel = createMcpPanel(config, cache, provenance, callbacks, tui, (result) => { state.done = result; }, { dynamic: overrides.dynamic === true });
     return { panel, state, setConnectionStatus: (next) => { connectionStatus = next; } };
   }
 
   {
     const { panel } = buildParityPanel();
+    const rule = "▔".repeat(120);
     assert.deepEqual(trimmedRows(panel), [
+      rule,
       "   Manage MCP servers",
       "   1 server",
       "",
@@ -317,6 +320,7 @@ function runResult(resultRenderer, result, options, context, theme = plainTheme)
 
     panel.handleInput("\r");
     assert.deepEqual(trimmedRows(panel), [
+      rule,
       "   Parity MCP Server",
       "",
       "   Status:           ✔ connected",
@@ -333,17 +337,19 @@ function runResult(resultRenderer, result, options, context, theme = plainTheme)
 
     panel.handleInput("\r");
     assert.deepEqual(trimmedRows(panel), [
+      rule,
       "   Tools for parity",
       "   2 tools",
       "",
-      "   ❯ lookup — Look up the value stored under a key.",
-      "     explode — Always fails.",
+      "   ❯ lookup",
+      "     explode",
       "",
-      "   ↑/↓ to navigate · Enter to select · Esc to back · space to toggle direct",
-    ], "tools screen matches Claude's captured tools list (plus pi's own direct-tool marker)");
+      "   ↑/↓ to navigate · Enter to select · Esc to back",
+    ], "tools screen matches Claude 2.1.289's bare tool names and its hint, with no description and no direct-tool hint (m6e-mcp-panel)");
 
     panel.handleInput("\r");
     assert.deepEqual(trimmedRows(panel), [
+      rule,
       "   lookup",
       "   parity",
       "",
@@ -394,6 +400,32 @@ function runResult(resultRenderer, result, options, context, theme = plainTheme)
     panel.handleInput("\r");
     assert.ok(state.done && state.done.disabledChanges.get("parity") === true, "Keep & Close (the default) saves the disabled change");
     console.log("PASS: server actions Enable/Disable stays reachable and wires into the existing dirty/save flow");
+  }
+
+  {
+    const { panel } = buildParityPanel({ dynamic: true });
+    const rows = trimmedRows(panel);
+    assert.ok(rows.includes("     Built-in MCPs (always available)"), "a server from the --mcp-config flag groups under Claude's `Built-in MCPs (always available)` (measured 2.1.289 m6e-mcp-panel)");
+    panel.handleInput("\r");
+    assert.ok(trimmedRows(panel).includes("   Config location:  Dynamically configured"), "and its Config location reads `Dynamically configured`, not the file path");
+    console.log("PASS: --mcp-config servers read as Claude's dynamic scope");
+  }
+
+  {
+    const { panel } = buildParityPanel({ definition: { directTools: ["lookup"] } });
+    panel.handleInput("\r");
+    panel.handleInput("\r");
+    assert.ok(trimmedRows(panel).includes("   ↑/↓ to navigate · Enter to select · Esc to back · space to toggle direct"), "a server with direct tools keeps pi's `space to toggle direct` hint, which Claude has no counterpart for");
+    console.log("PASS: direct-tool hint only when the server has direct tools");
+  }
+
+  {
+    const theme = createMcpPanelTheme({ fg: (_role, text) => text, bold: (text) => text, italic: (text) => text, inverse: (text) => text });
+    assert.equal(theme.title("t"), "\x1b[38;2;153;204;255mt\x1b[39m", "titles are Claude's 99ccff, not the theme accent 87afd7");
+    assert.equal(theme.selected("t"), "\x1b[38;2;153;204;255mt\x1b[39m", "the selection arrow and name are 99ccff");
+    assert.equal(theme.rule("▔"), "\x1b[38;2;153;204;255m▔\x1b[39m", "the modal's upper rule is 99ccff");
+    assert.equal(theme.value("tools"), "\x1b[38;2;255;255;255mtools\x1b[39m", "the Capabilities value is ffffff");
+    console.log("PASS: panel colours (m6e-mcp-panel colour runs)");
   }
 
   {

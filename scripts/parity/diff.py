@@ -20,6 +20,16 @@ VOLATILE = [
     (re.compile(r"\b\d{2}:\d{2} [AP]M(?= \S+$)"), "<clock>"),
     (re.compile(r"\ba[0-9a-f]{16}\b"), "<agent-id>"),
     (re.compile(r"(?<=Resuming agent )a[0-9a-f]{6}\b"), "<agent-id7>"),
+    (re.compile(r"^(   (?:Version|Session name|Session ID|Session kind|cwd|Model|MCP servers|Setting sources):) +"), r"\1 "),
+    (re.compile(r"^(   Version:) \S+$"), r"\1 <version>"),
+    (re.compile(r"^(   Session ID:) [0-9a-f-]{36}$"), r"\1 <session-id>"),
+    (re.compile(r"^(   Model:) .+$"), r"\1 <model>"),
+    (GRID := re.compile(r"^( *)(?:[⛁⛀⛶⛝] ){9}[⛁⛀⛶⛝]"), r"\1<grid>"),
+    (re.compile(r"^(.*?)\d[\d.]*k?(/\d+k tokens \()\d+(%\)$)"), r"\1<n>\2<p>\3"),
+    (re.compile(r"(: )\d[\d.]*k?( tokens \()\d+\.\d(%\)$)"), r"\1<n>\2<p>\3"),
+    (re.compile(r"(Free space: )\d[\d.]*k?( \()\d+\.\d(%\)$)"), r"\1<n>\2<p>\3"),
+    (re.compile(r"(└ )\d+( (?:files?|skills?|tools?) · )\d[\d.]*k?( tokens$)"), r"\1<n>\2<n>\3"),
+    (re.compile(r"(?<=<grid>   )(?![⛁⛶⛝<]|Estimated)\S.*$"), "<model>"),
 ]
 
 BLINK = re.compile(r"^[● ] (?=[^\s⎿].*(?:…| · (?:\d+[hm] )*\d+s)$)")
@@ -44,6 +54,8 @@ ANYWHERE = [
      re.compile(r"[^\s(]*(?:\.claude|claude-config)[\\/]plans[\\/][\w.-]+\.md"), re.compile(r"[^\s(]*\.pi[\\/](?:sandbox[\\/])?agent[\\/]plans[\\/][\w.-]+\.md")),
     ("plugin update notice: Claude's marketplace auto-update toast; pi has no plugin marketplace",
      re.compile(r"(?<=▔) Plugin updated: [^▔]* · Run /reload-plugins to apply (?=▔)"), None),
+    ("/mcp tool detail Full name: Claude names a tool mcp__<server>__<tool>; pi registers and calls the same tool as <server>_<tool> (the adapter's toolPrefix \"server\"), which is its real name and the one the model sees",
+     re.compile(r"(?<=^   Full name: )mcp__\w+__\w+$"), re.compile(r"(?<=^   Full name: )\w+_\w+$")),
 ]
 
 
@@ -52,6 +64,14 @@ ROWS = [
      re.compile(r"^  ⎿[  ]{2}Tip: "), None, re.compile(r"^ {5}\S")),
     ("out-of-scope model warning: the harness pins Haiku 4.5, which is outside Cuong's enabledModels",
      None, re.compile(r"^ Warning: Agent \".*\" using out-of-scope model "), re.compile(r"^\s*$")),
+    ("/status account rows: Claude also lists its cross-session bus address (Peer address), this harness's mock API (Auth token, Anthropic base URL) and Anthropic account services (Managed settings (remote), Organization policy, Auto mode server); pi has no bus, no Anthropic account and no managed settings",
+     re.compile(r"^   (?:Peer address|Auth token|Anthropic base URL|Managed settings \(remote\)|Organization policy|Auto mode server):"), None, None),
+    ("/status Provider row: pi runs many providers and names the active one, which has no counterpart among Claude's account rows",
+     None, re.compile(r"^   Provider:"), None),
+    ("/usage Provider balances: Claude's Session block is followed by nothing here (its plan-usage bars need an Anthropic subscription); pi shows its own provider balances in that slot",
+     None, re.compile(r"^   Provider balances$"), re.compile(r"^(?:\s*|   (?:no provider balance sources configured|[a-z][\w-]* (?:\$[\d.]+|\?)))$")),
+    ("/context Messages row: Claude counts its own local-command results (/status, /usage) as 1k tokens of messages before any model turn; pi keeps no message for a slash command, so a fresh pi session has none",
+     re.compile(r"^ {27}⛁ Messages: "), None, None),
 ]
 
 
@@ -179,6 +199,9 @@ def styles(line):
         chars += [(ch, fg, bg, bool(bold), bool(italic), bool(dim)) for ch in text]
     raw = "".join(c[0] for c in chars)
     folded = {i for m in DURATION.finditer(raw) for i in range(m.start() + 1, m.end())}
+    grid = GRID.match(raw)
+    if grid:
+        folded |= set(range(grid.end()))
     return [c for i, c in enumerate(chars) if c[0].strip() and i not in folded]
 
 

@@ -1,12 +1,12 @@
-import { basename } from "node:path";
 import type { ExtensionAPI, ExtensionCommandContext, ExtensionMode } from "@earendil-works/pi-coding-agent";
 import { SettingsManager, VERSION } from "@earendil-works/pi-coding-agent";
 import type { Component, KeybindingsManager, TUI, Theme } from "@earendil-works/pi-tui";
 import { matchesKey } from "@earendil-works/pi-tui";
 import { hex } from "./colors.ts";
-import { TAB_BAR_TABS, tabBarRow } from "./tabs.ts";
+import { TAB_BAR_TABS, openPanel, paneRows, tabBarRow } from "./tabs.ts";
 
-const LABEL_WIDTH = 19;
+const LABEL_GAP = 2;
+const INDENT = "   ";
 
 export interface McpStatusServerLike {
 	status: string;
@@ -42,64 +42,59 @@ export function mcpSummaryLine(counts: McpServerCounts | undefined, paint: (colo
 	return counts.needsAuth > 0 ? `${connected}, ${paint("ffcc00", `${counts.needsAuth} need auth`)} ${hint}` : `${connected} ${hint}`;
 }
 
-export function memoryFilesSummary(paths: string[]): string {
-	if (paths.length === 0) return "No memory files loaded";
-	return `${paths.length} loaded \xB7 ${paths.map((path) => basename(path)).join(", ")}`;
-}
-
-export function labelRow(label: string, value: string, paint: (color: string, text: string) => string, bold: (text: string) => string): string {
-	return `${bold(`${label}:`.padEnd(LABEL_WIDTH))}${value}`;
+export function labelRow(label: string, value: string, width: number, bold: (text: string) => string): string {
+	return `${bold(`${label}:`)}${" ".repeat(width - label.length - 1)}${value}`;
 }
 
 export interface StatusPanelData {
 	version: string;
+	sessionName: string | undefined;
 	sessionId: string;
 	sessionKind: string;
 	cwd: string;
 	provider: string;
 	modelLabel: string;
 	mcpServers: McpServerCounts | undefined;
-	memoryFiles: string;
 	settingsSources: string;
 }
 
 export function statusPanelRows(data: StatusPanelData, width: number, paint: (color: string, text: string) => string, bold: (text: string) => string): string[] {
-	const rows: string[] = [
-		paint("99ccff", "\u2594".repeat(width)),
-		"",
-		`  ${tabBarRow(TAB_BAR_TABS, "Status", paint, bold)}`,
-		"",
-		`  ${labelRow("Version", data.version, paint, bold)}`,
-		`  ${labelRow("Session ID", data.sessionId, paint, bold)}`,
-		`  ${labelRow("Session kind", data.sessionKind, paint, bold)}`,
-		`  ${labelRow("cwd", data.cwd, paint, bold)}`,
-		"",
-		`  ${labelRow("Provider", data.provider, paint, bold)}`,
-		`  ${labelRow("Model", data.modelLabel, paint, bold)}`,
+	const rows: Array<[string, string] | undefined> = [
+		["Version", data.version],
+		["Session name", data.sessionName ?? paint("999999", "/rename to add a name")],
+		["Session ID", data.sessionId],
+		["Session kind", data.sessionKind],
+		["cwd", data.cwd],
+		undefined,
+		["Provider", data.provider],
+		["Model", data.modelLabel],
 	];
 	const mcpSummary = mcpSummaryLine(data.mcpServers, paint);
-	if (mcpSummary) rows.push(`  ${labelRow("MCP servers", mcpSummary, paint, bold)}`);
-	rows.push(`  ${labelRow("Memory files", data.memoryFiles, paint, bold)}`);
-	rows.push(`  ${labelRow("Settings sources", data.settingsSources, paint, bold)}`);
-	rows.push("");
-	rows.push(`  ${paint("999999", "Esc to cancel")}`);
-	return rows;
+	if (mcpSummary) rows.push(["MCP servers", mcpSummary]);
+	rows.push(["Setting sources", data.settingsSources]);
+	const labelWidth = Math.max(...rows.map((row) => (row ? row[0].length + 1 : 0))) + LABEL_GAP;
+	return [
+		paint("99ccff", "▔".repeat(width)),
+		`${INDENT}${tabBarRow(TAB_BAR_TABS, "Status", paint, bold)}`,
+		"",
+		...rows.map((row) => (row ? `${INDENT}${labelRow(row[0], row[1], labelWidth, bold)}` : "")),
+		"",
+		`${INDENT}${paint("999999", "Esc to cancel")}`,
+	];
 }
 
 export function gatherStatusData(ctx: ExtensionCommandContext, mcpSnapshot: McpStatusSnapshotLike | undefined): StatusPanelData {
 	const settingsManager = SettingsManager.create(ctx.cwd, process.env.PI_CODING_AGENT_DIR);
 	const hasProjectSettings = Object.keys(settingsManager.getProjectSettings() ?? {}).length > 0;
-	const promptOptions = ctx.getSystemPromptOptions();
-	const memoryPaths = (promptOptions.contextFiles ?? []).map((file) => file.path);
 	return {
 		version: VERSION,
+		sessionName: ctx.sessionManager.getSessionName(),
 		sessionId: ctx.sessionManager.getSessionId(),
 		sessionKind: sessionKindLabel(ctx.mode),
 		cwd: ctx.cwd,
 		provider: ctx.model?.provider ?? "no model",
-		modelLabel: ctx.model?.name ?? ctx.model?.id ?? "no model",
+		modelLabel: ctx.model ? `${ctx.model.name} (${ctx.model.id})` : "no model",
 		mcpServers: mcpServerCounts(mcpSnapshot),
-		memoryFiles: memoryFilesSummary(memoryPaths),
 		settingsSources: hasProjectSettings ? "User settings, Project settings" : "User settings",
 	};
 }
@@ -109,7 +104,7 @@ function statusComponent(data: StatusPanelData, theme: Theme, keybindings: Keybi
 	const bold = (text: string) => theme.bold(text);
 	return {
 		render(width: number): string[] {
-			return statusPanelRows(data, width, paint, bold);
+			return paneRows(statusPanelRows(data, width, paint, bold), tui.terminal.rows - 2);
 		},
 		invalidate(): void {},
 		handleInput(input: string): void {
@@ -124,10 +119,7 @@ export function registerStatusPanel(pi: ExtensionAPI, getMcpSnapshot: () => McpS
 		handler: async (_args, ctx) => {
 			if (!ctx.hasUI) return;
 			const data = gatherStatusData(ctx, getMcpSnapshot());
-			await ctx.ui.custom<void>((tui, theme, keybindings, done) => statusComponent(data, theme, keybindings, done, tui), {
-				overlay: true,
-				overlayOptions: { anchor: "bottom-left", width: "100%", margin: 0 },
-			});
+			await openPanel(pi, ctx, (tui, theme, keybindings, done) => statusComponent(data, theme, keybindings, done, tui));
 		},
 	});
 }
@@ -150,29 +142,29 @@ if (process.env.CLAUDE_PANELS_STATUS_SELFTEST) {
 	check(mcpSummaryLine(mcpServerCounts({ servers: [{ status: "connected" }, { status: "needs-auth" }], connectedCount: 1 }), (color, text) => `<${color}>${text}`).startsWith("<3399ff>1 connected"), "the connected count carries Claude's exact borderAccent blue (3399ff)");
 	check(mcpSummaryLine(mcpServerCounts({ servers: [{ status: "needs-auth" }], connectedCount: 0 }), (color, text) => `<${color}>${text}`).includes("<ffcc00>1 need auth"), "the needs-auth count carries Claude's exact warning yellow (ffcc00)");
 
-	check(memoryFilesSummary([]) === "No memory files loaded", "no context files loaded reads plainly, not as a blank list");
-	check(memoryFilesSummary(["C:\\Users\\cuong\\AGENTS.md"]) === "1 loaded \xB7 AGENTS.md", "matches pi's own header notice basename for a single memory file");
-	check(memoryFilesSummary(["/a/CLAUDE.md", "/a/AGENTS.md"]) === "2 loaded \xB7 CLAUDE.md, AGENTS.md", "multiple memory files list every basename");
-
-	check(labelRow("Version", "2.1.283", plain, bold) === `[${"Version:".padEnd(19)}]2.1.283`, "labels pad to Claude's 19-column field width before the value");
-	check(labelRow("cwd", "C:\\x", plain, bold) === `[${"cwd:".padEnd(19)}]C:\\x`, "a short label still pads to the same 19-column width as a long one");
+	check(labelRow("Version", "2.1.289", 28, bold) === `[Version:]${" ".repeat(20)}2.1.289`, "the value column is the longest label plus two spaces, not a fixed width: Claude 2.1.289 m6d-panels puts Version's value 28 columns after the label start because `Managed settings (remote):` is 26 wide");
+	check(labelRow("cwd", "C:\\x", 28, bold) === `[cwd:]${" ".repeat(24)}C:\\x`, "a short label pads to the same value column as a long one, and only the label itself is bold");
 
 	const data: StatusPanelData = {
 		version: "0.85.1",
+		sessionName: undefined,
 		sessionId: "abc-123",
 		sessionKind: "interactive",
 		cwd: "C:\\work",
 		provider: "github-copilot",
-		modelLabel: "Haiku 4.5",
+		modelLabel: "Haiku 4.5 (claude-haiku-4.5)",
 		mcpServers: { connected: 1, needsAuth: 0 },
-		memoryFiles: "1 loaded \xB7 AGENTS.md",
 		settingsSources: "User settings",
 	};
 	const rows = statusPanelRows(data, 80, plain, bold);
 	check(rows[0]!.length === 80, "the top rule spans the full panel width, like Claude's status/usage dialogs");
-	check(rows.some((row) => row.includes(`[${"Settings sources:".padEnd(19)}]User settings`)), "settings sources row is present");
-	check(rows[rows.length - 1]!.trim() === "Esc to cancel", "the panel ends with Claude's dismissal hint");
+	check(rows[1] === `   ${tabBarRow(TAB_BAR_TABS, "Status", plain, bold)}` && rows[2] === "", "the tab row sits directly under the rule, three columns in, followed by one blank row (Claude 2.1.289 m6d-panels rows 2-4)");
+	check(rows.slice(3, 10).map((row) => row.replace(/\] +/, "] ").trimEnd()).join("|") === "   [Version:] 0.85.1|   [Session name:] /rename to add a name|   [Session ID:] abc-123|   [Session kind:] interactive|   [cwd:] C:\\work||   [Provider:] github-copilot", "rows follow Claude's order Version, Session name, Session ID, Session kind, cwd, then a blank row; an unnamed session reads `/rename to add a name`");
+	check(rows.some((row) => row === `   [Setting sources:]${" ".repeat(2)}User settings`) && rows.some((row) => row.startsWith("   [MCP servers:]")), "Setting sources (not Settings) is the last row and the longest label sets the value column");
+	check(rows[rows.length - 2] === "" && rows[rows.length - 1] === "   Esc to cancel", "a blank row, then Esc to cancel three columns in, ends the card");
+	check(!rows.some((row) => row.includes("Memory files")), "Claude's /status has no Memory files row, so pi draws none");
 	check(rows.some((row) => row.includes("0.85.1")), "the real pi VERSION constant is shown instead of Claude's own version number");
+	check(statusPanelRows({ ...data, sessionName: "my name" }, 80, plain, bold).some((row) => /] +my name$/.test(row)), "a named session shows its name in place of the hint");
 
 	console.log("\nAll claude-panels status checks passed.");
 }

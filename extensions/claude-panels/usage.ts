@@ -3,9 +3,10 @@ import { generateDiffString } from "@earendil-works/pi-coding-agent";
 import type { Component, KeybindingsManager, TUI, Theme } from "@earendil-works/pi-tui";
 import { matchesKey } from "@earendil-works/pi-tui";
 import { hex } from "./colors.ts";
-import { TAB_BAR_TABS, tabBarRow } from "./tabs.ts";
+import { TAB_BAR_TABS, openPanel, paneRows, tabBarRow } from "./tabs.ts";
 
 const SESSION_LABEL_WIDTH = 23;
+const INDENT = "   ";
 
 export interface UsageLike {
 	input: number;
@@ -140,7 +141,7 @@ export function sessionBlockRows(
 	paint: (color: string, text: string) => string,
 	bold: (text: string) => string,
 ): string[] {
-	const field = (label: string, value: string) => `${paint("999999", `${label}:`.padEnd(SESSION_LABEL_WIDTH))}${value}`;
+	const field = (label: string, value: string) => paint("999999", `${`${label}:`.padEnd(SESSION_LABEL_WIDTH)}${value}`);
 	return [
 		bold("Session"),
 		"",
@@ -176,24 +177,23 @@ export interface UsagePanelData {
 export function usagePanelRows(data: UsagePanelData, width: number, paint: (color: string, text: string) => string, bold: (text: string) => string): string[] {
 	return [
 		paint("99ccff", "▔".repeat(width)),
+		`${INDENT}${tabBarRow(TAB_BAR_TABS, "Usage", paint, bold)}`,
 		"",
-		`  ${tabBarRow(TAB_BAR_TABS, "Usage", paint, bold)}`,
+		...sessionBlockRows(data.session, paint, bold).map((row) => `${INDENT}${row}`),
 		"",
-		...sessionBlockRows(data.session, paint, bold).map((row) => `  ${row}`),
+		...balanceRows(data.balances, paint, bold).map((row) => `${INDENT}${row}`),
+		...modelBreakdownRows(data.modelBreakdown, bold, paint).map((row) => (row === "" ? "" : `${INDENT}${row}`)),
 		"",
-		...balanceRows(data.balances, paint, bold).map((row) => `  ${row}`),
-		...modelBreakdownRows(data.modelBreakdown, bold, paint).map((row) => (row === "" ? "" : `  ${row}`)),
-		"",
-		`  ${paint("999999", "Esc to cancel")}`,
+		`${INDENT}${paint("999999", "Esc to cancel")}`,
 	];
 }
 
-function usageComponent(data: UsagePanelData, theme: Theme, keybindings: KeybindingsManager, done: (result: void) => void): Component {
+function usageComponent(data: UsagePanelData, theme: Theme, keybindings: KeybindingsManager, done: (result: void) => void, tui: TUI): Component {
 	const paint = (color: string, text: string) => hex(color, text);
 	const bold = (text: string) => theme.bold(text);
 	return {
 		render(width: number): string[] {
-			return usagePanelRows(data, width, paint, bold);
+			return paneRows(usagePanelRows(data, width, paint, bold), tui.terminal.rows - 2);
 		},
 		invalidate(): void {},
 		handleInput(input: string): void {
@@ -243,10 +243,7 @@ export function registerUsagePanel(pi: ExtensionAPI, tracker: UsageTracker, getS
 			balances,
 			modelBreakdown: usageCostBreakdown(entries),
 		};
-		await ctx.ui.custom<void>((_tui, theme, keybindings, done) => usageComponent(data, theme, keybindings, done), {
-			overlay: true,
-			overlayOptions: { anchor: "bottom-left", width: "100%", margin: 0 },
-		});
+		await openPanel(pi, ctx, (tui, theme, keybindings, done) => usageComponent(data, theme, keybindings, done, tui));
 	};
 	pi.registerCommand("usage", { description: "Show session cost, plan usage, and activity stats", handler });
 	pi.registerCommand("cost", { description: "Show session cost, plan usage, and activity stats", handler });
@@ -300,6 +297,7 @@ if (process.env.CLAUDE_PANELS_USAGE_SELFTEST) {
 
 	const sessionRows = sessionBlockRows({ costUsd: 0, apiMs: 0, wallMs: 14_000, linesAdded: 0, linesRemoved: 0, totals: emptyUsageTotals() }, plain, bold);
 	check(sessionRows.includes(`${"Total cost:".padEnd(23)}$0.0000`), "matches Claude's captured Total cost row exactly, including the 23-column field width");
+	check(sessionBlockRows({ costUsd: 0, apiMs: 0, wallMs: 14_000, linesAdded: 0, linesRemoved: 0, totals: emptyUsageTotals() }, (color, text) => `<${color}>${text}`, bold)[2] === `<999999>${"Total cost:".padEnd(23)}$0.0000`, "the whole row, value included, is one grey run (999999) on Claude 2.1.289 m6d-panels rows 7-11; 2.1.283 greyed only the label");
 	check(sessionRows.includes(`${"Total duration (wall):".padEnd(23)}14s`), "matches Claude's captured wall-duration row exactly");
 	check(sessionRows.includes(`${"Usage:".padEnd(23)}0 input, 0 output, 0 cache read, 0 cache write`), "matches Claude's captured Usage row exactly");
 
@@ -316,6 +314,7 @@ if (process.env.CLAUDE_PANELS_USAGE_SELFTEST) {
 	};
 	const rows = usagePanelRows(panel, 80, plain, bold);
 	check(rows[0]!.length === 80, "the top rule spans the full panel width");
+	check(rows[1]!.startsWith("   ") && rows[1]!.replace(/\x1b\[[0-9;]*m/g, "").trim() === "Settings  Status   Config   Usage   Stats" && rows[2] === "" && rows[3] === "   Session", "the tab row sits directly under the rule, then one blank row, and every row is three columns in (Claude 2.1.289 m6d-panels rows 2-5)");
 	check(rows[rows.length - 1]!.trim() === "Esc to cancel", "the panel ends with Claude's dismissal hint");
 	check(rows.some((row) => row.trim() === "Session"), "the Session heading is present");
 

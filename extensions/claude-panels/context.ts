@@ -1,7 +1,9 @@
 import type { ExtensionAPI, ExtensionCommandContext, SourceInfo } from "@earendil-works/pi-coding-agent";
 import { SettingsManager, formatSkillsForPrompt } from "@earendil-works/pi-coding-agent";
 import type { Component } from "@earendil-works/pi-tui";
+import { viewingRows } from "../claude-tasks/index.ts";
 import { hex } from "./colors.ts";
+import { mcpServerCounts, type McpStatusSnapshotLike } from "./status.ts";
 
 export const ENTRY_TYPE = "claude-panels-context";
 const GRID_ROWS = 10;
@@ -13,6 +15,8 @@ const FREE_GLYPH = "⛶";
 const AUTOCOMPACT_GLYPH = "⛝";
 const FREE_COLOR = "999999";
 const AUTOCOMPACT_COLOR = "999999";
+const INDENT = "     ";
+const CHARS_PER_TOKEN = 4;
 
 export type CategoryKey = "systemPrompt" | "tools" | "mcpTools" | "memoryFiles" | "skills" | "messages";
 
@@ -20,7 +24,7 @@ export const CATEGORY_ORDER: CategoryKey[] = ["systemPrompt", "tools", "mcpTools
 
 export const CATEGORY_LABEL: Record<CategoryKey, string> = {
 	systemPrompt: "System prompt",
-	tools: "Tools",
+	tools: "System tools",
 	mcpTools: "MCP tools",
 	memoryFiles: "Memory files",
 	skills: "Skills",
@@ -125,13 +129,15 @@ export function categoryLegendLine(
 	percent: number,
 	paint: (color: string, text: string) => string,
 	unit: "tokens" | "" = "tokens",
+	glyph: string = FULL_GLYPH,
 ): string {
 	const amount = unit === "tokens" ? `${fmtK(tokens)} tokens` : fmtK(tokens);
-	return `${paint(color, FULL_GLYPH)} ${label}: ${amount} (${fmtPercent1(percent)})`;
+	return `${paint(color, glyph)} ${label}: ${paint("999999", `${amount} (${fmtPercent1(percent)})`)}`;
 }
 
 export interface ContextPanelData {
 	modelLabel: string;
+	modelId: string;
 	usedTokens: number;
 	contextWindow: number;
 	categories: Record<CategoryKey, number>;
@@ -139,9 +145,10 @@ export interface ContextPanelData {
 	autocompactTokens: number;
 	mcpToolCount: number;
 	skillCount: number;
+	memoryFileCount: number;
 }
 
-export function contextPanelLines(data: ContextPanelData, paint: (color: string, text: string) => string, bold: (text: string) => string): { grid: string[]; right: string[] } {
+export function contextPanelLines(data: ContextPanelData, paint: (color: string, text: string) => string): { grid: string[]; right: string[] } {
 	const categories = CATEGORY_ORDER.map((key) => ({ key, tokens: data.categories[key] }));
 	const cells = buildGridCells(categories, data.autocompactTokens, data.contextWindow);
 	const grid = gridRows(cells, GRID_COLS, paint);
@@ -149,44 +156,55 @@ export function contextPanelLines(data: ContextPanelData, paint: (color: string,
 	const percentOf = (tokens: number) => (data.contextWindow > 0 ? (tokens / data.contextWindow) * 100 : 0);
 	const usedPercent = percentOf(data.usedTokens);
 	const right: string[] = [
-		bold(data.modelLabel),
-		`${fmtK(data.usedTokens)}/${fmtK(data.contextWindow)} tokens (${fmtPercentRound(usedPercent)})`,
+		data.modelLabel,
+		paint("999999", data.modelId),
+		paint("999999", `${fmtK(data.usedTokens)}/${fmtK(data.contextWindow)} tokens (${fmtPercentRound(usedPercent)})`),
 		"",
-		paint("999999", "Estimated usage by category"),
-		...CATEGORY_ORDER.map((key) => categoryLegendLine(CATEGORY_LABEL[key], CATEGORY_COLOR[key], data.categories[key], percentOf(data.categories[key]), paint)),
-		categoryLegendLine("Free space", FREE_COLOR, data.freeTokens, percentOf(data.freeTokens), paint, ""),
-		categoryLegendLine("Autocompact buffer", AUTOCOMPACT_COLOR, data.autocompactTokens, percentOf(data.autocompactTokens), paint),
+		`\x1b[3m${paint("999999", "Estimated usage by category")}\x1b[23m`,
+		...CATEGORY_ORDER.filter((key) => data.categories[key] > 0).map((key) => categoryLegendLine(CATEGORY_LABEL[key], CATEGORY_COLOR[key], data.categories[key], percentOf(data.categories[key]), paint)),
+		...(data.freeTokens > 0 ? [categoryLegendLine("Free space", FREE_COLOR, data.freeTokens, percentOf(data.freeTokens), paint, "", FREE_GLYPH)] : []),
+		...(data.autocompactTokens > 0 ? [paint(AUTOCOMPACT_COLOR, `${AUTOCOMPACT_GLYPH} Autocompact buffer: ${fmtK(data.autocompactTokens)} tokens (${fmtPercent1(percentOf(data.autocompactTokens))})`)] : []),
 	];
 	return { grid, right };
 }
 
+function plural(count: number, noun: string): string {
+	return `${count} ${count === 1 ? noun : `${noun}s`}`;
+}
+
 export function contextEntryRows(data: ContextPanelData, paint: (color: string, text: string) => string, bold: (text: string) => string): string[] {
-	const { grid, right } = contextPanelLines(data, paint, bold);
+	const { grid, right } = contextPanelLines(data, paint);
 	const rowCount = Math.max(grid.length, right.length);
-	const rows: string[] = [];
+	const body: string[] = [];
 	for (let i = 0; i < rowCount; i++) {
 		const left = grid[i];
 		const label = right[i] ?? "";
-		rows.push(left === undefined ? `${" ".repeat(21)}${label}` : `${left}   ${label}`);
+		body.push(left === undefined ? `${" ".repeat(22)}${label}` : `${left}   ${label}`);
 	}
-	rows.push("");
-	rows.push(bold(`Auto-compact window: ${fmtK(data.contextWindow)} tokens`));
-	rows.push("");
-	rows.push(bold(`MCP tools ${paint("999999", "· /mcp (loaded on-demand)")}`));
-	rows.push(paint("999999", `└ ${data.mcpToolCount} tools · ${fmtK(data.categories.mcpTools)} tokens`));
-	rows.push("");
-	rows.push(bold(`Skills ${paint("999999", "· /skills")}`));
-	rows.push(paint("999999", `└ ${data.skillCount} skills · ${fmtK(data.categories.skills)} tokens`));
-	rows.push("");
-	rows.push(paint("999999", "/context all to expand"));
-	return rows;
+	body.push("");
+	body.push(`${bold("Auto-compact window:")} ${paint("999999", `${fmtK(data.contextWindow)} tokens`)}`);
+	const sections = [
+		{ show: data.mcpToolCount > 0, title: "MCP tools", hint: " · /mcp (loaded on-demand)", tree: `${plural(data.mcpToolCount, "tool")} · ${fmtK(data.categories.mcpTools)} tokens` },
+		{ show: data.memoryFileCount > 0, title: "Memory files", hint: " · /memory", tree: `${plural(data.memoryFileCount, "file")} · ${fmtK(data.categories.memoryFiles)} tokens` },
+		{ show: data.categories.skills > 0, title: "Skills", hint: " · /skills", tree: `${plural(data.skillCount, "skill")} · ${fmtK(data.categories.skills)} tokens` },
+	].filter((section) => section.show);
+	for (const section of sections) {
+		body.push("");
+		body.push(`${bold(section.title)}${paint("999999", section.hint)}`);
+		body.push(paint("999999", `└ ${section.tree}`));
+	}
+	if (sections.length > 0) {
+		body.push("");
+		body.push(paint("999999", "/context all to expand"));
+	}
+	return [viewingRows("/context")[0]!, `${paint("999999", "  ⎿  ")}${bold("Context Usage")}`, ...body.map((row) => (row === "" ? "" : `${INDENT}${row}`))];
 }
 
 function isMcpSourceInfo(sourceInfo: SourceInfo | undefined): boolean {
 	return sourceInfo !== undefined && sourceInfo.origin === "package" && /mcp/i.test(sourceInfo.source);
 }
 
-export function gatherContextData(ctx: ExtensionCommandContext, pi: ExtensionAPI): ContextPanelData | undefined {
+export function gatherContextData(ctx: ExtensionCommandContext, pi: ExtensionAPI, mcpSnapshot: McpStatusSnapshotLike | undefined): ContextPanelData | undefined {
 	const usage = ctx.getContextUsage();
 	if (!usage || usage.tokens === null || !usage.contextWindow) return undefined;
 
@@ -222,26 +240,32 @@ export function gatherContextData(ctx: ExtensionCommandContext, pi: ExtensionAPI
 		skills: skillsText.length,
 		messages: 0,
 	};
-	const categories = distributeUsedTokens(usage.tokens, weights);
-	const freeTokens = Math.max(0, usage.contextWindow - reserveTokens - usage.tokens);
+	const staticEstimate = Math.ceil((systemPromptBytes + systemToolBytes + mcpToolBytes + memoryFilesText.length + skillsText.length) / CHARS_PER_TOKEN);
+	const usedTokens = Math.max(usage.tokens, staticEstimate);
+	const categories = distributeUsedTokens(usedTokens, weights);
+	const freeTokens = Math.max(0, usage.contextWindow - reserveTokens - usedTokens);
 
 	return {
 		modelLabel: ctx.model?.name ?? ctx.model?.id ?? "model",
-		usedTokens: usage.tokens,
+		modelId: ctx.model?.id ?? "",
+		usedTokens,
 		contextWindow: usage.contextWindow,
 		categories,
 		freeTokens,
 		autocompactTokens: reserveTokens,
-		mcpToolCount,
+		mcpToolCount: (mcpServerCounts(mcpSnapshot)?.connected ?? 0) > 0 ? mcpToolCount : 0,
 		skillCount: skills.length,
+		memoryFileCount: (promptOptions.contextFiles ?? []).length,
 	};
 }
+
+const prompted = ((globalThis as { __claudeInputPrompted?: { submitted: boolean } }).__claudeInputPrompted ??= { submitted: false });
 
 function view(render: (width: number) => string[]): Component {
 	return { render, invalidate() {} };
 }
 
-export function registerContextPanel(pi: ExtensionAPI): void {
+export function registerContextPanel(pi: ExtensionAPI, getMcpSnapshot: () => McpStatusSnapshotLike | undefined): void {
 	pi.registerEntryRenderer<ContextPanelData>(ENTRY_TYPE, (entry, _options, theme) => {
 		const paint = (color: string, text: string) => hex(color, text);
 		const bold = (text: string) => theme.bold(text);
@@ -252,11 +276,12 @@ export function registerContextPanel(pi: ExtensionAPI): void {
 		description: "Visualize current context usage as a colored grid",
 		handler: async (_args, ctx) => {
 			if (!ctx.hasUI) return;
-			const data = gatherContextData(ctx, pi);
+			const data = gatherContextData(ctx, pi, getMcpSnapshot());
 			if (!data) {
 				ctx.ui.notify("Context usage isn't available yet", "info");
 				return;
 			}
+			prompted.submitted = true;
 			pi.appendEntry(ENTRY_TYPE, data);
 		},
 	});
@@ -317,29 +342,39 @@ if (process.env.CLAUDE_PANELS_CONTEXT_SELFTEST) {
 	check(rows.length === 10 && rows[0]!.split(" ").length === 10, "10 rows of 10 space-separated glyphs, like Claude's grid");
 
 	check(categoryLegendLine("System prompt", "888888", 7500, 3.75, plain) === "⛁ System prompt: 7.5k tokens (3.8%)", "legend line matches Claude's wording (rounding differs slightly from Claude's own 3.7% because pi derives the percent from its own token split)");
-	check(categoryLegendLine("Free space", "999999", 129_500, 64.75, plain, "") === "⛁ Free space: 129.5k (64.8%)", "Free space drops the word tokens, like Claude's own row");
+	check(categoryLegendLine("Free space", "999999", 129_500, 64.75, plain, "", "⛶") === "⛶ Free space: 129.5k (64.8%)", "Free space drops the word tokens and draws the free glyph, like Claude 2.1.289's own row");
+	check(categoryLegendLine("MCP tools", "66cccc", 500, 0.25, (color, text) => `<${color}>${text}`) === "<66cccc>⛁ MCP tools: <999999>500 tokens (0.3%)", "only the glyph carries the category colour, the label is default and the amounts are dim (Claude m6d-panels rows 13-19)");
 
 	const data: ContextPanelData = {
 		modelLabel: "Haiku 4.5",
+		modelId: "claude-haiku-4-5-20251001",
 		usedTokens: 37_500,
 		contextWindow: 200_000,
 		categories: { systemPrompt: 7500, tools: 24300, mcpTools: 496, memoryFiles: 2200, skills: 2000, messages: 8 },
 		freeTokens: 129_500,
 		autocompactTokens: 33_000,
-		mcpToolCount: 219,
+		mcpToolCount: 0,
 		skillCount: 39,
+		memoryFileCount: 5,
 	};
 	const bold = (text: string) => `[${text}]`;
-	const { grid, right } = contextPanelLines(data, plain, bold);
+	const { grid, right } = contextPanelLines(data, plain);
 	check(grid.length === 10, "one grid row per 10 cells, matching Claude's 10-row panel");
-	check(right[0] === "[Haiku 4.5]", "the model name heads the right column, bolded like Claude's");
-	check(right[1] === "37.5k/200k tokens (19%)", "the headline usage line matches Claude's exact reading");
-	check(right.length === 12, "6 categories plus Free space and Autocompact buffer, plus the model line, the totals line and a blank = 12 lines");
+	check(right[0] === "Haiku 4.5" && right[1] === "claude-haiku-4-5-20251001", "the model name (plain) and its id head the right column, like Claude 2.1.289 (2.1.283 bolded the name and had no id row)");
+	check(right[2] === "37.5k/200k tokens (19%)", "the headline usage line matches Claude's exact reading");
+	check(right[3] === "" && right[4]!.includes("Estimated usage by category"), "a blank row and the italic heading follow");
+	check(right.length === 5 + 6 + 2, "five head rows, the six categories with tokens, Free space and Autocompact buffer");
+	check(contextPanelLines({ ...data, categories: { ...data.categories, messages: 0 }, freeTokens: 0, autocompactTokens: 0 }, plain).right.length === 5 + 5, "a category, Free space or the buffer with no tokens draws no legend row (Claude's `tokens>0` filters)");
+	check(right[right.length - 1] === "⛝ Autocompact buffer: 33k tokens (16.5%)", "the buffer row is one dim run ending the legend");
 
 	const entryRows = contextEntryRows(data, plain, bold);
-	check(entryRows.some((row) => row.includes("Auto-compact window: 200k tokens")), "the footer names the auto-compact window size, like Claude's");
-	check(entryRows.some((row) => row.includes("219 tools")), "the MCP tools summary line carries the real tool count");
-	check(entryRows[entryRows.length - 1] === "/context all to expand", "the panel ends with Claude's own expand hint");
+	check(entryRows[0]!.includes("❯ ") && entryRows[0]!.includes("/context") && entryRows[1] === "  ⎿  [Context Usage]", "the entry opens with the typed command row and the `  ⎿  Context Usage` header, like Claude 2.1.289 (the grid is the tool result)");
+	check(entryRows[2]!.startsWith("     ⛁") && entryRows.some((row) => row.startsWith(`${" ".repeat(27)}⛶ Free space`)), "the grid is five columns in, and legend rows past the grid align under its right column (27 columns, Claude 2.1.289 m6d-panels rows 18-20)");
+	check(entryRows.some((row) => row === "     [Auto-compact window:] 200k tokens"), "the footer names the auto-compact window size, only the label bold");
+	check(!entryRows.some((row) => row.includes("MCP tools ·")), "no MCP tools section when no MCP tool is loaded (Claude 2.1.289 m6d-panels shows the legend row but no section)");
+	check(entryRows.some((row) => row === "     └ 5 files · 2.2k tokens") && entryRows.some((row) => row === "     └ 39 skills · 2k tokens"), "Memory files and Skills sections count their items and tokens");
+	check(entryRows[entryRows.length - 1] === "     /context all to expand", "the panel ends with Claude's own expand hint, indented with the rest");
+	check(contextEntryRows({ ...data, mcpToolCount: 1 }, plain, bold).some((row) => row === "     └ 1 tool · 496 tokens"), "a single MCP tool is singular");
 
 	console.log("\nAll claude-panels context checks passed.");
 }
