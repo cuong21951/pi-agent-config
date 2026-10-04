@@ -52,7 +52,9 @@ def cases():
 
 def run(index, name, args):
     out = os.path.join(a.out, name)
-    subprocess.run([sys.executable, RUN, "--out", out, "--port", str(a.port + index)] + args, capture_output=True, text=True)
+    captured = subprocess.run([sys.executable, RUN, "--out", out, "--port", str(a.port + index)] + args, capture_output=True, text=True, encoding="utf-8", errors="replace")
+    with open(os.path.join(out, "run.log"), "w", encoding="utf-8") as f:
+        f.write(captured.stdout + captured.stderr)
     result = subprocess.run([sys.executable, DIFF, "--out", out], capture_output=True, text=True)
     return name, result.returncode, result.stdout.strip().splitlines()[-1] if result.stdout.strip() else result.stderr.strip()[-200:]
 

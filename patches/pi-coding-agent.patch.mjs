@@ -389,6 +389,10 @@ const EDITS = [
 		'renderToken(token,width,nextTokenType,styleContext){let lines=[];switch(token.type){',
 		'renderToken(token,width,nextTokenType,styleContext){let lines=[];(token.type==="paragraph"||token.type==="code")&&(nextTokenType=void 0);switch(token.type){',
 	],
+	[
+		'errors.push("description is required"):description.length>MAX_DESCRIPTION_LENGTH2&&errors.push(`description exceeds ${MAX_DESCRIPTION_LENGTH2} characters (${description.length})`),errors}function createSkillSourceInfo(',
+		'errors.push("description is required"):void 0,errors}function createSkillSourceInfo(',
+	],
 ];
 
 const check = process.argv.includes("--check");

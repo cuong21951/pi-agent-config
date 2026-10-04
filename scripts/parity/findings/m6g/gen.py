@@ -35,7 +35,7 @@ session("fg", [
     ("M6G-SUB-FG: run ls, then reply with the word fgreport.", [[("bash", {"command": "ls", "description": "List files"})], ["fgreport"]]),
 ])
 session("bg", [
-    ("M6G background run.", [[("Agent", {"description": "Sleep briefly", "subagent_type": "general-purpose", "name": "sleeper", "prompt": "M6G-SUB-BG: run sleep 4, then reply with the word bgreport.", "run_in_background": True})], ["started"], [("SendMessage", {"to": "@FIRST", "message": "M6G-SUB-SM: reply with the word smreport.", "summary": "ask again"})], ["asked"], ["smdone"]]),
+    ("M6G background run.", [[("Agent", {"description": "Sleep briefly", "subagent_type": "general-purpose", "name": "sleeper", "prompt": "M6G-SUB-BG: run sleep 4, then reply with the word bgreport.", "run_in_background": True})], ["started"], [("SendMessage", {"to": "@FIRST", "message": "M6G-SUB-SM: reply with the word smreport.", "summary": "ask again"})], ["asked", 1500], ["smdone"]]),
     ("M6G-SUB-BG: run sleep 4, then reply with the word bgreport.", [[("bash", {"command": "sleep 4", "description": "Sleep"})], ["bgreport"], ["smreport"]]),
 ])
 session("types", [

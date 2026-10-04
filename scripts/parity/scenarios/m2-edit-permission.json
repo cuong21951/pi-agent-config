@@ -1,6 +1,6 @@
 {
   "bypass": false,
-  "prompt": "Use the Edit tool to change the line \"alpha: 1\" to \"alpha: 100\" in notes.txt. Then reply with exactly: edited.",
+  "prompt": "Read notes.txt first. Then use the Edit tool to change the line \"alpha: 1\" to \"alpha: 100\" in notes.txt. Then reply with exactly: edited.",
   "steps": [
     {"until": "(?m)^(?!❯ ).*(proceed|Allow|allow|Yes)", "timeout": 90},
     {"sleep": 1},

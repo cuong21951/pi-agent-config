@@ -52,8 +52,6 @@ ROWS = [
      re.compile(r"^  ⎿[  ]{2}Tip: "), None, re.compile(r"^ {5}\S")),
     ("out-of-scope model warning: the harness pins Haiku 4.5, which is outside Cuong's enabledModels",
      None, re.compile(r"^ Warning: Agent \".*\" using out-of-scope model "), re.compile(r"^\s*$")),
-    ("session-start notice: each harness's own SessionStart line (Claude's agents-md hook, pi's Ponytail loader), drawn after the history on a resume",
-     re.compile(r"^● agents-md: "), re.compile(r"^● Ponytail loaded: "), None),
 ]
 
 
@@ -223,6 +221,18 @@ def excepted(texts, side, applied, exceptions=EXCEPTIONS):
     return out
 
 
+STATUS_TIMER = "status-line refresh: Claude re-runs its status line while a reply streams, so a mid-turn snapshot may already show the `ctx N%` that pi shows when the reply ends"
+EARLY_CONTEXT = re.compile(r" · ctx \d+%")
+
+
+def without_early_context(ct, pt, applied):
+    midturn = all(any(text.startswith("<spinner>") for text in side) for side in (ct, pt))
+    early = midturn and any(EARLY_CONTEXT.search(text) for text in ct) and not any(EARLY_CONTEXT.search(text) for text in pt)
+    if early:
+        applied.add(STATUS_TIMER)
+    return [EARLY_CONTEXT.sub("", text) if early else text for text in ct]
+
+
 def compare(claude, pi, applied, footer=False):
     ct = [normalise(l["text"], not footer) for l in claude]
     pt = [normalise(l["text"], not footer) for l in pi]
@@ -231,6 +241,7 @@ def compare(claude, pi, applied, footer=False):
     rewritten = {i for i, (x, y) in enumerate(zip(before, ct)) if x != y}
     if footer:
         ct, pt = excepted(ct, "claude", applied), excepted(pt, "pi", applied)
+        ct = without_early_context(ct, pt, applied)
     text_diffs, colour_diffs = [], []
     matcher = difflib.SequenceMatcher(a=ct, b=pt, autojunk=False)
     for op, i1, i2, j1, j2 in matcher.get_opcodes():

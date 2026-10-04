@@ -119,7 +119,7 @@ export function taskOf(record: Record, now: number): Task {
 }
 
 export function viewingRows(command: string): string[] {
-	return [`\x1b[48;2;55;55;55m\x1b[38;2;80;80;80m❯ \x1b[38;2;255;255;255m${command} \x1b[39m\x1b[49m`, "\x1b[38;2;153;153;153m  ⎿  \x1b[39mViewing agent"];
+	return [`\x1b[48;2;55;55;55m\x1b[38;2;153;153;153m❯ \x1b[38;2;255;255;255m${command} \x1b[39m\x1b[49m`, "\x1b[38;2;153;153;153m  ⎿  \x1b[39mViewing agent"];
 }
 
 const hint = (p: Paint, parts: string[]) => `   ${p.italic(p.hex(GREY, parts.join(" · ")))}`;

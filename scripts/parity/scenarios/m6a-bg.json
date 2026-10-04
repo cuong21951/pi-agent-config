@@ -1,5 +1,5 @@
 {
- "prompt": "Run exactly one shell command in the background (run_in_background true), with the description \"Wait for the timer\": python -c \"import time; time.sleep(8); print('finished')\" . Then reply with exactly: Started it in the background. When you are notified that it finished, reply with exactly: The timer finished. Do not write any other text.",
+ "prompt": "Run exactly one shell command in the background (run_in_background true), with the description \"Wait for the timer\": python -c \"import time; time.sleep(30); print('finished')\" . Then reply with exactly: Started it in the background. When you are notified that it finished, reply with exactly: The timer finished. Do not write any other text.",
  "steps": [
   {
    "until": "(?m)^\u25cf Started it in the background\\.[\\s\\S]*done[^\\n]*shell still running",

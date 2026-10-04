@@ -1,0 +1,12 @@
+{
+ "prompt": "Run exactly one shell command, with the description \"Pause a few seconds\": sleep 3 && echo ok . Then reply with exactly: ok. No other text.",
+ "steps": [
+  {"sleep": 0.4},
+  {"snap": "sent"},
+  {"until": "Pause a few seconds", "timeout": 60},
+  {"sleep": 0.5},
+  {"snap": "tool"},
+  {"until": "✻ \\S+ for [^\\n]*· done", "timeout": 90},
+  {"sleep": 1}
+ ]
+}

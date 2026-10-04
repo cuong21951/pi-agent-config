@@ -1,0 +1,17 @@
+{
+ "prompt": "M6G background run.",
+ "fixture": "findings/m6g/fixture",
+ "pi_mock": true,
+ "session": "findings/m6g/bg.jsonl",
+ "end": "smdone[\\s\\S]*✻ \\S+ for [^\\n]*· done",
+ "steps": [
+  {"until": "(?m)^● asked", "timeout": 150},
+  {"sleep": 0.3},
+  {"snap": "asked"},
+  {"sleep": 1.5},
+  {"snap": "asked-later"},
+  {"until": "smdone[\\s\\S]*✻ \\S+ for [^\\n]*· done", "timeout": 150},
+  {"sleep": 1},
+  {"snap": "end"}
+ ]
+}

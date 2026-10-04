@@ -8,7 +8,6 @@ import { MODAL_EVENT } from "../claude-bottom-input/index.ts";
 import { contentRows, diffRows, paint as paintRow, previewEdits, trimDiffContext, wrapRow, type Row } from "../claude-tools/format.ts";
 import {
 	approvedRows,
-	bashPreviewRows,
 	commandRows,
 	dialogRows,
 	enteredRows,
@@ -101,30 +100,30 @@ function readFileSafe(path: string): string {
 interface PreviewSpec {
 	kind: ToolKind;
 	title: string;
+	subtitle: string;
 	target: string;
 	rowsFor: (width: number) => string[];
 }
 
-function buildPreviewSpec(kind: ToolKind, input: Record<string, unknown>, cwd: string, paint: Paint): PreviewSpec {
+function buildPreviewSpec(kind: ToolKind, input: Record<string, unknown>, cwd: string): PreviewSpec {
 	if (kind === "bash") {
 		const command = String(input.command ?? "");
 		const description = String(input.description ?? "");
-		return { kind, title: titleFor("bash", false), target: cwd, rowsFor: () => bashPreviewRows(command, description, paint) };
+		return { kind, title: titleFor("bash", false), subtitle: description, target: cwd, rowsFor: () => [` ${command}`] };
 	}
 	const path = String(input.path ?? "");
 	const exists = existsSync(path);
-	const pathRow = `   ${paint("muted", path)}`;
 	if (kind === "edit") {
 		const edits = Array.isArray(input.edits) ? (input.edits as Array<{ oldText: string; newText: string }>) : [];
 		const oldContent = readFileSafe(path);
 		const newContent = previewEdits(oldContent, edits);
 		const { diff } = generateDiffString(oldContent, newContent);
 		const lines = trimDiffContext(diff.split("\n"));
-		return { kind, title: titleFor("edit", exists), target: path, rowsFor: (width) => [pathRow, ...renderRows(diffRows(lines), width)] };
+		return { kind, title: titleFor("edit", exists), subtitle: path, target: path, rowsFor: (width) => renderRows(diffRows(lines), width) };
 	}
 	const content = String(input.content ?? "");
 	const rows = contentRows(content).slice(0, 10);
-	return { kind, title: titleFor("write", exists), target: path, rowsFor: (width) => [pathRow, ...renderRows(rows, width)] };
+	return { kind, title: titleFor("write", exists), subtitle: path, target: path, rowsFor: (width) => renderRows(rows, width) };
 }
 
 type Outcome = "yes" | "always" | "no" | "amend";
@@ -139,7 +138,7 @@ function buildPermissionComponent(tui: TUI, theme: Theme, keybindings: Keybindin
 	const select = (index: number) => done(outcomeFor(index));
 	return {
 		render(width: number): string[] {
-			return dialogRows(spec.kind, spec.title, spec.rowsFor(width), spec.target, selectedIndex, width, paint);
+			return dialogRows(spec.kind, spec.title, spec.subtitle, spec.rowsFor(width), spec.target, selectedIndex, width, paint);
 		},
 		invalidate(): void {},
 		handleInput(data: string): void {
@@ -164,8 +163,7 @@ function buildPermissionComponent(tui: TUI, theme: Theme, keybindings: Keybindin
 }
 
 async function askPermission(ctx: ExtensionContext, kind: ToolKind, input: Record<string, unknown>): Promise<Outcome> {
-	const paint: Paint = (role, text) => ctx.ui.theme.fg(role as never, text);
-	const spec = buildPreviewSpec(kind, input, ctx.cwd, paint);
+	const spec = buildPreviewSpec(kind, input, ctx.cwd);
 	return ctx.ui.custom<Outcome>((tui, theme, keybindings, done) => buildPermissionComponent(tui, theme, keybindings, done, spec));
 }
 

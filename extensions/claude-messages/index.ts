@@ -3,8 +3,14 @@ import { patchGutters, setAwaiting, setPaint } from "./gutter.ts";
 
 export default function (pi: ExtensionAPI) {
 	patchGutters(UserMessageComponent.prototype, AssistantMessageComponent.prototype);
+	let queued = false;
+	pi.on("agent_start", () => {
+		queued = false;
+	});
 	pi.on("message_start", (event) => {
-		if (event.message.role === "user") setAwaiting(true);
+		if (event.message.role !== "user") return;
+		setAwaiting(queued);
+		queued = true;
 	});
 	pi.on("message_update", () => setAwaiting(false));
 	pi.on("agent_settled", () => setAwaiting(false));

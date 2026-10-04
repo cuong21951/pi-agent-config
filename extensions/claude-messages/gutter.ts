@@ -40,7 +40,7 @@ function marked(block: Block, mark: () => string, reserve = WIDTH): Block {
 	};
 }
 
-const userMark = () => `${shared.paint("dim", "❯")} `;
+const userMark = () => `${shared.paint("muted", "❯")} `;
 const assistantMark = () => `${shared.paint("text", "●")} `;
 const errorMark = () => `${shared.paint("warning", "●")} `;
 const ABORTED = "This operation was aborted";
@@ -153,23 +153,23 @@ if (process.env.CLAUDE_MESSAGES_SELFTEST) {
 	const user = { children: [box([new Markdown(["hello", "world"])])] };
 	markUser(user);
 	check(user.children[0].paddingX === 0 && user.children[0].paddingY === 0, "no padding rows above or below the prompt, like Claude's");
-	check(user.children[0].children[0].render(40).join("|") === "<dim>❯</dim> hello|  world", "the prompt mark sits in the gutter");
+	check(user.children[0].children[0].render(40).join("|") === "<muted>❯</muted> hello|  world", "the prompt mark sits in the gutter, in 999999 (Claude 2.1.289; 505050 up to 2.1.283, the sticky row keeps it)");
 	setPaint((role, text) => (role === "muted" ? `\x1b[38;2;153;153;153m${text}\x1b[39m` : `<${role}>${text}</${role}>`));
 	setAwaiting(true);
 	const waiting = user.children[0].children[0].render(40);
-	check(waiting[0] === "<dim>❯</dim> \x1b[38;2;153;153;153mhello" && waiting[1] === "  \x1b[38;2;153;153;153mworld", "while the prompt awaits the model its text is 999999 and the mark keeps its colour, like Claude 2.1.280's pending prompt (promptsAwaitingModel)");
+	check(waiting[0] === "[38;2;153;153;153m❯[39m \x1b[38;2;153;153;153mhello" && waiting[1] === "  \x1b[38;2;153;153;153mworld", "while the prompt awaits the model its text is 999999 and the mark keeps its colour, like Claude 2.1.280's pending prompt (promptsAwaitingModel)");
 	check(awaitingLine("\x1b[48;2;55;55;55m\x1b[38;2;255;255;255mhi\x1b[39m\x1b[49m") === "\x1b[38;2;153;153;153m\x1b[48;2;55;55;55m\x1b[38;2;153;153;153mhi\x1b[38;2;153;153;153m\x1b[49m", "every foreground in the row turns 999999 and the background stays");
 	const older = user;
 	const newer = { children: [box([new Markdown(["next"])])] };
 	markUser(newer);
 	older.children = [box([new Markdown(["hello"])])];
 	markUser(older);
-	check(older.children[0].children[0].render(40)[0] === "<dim>❯</dim> hello" && newer.children[0].children[0].render(40)[0] === "<dim>❯</dim> \x1b[38;2;153;153;153mnext", "only the newest prompt waits, even when an older one rebuilds later");
+	check(older.children[0].children[0].render(40)[0] === "[38;2;153;153;153m❯[39m hello" && newer.children[0].children[0].render(40)[0] === "[38;2;153;153;153m❯[39m \x1b[38;2;153;153;153mnext", "only the newest prompt waits, even when an older one rebuilds later");
 	setAwaiting(false);
-	check(newer.children[0].children[0].render(40)[0] === "<dim>❯</dim> next", "once the model answers or the turn ends the prompt is white again");
+	check(newer.children[0].children[0].render(40)[0] === "[38;2;153;153;153m❯[39m next", "once the model answers or the turn ends the prompt is white again");
 	const wide = { children: [box([new Markdown(["x".repeat(200)])])] };
 	markUser(wide);
-	check(wide.children[0].children[0].render(132)[0].length === "<dim>❯</dim> ".length + 129, "the prompt text is 129 columns wide at 132: Claude 2.1.280's wrapped prompt rows reach column 131 (68 of 377 captured rows) and never 132");
+	check(wide.children[0].children[0].render(132)[0].length === "[38;2;153;153;153m❯[39m ".length + 129, "the prompt text is 129 columns wide at 132: Claude 2.1.280's wrapped prompt rows reach column 131 (68 of 377 captured rows) and never 132");
 	setPaint((role, text) => `<${role}>${text}</${role}>`);
 
 	const text = new Markdown(["Hello", "there"], 1);
@@ -188,7 +188,7 @@ if (process.env.CLAUDE_MESSAGES_SELFTEST) {
 	patchGutters(fakeUser, fakeAssistant);
 	const u = { children: [] as Parent[] };
 	(fakeUser.rebuild as (this: typeof u) => void).call(u);
-	check(u.children[0].children[0].render(10).join("|") === "<dim>❯</dim> x", "a patched rebuild marks the prompt once");
+	check(u.children[0].children[0].render(10).join("|") === "<muted>❯</muted> x", "a patched rebuild marks the prompt once");
 	const a = { contentContainer: box([]) };
 	(fakeAssistant.updateContent as (this: typeof a) => void).call(a);
 	check(a.contentContainer.children[0].render(10).join("|") === "<text>●</text> y", "a patched updateContent marks the reply once");

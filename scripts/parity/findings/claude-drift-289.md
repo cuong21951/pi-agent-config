@@ -128,3 +128,29 @@ logic); **contradicted** = code literal still shows the old form in 289.
 - Kept (TUI-visible, grouped into the 19 entries above): 41 bullets.
 - Dropped: 389 (VS Code about 70, cloud sessions/Remote Control/Claude Tag/Code Review about 70, API/SDK/MCP-protocol/hooks/plugins/marketplace/auth/Bedrock/Vertex/gateway/`/ultrareview`/`claude-api`/artifact tool/enterprise about 235, screen-reader mode 12).
 - Of the kept entries: already matched 1 (parser names), differs now 3 (dashed prompt boxes, idle prompt colour, `/tasks` list layout), not covered 15.
+
+## Verdicts (M8, 2026-10-04, measured on the pinned 2.1.289 with the suite and the measuring scenarios)
+
+The first full run against 2.1.289 was 8/74. Every difference fell into one of these, each re-measured on screen or read from the bundle:
+
+| Item | Verdict | Evidence |
+| --- | --- | --- |
+| `❯` before earlier messages (287) | ported: `999999` on every transcript prompt row, the sticky copy keeps `505050` | 164 rows `999999`, 17 sticky rows `505050` in the 2.1.289 captures; `claude-messages/gutter.ts`, `claude-tasks` |
+| Prompts sent while idle in the normal colour (286) | ported: an idle send is `ffffff` at once; only a message joining a running turn stays grey | `retry-live` `retrying` snapshot |
+| Permission prompts between dashed lines (286/287) | ported for Bash, Edit and Write (one frame for all three); MCP, Fetch and Skill dialogs stay with M10 (pi asks nothing there) | `permission`, `m2-edit-permission` |
+| Session-start row (not in the notes, 288 or 289) | ported: the `agents-md` notice goes to the debug log, so Claude draws no row; pi's `Ponytail loaded` row removed and the header ends in two blank rows | bundle `s.ui.log(…, {to:"debug"})`; 0 of 74 captures |
+| A ready notification joins the turn (not in the notes) | harness: 2.1.289 runs a notification that is already queued when the turn ends without a done line between (2.1.283 drew `✻ … for 0s · done` first); pi holds a notification about 300 ms, which only a scripted instant reply can beat, so the scripted `asked` reply now takes 1.5 s | `m6g-resume` (3 of 3 before, clean 2 of 2 after) |
+| `sonnet` alias (not in the notes) | harness: the alias is Sonnet 5.5 in 2.1.289 and pi's cases run Copilot's Sonnet 5, so the four Sonnet cases pin `claude-sonnet-5` | `modes`, `modes-default`, `plan` |
+| Fullscreen scroll fixes (284/285/287) | matched: the `screen-*` cases are clean once the header heights agree | `screen-scroll-replay`, `screen-sticky-replay`, `screen-newmsg`, `screen-size-*` |
+| List details in one column, `/tasks` (284/286) | matched for `/tasks` (the `m6f-view` `tasks` snapshot is clean); `/hooks`, `/config`, the theme and output-style pickers and `/artifacts` have no pi counterpart | `m6f-view` |
+| Parser names in Bash prompts (287) | already matched | pi never printed them |
+| "N of M" on stacked permission prompts (286/287) | deferred to M10 (needs a prompt queue) | changelog only |
+| Auto-mode read prompt, auto as the start mode (284/285) | deferred to M10 (pi has no classifier prompt) | literal only |
+| `/compact`, `/clear`, `/rewind` confirmation while viewing an agent (286) | deferred to M10 | changelog only |
+| Send-now inside an agent view or on a skill's command (286) | deferred to M9 with the queued-message layout | changelog only |
+| `↑ N more` rows, scrollbar arrows, clickable rows (286) | deferred to M9 (panels); the wording is contradicted by the bundle | literal counts |
+| Agents view `n:` filter (287) | deferred to M10 | literal |
+| Reduce motion freezes the dot and spinners (287) | not ported: pi has no reduce-motion switch | changelog |
+| `&nbsp;`, click on a collapsed row, right-click paste, Ctrl+G line (285-287) | deferred to M9 or M10, unmeasured | changelog only |
+| Light-theme border contrast (287) | M12 | changelog only |
+| System tasks row, Ultracode toggle, usage-limit wait, model fallback notice, `/mcp reconnect all` | not applicable: no pi counterpart (account or Claude-internal) | literals |

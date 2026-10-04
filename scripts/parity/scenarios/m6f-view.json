@@ -47,7 +47,7 @@
     },
     {
       "until": "Running 1 shell command · \\d+s…\\s+⎿\\s+\\$ python -c 'import time; time\\.sleep\\(30\\)'",
-      "timeout": 90
+      "timeout": 240
     },
     {
       "sleep": 0.5

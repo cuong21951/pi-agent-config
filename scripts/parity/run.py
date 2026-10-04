@@ -23,7 +23,8 @@ ap.add_argument("--claude-model", default="haiku")
 ap.add_argument("--pi-model", default="github-copilot/claude-haiku-4.5")
 ap.add_argument("--rows", type=int, default=100)
 ap.add_argument("--cols", type=int, default=132)
-ap.add_argument("--timeout", type=float, default=300)
+ap.add_argument("--timeout", type=float, default=900)
+ap.add_argument("--patience", type=float, default=3, help="multiplies every step timeout: a live model that answers slowly then only costs time")
 ap.add_argument("--port", type=int, default=18471)
 ap.add_argument("--pi-env", action="append", default=[], help="NAME=VALUE for the pi process, e.g. PI_TUI_DEBUG_REDRAW=1")
 ap.add_argument("--raw", action="store_true", help="also save each side's raw terminal output as <side>.raw")
@@ -78,7 +79,7 @@ def steps_for(side, typed=True):
         step = dict(step)
         if isinstance(step.get("keys"), dict):
             step["keys"] = step["keys"].get(side, "")
-        steps.append(step)
+        steps.append({**step, **{key: step[key] * a.patience for key in ("timeout",) if key in step}})
     return steps
 
 

@@ -82,7 +82,7 @@ Cuong asked on 2026-10-04 to keep cloning, with a goal cut into milestones and t
 
 1. `py -3.12 scripts/selfchecks.py` prints `all self-checks passed`.
 2. `node patches/apply.mjs` reports no `NEEDS PORT`, and `node patches/pi-coding-agent.patch.mjs --check` shows every edit present.
-3. `py -3.12 scripts/parity/suite.py --jobs 3` exits 0 on two consecutive runs: every earlier case plus the milestone's new ones. A case that differs once is run alone three times before it is called a flake, and its cause goes in the README ledger.
+3. `py -3.12 scripts/parity/suite.py --jobs 3` (`--jobs 2` when the live model is slow, as on the evening of M8) exits 0 on two consecutive runs: every earlier case plus the milestone's new ones. A case that differs once is run alone three times before it is called a flake, and its cause goes in the README ledger.
 4. Every `m6g-*` `reqdiff` is clean, and no Claude capture carries the classic-fallback line.
 
 Landing, after the gate: sync the sandbox files into `~/.pi/agent`, `node patches/apply.mjs` there (`--check` complete on the Volta and Roaming installs), commit, push `origin main`, add a Baseline row. Running pi sessions need a restart.
@@ -104,13 +104,13 @@ Exit: gate green on 2.1.289; every drift item has a verdict (matched, ported, ex
 
 What is only self-checked or kept out of the suite today.
 Investigate: capture Claude's `/context`, `/usage`, `/status` and `/mcp` panels and the queued-message screens on the pinned binary.
-Work: suite cases for the four panels (the account-only rows stay named exceptions); the queued-message layout (Claude's grey `❯` row after the tool, `ctrl+x ctrl+s to send now`, `Press up to edit queued messages`; pi draws `Steering: …` above it), which brings `m6a-sendnow` and `m6j-interrupt-queued` into the suite; thinking markdown in the ctrl+o view (inline code, nested lists).
+Work: suite cases for the four panels (the account-only rows stay named exceptions); the queued-message layout (Claude's grey `❯` row after the tool, `ctrl+x ctrl+s to send now`, `Press up to edit queued messages`; pi draws `Steering: …` above it), which brings `m6a-sendnow` and `m6j-interrupt-queued` into the suite; thinking markdown in the ctrl+o view (inline code, nested lists); when Claude's status line first shows `ctx N%` (pi shows it when the first reply ends; Claude's status line is re-run during the reply, and in 1 of 4 `stream-lines` `thought` snapshots on 2.1.289 it already showed `ctx 23%`: measure when it refreshes, then either move pi's update to the same moment with a wait in the case, or name the timer in diff.py).
 Exit: gate green with the new cases.
 
 ## M10 — Dialogs and keys (time box: 2 sessions)
 
 Investigate: the measuring cases `m5d-perm-fetch`, `m5d-perm-mcp`, `m5d-perm-skill`; Claude's transcript key card in the ctrl+o view.
-Work: MCP, Fetch and Skill permission dialogs in manual mode (pi asks nothing today); the ctrl+o transcript keys (↑↓ j k, ctrl+u/d, space/b, g/G, `/` search, the `?` key card); a click on the sticky prompt row; the list dialog for several background shells and `x` in Shell details.
+Work: MCP, Fetch and Skill permission dialogs in manual mode (pi asks nothing today); the ctrl+o transcript keys (↑↓ j k, ctrl+u/d, space/b, g/G, `/` search, the `?` key card); a click on the sticky prompt row; the list dialog for several background shells and `x` in Shell details; the dot of a write row while its permission dialog is open (Claude `999999` until the call resolves, then `3399ff`, measured 2026-10-04 on 2.1.283 and 2.1.289 with `m2-edit-permission`; pi draws it blue at once), which brings `m2-edit-permission` into the suite.
 Exit: gate green with a case for each.
 
 ## M11 — Tools Claude has and pi lacks (time box: 3 sessions)
@@ -136,3 +136,4 @@ Exit: the replay cases run once per theme and are clean; gate green.
 | Milestone | Date | Suite | Notes |
 | --- | --- | --- | --- |
 | M7 | 2026-10-04 | 74/74, 74/74 | runs 9 and 10 (`--jobs 3`, 74 cases with `slash-nearest`, `slash-skill`, `markdown-tight-replay`); runs 1-8: 71/73, 71/73, 72/73, 73/73, 72/73, 70/73, 72/74, 73/74, every difference read out of its captures (README, Suite state). Landed: the slash-menu round, the wheel edits 67-68, and four pi differences live Haiku turned up (wrap after inline code, edit 77; blank row between a sentence and a fence, edit 78; a leading `./` in a path; the refused `Stop Task` row). Harness: state waits in `clear` and `slash-nearest`, run.py waits for Claude's final `ctx N%`, mock.py ends the stream after the last block, `m6a-timeout` timer 25 s, `agent` prompt, `m6a-stop` and `m6f-view` waits. `m6g-stop`'s Claude-side race remains (once in ten runs). Every m6g `reqdiff` clean in runs 9 and 10; the classic-fallback line once, in run 10's uncompared `error-replay/claude-live` leg; self-checks green; core patch 78/78 |
+| M8 | 2026-10-04 | 74/74, 74/74 | runs 7 and 8 against the pinned 2.1.289 (`--jobs 2`; runs 1-6: 70, 72, 73, 72, 71, 73 of 74, read out in README, Suite state). The first run against 2.1.289 was 8/74. Ported: `❯` `999999` on transcript prompt rows, an idle prompt white at once, the Bash/Edit/Write permission frame (description or path under the title, body between dashed rules), no session-start row (`ponytail.patch`) and a header ending in two blank rows, no `[Skill conflicts]` block for a long skill description (edit 79). Harness: Sonnet cases pin `claude-sonnet-5`, the scripted `asked` reply takes 1.5 s, `--patience 3` on every step timeout, longer `m6a-bg`/`m6a-ctrlb` timers and `m6f-view` wait, a named diff.py rule for Claude's early `ctx N%` (M9 measures it), suite.py keeps `run.log`. Every drift item has a verdict in `findings/claude-drift-289.md`. Every m6g `reqdiff` clean, no classic-fallback line, self-checks green, core patch 79/79 |

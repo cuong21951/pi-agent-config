@@ -38,10 +38,12 @@ export function footerRow(paint: Paint): string {
 	return ` ${paint("muted", "Esc to cancel · Tab to amend")}`;
 }
 
-export function bashPreviewRows(command: string, description: string, paint: Paint): string[] {
-	const rows = [`   ${command}`];
-	if (description !== "") rows.push(`   ${paint("muted", description)}`);
-	return rows;
+export function subtitleRows(subtitle: string, paint: Paint): string[] {
+	return [subtitle].filter(Boolean).map((text) => ` ${paint("muted", text)}`);
+}
+
+export function dashedRow(width: number, paint: Paint): string {
+	return paint("dim", "╌".repeat(Math.max(0, width)));
 }
 
 const ACCEPT_EDITS_OPTION: Token[] = [
@@ -91,7 +93,8 @@ export function titleFor(kind: ToolKind, exists: boolean): string {
 export function dialogRows(
 	kind: ToolKind,
 	title: string,
-	previewRows: string[],
+	subtitle: string,
+	bodyRows: string[],
 	target: string,
 	selectedIndex: number,
 	width: number,
@@ -101,9 +104,10 @@ export function dialogRows(
 	return [
 		ruleRow(width),
 		titleRow(title),
-		"",
-		...previewRows,
-		"",
+		...subtitleRows(subtitle, paint),
+		dashedRow(width, paint),
+		...bodyRows,
+		dashedRow(width, paint),
 		questionRow(kind, target),
 		...tokens.flatMap((token, index) => optionRows(index, token, index === selectedIndex, paint, width)),
 		"",
@@ -251,14 +255,10 @@ if (process.env.CLAUDE_MODES_DIALOG_SELFTEST) {
 	check(footerRow(tag) === " <muted>Esc to cancel · Tab to amend</muted>", "footer is muted, one column in");
 
 	check(
-		JSON.stringify(bashPreviewRows("echo parity > marker.txt", "Write a marker file", tag)) ===
-			JSON.stringify(["   echo parity > marker.txt", "   <muted>Write a marker file</muted>"]),
-		"bash preview shows the command plain and the description muted, both indent 3",
+		JSON.stringify(subtitleRows("Write a marker file", tag)) === JSON.stringify([" <muted>Write a marker file</muted>"]) && dashedRow(4, tag) === "<dim>╌╌╌╌</dim>",
+		"the line under the title is 999999, one column in, and the body sits between two 505050 dashed rules as wide as the terminal (Claude 2.1.289, `permission` and `m2-edit-permission`: a bash description, an edit's path)",
 	);
-	check(
-		JSON.stringify(bashPreviewRows("ls", "", tag)) === JSON.stringify(["   ls"]),
-		"an empty description draws no second row",
-	);
+	check(subtitleRows("", tag).length === 0, "an empty description draws no row under the title");
 
 	const tokens = optionTokens("bash", "/repo");
 	check(
@@ -291,10 +291,11 @@ if (process.env.CLAUDE_MODES_DIALOG_SELFTEST) {
 	check(titleFor("write", false) === "Create file", "write title for a new file");
 	check(titleFor("write", true) === "Overwrite file", "write title for an existing file");
 
-	const rows = dialogRows("bash", "Bash command", ["   echo parity > marker.txt", "   <muted>Write a marker file</muted>"], "/repo", 0, 80, tag);
-	check(rows.length === 12, "dialog assembles rule, title, blank, 2 preview rows, blank, question, 3 options, blank, footer");
-	check(rows[0] === ruleRow(80) && rows[1] === titleRow("Bash command") && rows[2] === "", "rule, title, blank open the dialog");
-	check(rows[6] === QUESTION_ROW && rows[11] === footerRow(tag), "question sits after the preview, footer closes the dialog");
+	const rows = dialogRows("bash", "Bash command", "Write a marker file", [" echo parity > marker.txt"], "/repo", 0, 80, tag);
+	check(rows.length === 12, "dialog assembles rule, title, description, dashed rule, command, dashed rule, question, 3 options, blank, footer");
+	check(rows[0] === ruleRow(80) && rows[1] === titleRow("Bash command") && rows[2] === " <muted>Write a marker file</muted>", "rule, title and description open the dialog with no blank row (Claude 2.1.289; 2.1.283 drew a blank row, the command, then the description)");
+	check(rows[3] === dashedRow(80, tag) && rows[4] === " echo parity > marker.txt" && rows[5] === dashedRow(80, tag), "the command sits one column in between the dashed rules");
+	check(rows[6] === QUESTION_ROW && rows[11] === footerRow(tag), "question sits right under the second rule, footer closes the dialog");
 
 	check(questionRow("bash", "/repo") === QUESTION_ROW, "bash keeps Claude's generic question (measured via run.py --scenario permission, port 20097)");
 	check(

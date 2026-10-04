@@ -46,7 +46,7 @@ export function composeHeader(
 		fg("muted", `${model}${effort} · ${provider}`),
 		fg("muted", homeRelative(cwd)),
 	];
-	return ["", ...cat.map((line, i) => ` ${line}   ${right[i]}`), ""];
+	return ["", ...cat.map((line, i) => ` ${line}   ${right[i]}`), "", ""];
 }
 
 // ponytail: in regular TUI mode the header lives in scrollback once the transcript is taller than
@@ -100,7 +100,7 @@ export default function (pi: ExtensionAPI) {
 if (process.env.CLAUDE_HEADER_SELFTEST) {
 	const plain: Paint = (_r, t) => t;
 	const lines = composeHeader("GLM 5.3 Flash (multimodal)", "commandcode", "high", `${os.homedir()}/Documents/Kuha`, 0, plain, (t) => t);
-	if (lines.length !== 5) throw new Error("FAIL: blank, three rows, blank");
+	if (lines.length !== 6 || lines[4] !== "" || lines[5] !== "") throw new Error("FAIL: blank, three rows, two blanks (Claude 2.1.289: the first prompt sits on row 6, two blank rows under the logo, with no session-start row between)");
 	if (!lines[1].includes("pi v")) throw new Error("FAIL: title row");
 	if (!lines[2].includes("with high effort · commandcode")) throw new Error("FAIL: model row");
 	if (!lines[3].includes("~")) throw new Error("FAIL: cwd row is home-relative");

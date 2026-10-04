@@ -52,5 +52,5 @@
  ],
  "end": ".",
  "pi_model": "github-copilot/claude-sonnet-5",
- "claude_model": "sonnet"
+ "claude_model": "claude-sonnet-5"
 }
