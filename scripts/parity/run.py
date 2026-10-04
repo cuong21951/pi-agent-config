@@ -82,6 +82,11 @@ def steps_for(side, typed=True):
     return steps
 
 
+def pi_context_shown():
+    shown = [text for path in glob.glob(os.path.join(a.out, "pi.txt")) for text in re.findall(r"ctx \d+%", open(path, encoding="utf-8").read().split("=== COLORS")[0])]
+    return [{"until": re.escape(text), "timeout": 12} for text in shown[-1:]]
+
+
 def capture(side, cmd_args, env=(), steps=None, until=None, out=None):
     fresh_workdir()
     out = out or a.out
@@ -217,7 +222,7 @@ if a.only in (None, "claude"):
             resumed = steps_for("claude", typed=False) if scenario.get("steps") else [{"until": ready, "timeout": 90}, {"sleep": 1.5}]
             capture("claude", ["--cmd", f"{command} --resume {resumable_copy()}"], claude_env, steps=resumed, until=None if scenario.get("steps") else ready)
         else:
-            capture("claude", ["--cmd", command], claude_env, steps=steps_for("claude"))
+            capture("claude", ["--cmd", command], claude_env, steps=steps_for("claude") + pi_context_shown())
     finally:
         stop_mock(mock)
         if not a.keep_claude_session:

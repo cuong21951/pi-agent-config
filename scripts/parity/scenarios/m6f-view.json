@@ -6,7 +6,7 @@
       "timeout": 90
     },
     {
-      "until": "Check files +\\d+s · . [\\d.k]+ tokens",
+      "until": "Check files +\\d+s · ↓ [\\d.k]+ tokens",
       "timeout": 60
     },
     {

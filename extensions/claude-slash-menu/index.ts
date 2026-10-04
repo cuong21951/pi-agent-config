@@ -1,4 +1,5 @@
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
+import { truncateToWidth, visibleWidth } from "@earendil-works/pi-tui";
 import Fuse from "fuse.js";
 
 export interface SlashCommandItem {
@@ -118,8 +119,105 @@ export function matchSlashCommands(items: SlashCommandItem[], query: string, opt
 	return new ClaudeSlashMatcher(items).search(q, options);
 }
 
+export function preselectsFirst(typed: string, first: { value: string; label?: string }): boolean {
+	if (first.value.startsWith("/")) return true;
+	const query = typed.slice(1).toLowerCase().trim();
+	if (query === "") return true;
+	const joined = query.split(SPLIT_RE).join("");
+	if (joined === "") return false;
+	return [first.value, first.label ?? first.value].some((name) => {
+		const parts = name.toLowerCase().split(SPLIT_RE).filter(Boolean);
+		return parts.some((_part, i) => parts.slice(i).join("").startsWith(joined));
+	});
+}
+
+export function matchRanges(text: string, query: string, contiguousOnly: boolean): [number, number][] {
+	const lower = text.toLowerCase();
+	const at = lower.indexOf(query);
+	if (at !== -1) return [[at, at + query.length]];
+	if (contiguousOnly) return [];
+	const ranges: [number, number][] = [];
+	let from = 0;
+	for (const char of query) {
+		const found = lower.indexOf(char, from);
+		if (found === -1) return [];
+		from = found + char.length;
+		const last = ranges.at(-1);
+		if (last && last[1] === found) last[1] = from;
+		else ranges.push([found, from]);
+	}
+	return ranges;
+}
+
+const SELECTED = "\x1b[38;2;153;204;255m";
+const UNSELECTED = "\x1b[38;2;153;153;153m";
+const DEFAULT_FG = "\x1b[39m";
+const BOLD = "\x1b[1m";
+const NOT_BOLD = "\x1b[22m";
+const INDENT = "  ";
+const NAME_GAP = 2;
+const MIN_DESCRIPTION_WIDTH = 10;
+
+function paintMatches(text: string, query: string, selected: boolean, contiguousOnly: boolean): string {
+	const [on, off] = selected ? [BOLD, NOT_BOLD] : [DEFAULT_FG + BOLD, NOT_BOLD + UNSELECTED];
+	let out = "";
+	let cursor = 0;
+	for (const [start, end] of query ? matchRanges(text, query, contiguousOnly) : []) {
+		out += text.slice(cursor, start) + on + text.slice(start, end) + off;
+		cursor = end;
+	}
+	return out + text.slice(cursor);
+}
+
+function clip(text: string, width: number, ellipsis: string): string {
+	return truncateToWidth(text, width, ellipsis).replaceAll("\x1b[0m", "");
+}
+
+function wrapDescription(text: string, width: number): string[] {
+	if (visibleWidth(text) <= width) return [text];
+	let cut = text.length;
+	while (cut > 1 && visibleWidth(text.slice(0, cut)) > width) cut--;
+	const space = text.lastIndexOf(" ", cut);
+	const first = space > 0 ? text.slice(0, space) : text.slice(0, cut);
+	return [first, clip(text.slice(first.length).trimStart(), width, "…")];
+}
+
+export function menuRow(item: { value: string }, selected: boolean, width: number, description: string | undefined, nameColumn: number, typed: string): string[] {
+	const color = selected ? SELECTED : UNSELECTED;
+	const query = typed.slice(1).toLowerCase();
+	const columnWidth = Math.max(1, Math.min(nameColumn, width - INDENT.length - 4));
+	const bare = item.value.startsWith("/") ? item.value.slice(1) : item.value;
+	const name = clip(bare, Math.max(0, Math.max(1, columnWidth - NAME_GAP) - 1), "");
+	const nameWidth = 1 + visibleWidth(name);
+	const spacing = " ".repeat(Math.max(1, columnWidth - nameWidth));
+	const descriptionStart = INDENT.length + nameWidth + spacing.length;
+	const descriptionWidth = width - descriptionStart;
+	const head = `${color}${INDENT}/${paintMatches(name, query, selected, false)}`;
+	if (!description || descriptionWidth <= MIN_DESCRIPTION_WIDTH) return [head + DEFAULT_FG];
+	const [first, second] = wrapDescription(description, descriptionWidth);
+	const firstLine = head + spacing + paintMatches(first, query, selected, true) + DEFAULT_FG;
+	return second === undefined ? [firstLine] : [firstLine, color + " ".repeat(descriptionStart) + paintMatches(second, query, selected, true) + DEFAULT_FG];
+}
+
+const SCOPE_LABELS: Record<string, string> = { u: "user", p: "project" };
+
+export function skillMenuItem(item: SlashCommandItem, skill: { name: string; description: string }, sourceTag: string | undefined, others: { name: string }[]): SlashCommandItem {
+	const label = SCOPE_LABELS[sourceTag ?? ""];
+	return {
+		name: others.some((other) => other.name === skill.name) ? item.name : skill.name,
+		description: label ? `${skill.description} (${label})` : item.description,
+	};
+}
+
+export function invocableNames(commands: { name: string; source: string }[]): string[] {
+	return commands.flatMap((command) => (command.source === "skill" ? [command.name, command.name.slice("skill:".length)] : [command.name]));
+}
+
 export default function (_pi: ExtensionAPI) {
 	(globalThis as any).__claudeSlashMatch = matchSlashCommands;
+	(globalThis as any).__claudeSlashPreselect = preselectsFirst;
+	(globalThis as any).__claudeSlashRow = menuRow;
+	(globalThis as any).__claudeSkillItem = skillMenuItem;
 }
 
 if (process.env.CLAUDE_SLASH_MENU_SELFTEST) {
@@ -188,6 +286,66 @@ if (process.env.CLAUDE_SLASH_MENU_SELFTEST) {
 
 	const none = matchSlashCommands(COMMANDS, "zzzzzznotfound");
 	check(none.length === 0, "no match returns an empty array, not null/undefined");
+
+	check(preselectsFirst("/expl", { value: "explain" }), "Claude 2.1.283 preselects /explain for '/expl' (measured: row 0 in 99ccff, Enter runs it)");
+	check(preselectsFirst("/expl", { value: "skill:explain" }), "pi's skill:explain is preselected for '/expl' through its 'explain' segment");
+	check(!preselectsFirst("/modle", { value: "auto-mode-setup" }), "Claude 2.1.283 leaves the '/modle' menu unselected (measured: every row 999999)");
+	check(!preselectsFirst("/resme", { value: "resume" }), "a fuzzy-only top match is not preselected, so Enter still reaches 'Did you mean'");
+	check(preselectsFirst("/code-r", { value: "code-review" }), "separators in the typed text are ignored (2.1.283 oee: split on [:_-], joined)");
+	check(preselectsFirst("/review", { value: "code-review" }), "a later segment of the name counts as a prefix start");
+	check(preselectsFirst("/", { value: "clear" }), "a bare slash preselects the first row");
+	check(!preselectsFirst("/-", { value: "code-review" }), "typed text made only of separators preselects nothing");
+	check(preselectsFirst("/etc/ho", { value: "/etc/hosts", label: "hosts" }), "a path completion under the slash layout keeps its first row selected (2.1.283 oee: a suggestion that is not a command is always preselected)");
+	const withSkill = [...COMMANDS, { name: "skill:explain", description: "Explain a solution, bug, design or concept the Feynman way" }];
+	const explTop = matchSlashCommands(withSkill, "expl")[0];
+	check(explTop?.name === "skill:explain" && preselectsFirst("/expl", { value: explTop.name }), "'/expl' ranks skill:explain first and preselects it");
+
+	const same = (actual: unknown, expected: unknown) => JSON.stringify(actual) === JSON.stringify(expected);
+	check(same(matchRanges("resume", "resme", false), [[0, 3], [4, 6]]), "Claude 2.1.283 bolds 'res' and 'me' of /resume for '/resme' (measured; bundle Bt: one range per run of in-order characters)");
+	check(same(matchRanges("claude-api", "clea", false), [[0, 2], [5, 6], [7, 8]]), "'/clea' bolds 'cl', 'e', 'a' of /claude-api (measured): each character is searched after the previous hit");
+	check(same(matchRanges("model", "modle", false), []), "'/modle' bolds nothing in /model (measured): a character with no later occurrence drops every range");
+	check(same(matchRanges("Explain a solution", "expl", true), [[0, 4]]), "a description match ignores case (measured: 'Expl' bold for '/expl')");
+	check(same(matchRanges("efficiency cleanups where", "clea", true), [[11, 15]]), "a description bolds the typed text where it appears whole (measured: 'clea' in 'cleanups')");
+	check(same(matchRanges("Review the current diff", "clea", true), []), "a description never bolds scattered characters (bundle: contiguousOnly)");
+
+	const SHOW_ME = "Help the user understand the current topic visually with concise diagrams, code-shape sketches, and focused HTML artifacts. (user)";
+	check(
+		same(menuRow({ value: "show-me" }, true, 130, SHOW_ME, 30, "/show"), [
+			`${SELECTED}  /${BOLD}show${NOT_BOLD}-me${" ".repeat(22)}Help the user understand the current topic visually with concise diagrams, code-shape sketches,${DEFAULT_FG}`,
+			`${SELECTED}${" ".repeat(32)}and focused HTML artifacts. (user)${DEFAULT_FG}`,
+		]),
+		"the selected row is 99ccff with the typed text bold, description wrapped under column 32 and ending two columns short of the terminal's 132 (Claude 2.1.283, '/show'; the list itself is drawn 130 wide, inside claude-input's prompt)",
+	);
+	check(
+		same(menuRow({ value: "resume" }, false, 130, "Resume a previous conversation", 30, "/resme"), [
+			`${UNSELECTED}  /${DEFAULT_FG}${BOLD}res${NOT_BOLD}${UNSELECTED}u${DEFAULT_FG}${BOLD}me${NOT_BOLD}${UNSELECTED}${" ".repeat(23)}Resume a previous conversation${DEFAULT_FG}`,
+		]),
+		"an unselected row is 999999 with its matched characters bold in the default colour (Claude 2.1.283, '/resme')",
+	);
+	const DIAGRAMMING = "Diagramming know-how for Artifacts - when a picture earns its place, how to draw one that shows the real mechanism, and the inline-SVG mechanics that keep it legible in both themes.";
+	check(
+		same(menuRow({ value: "artifact-diagramming" }, false, 130, DIAGRAMMING, 30, "/show"), [
+			`${UNSELECTED}  /artifact-diagramming${" ".repeat(9)}Diagramming know-how for Artifacts - when a picture earns its place, how to draw one that ${DEFAULT_FG}${BOLD}show${NOT_BOLD}${UNSELECTED}s${DEFAULT_FG}`,
+			`${UNSELECTED}${" ".repeat(32)}the real mechanism, and the inline-SVG mechanics that keep it legible in both themes.${DEFAULT_FG}`,
+		]),
+		"an unselected row bolds the typed text inside its description (Claude 2.1.283, '/show' on /artifact-diagramming)",
+	);
+	check(same(menuRow({ value: "clear" }, false, 130, undefined, 30, "/"), [`${UNSELECTED}  /clear${DEFAULT_FG}`]), "a bare slash bolds nothing, and a row without a description is the name alone");
+	const EXPLAIN = "Explain a solution, bug, design or concept the Feynman way — one concrete picture carried all the way through, the tempting wrong answers and why they fail, no jargon without a plain-word twin, an honest section at the end";
+	check(
+		same(menuRow({ value: "explain" }, true, 130, EXPLAIN, 30, "/expl"), [
+			`${SELECTED}  /${BOLD}expl${NOT_BOLD}ain${" ".repeat(22)}${BOLD}Expl${NOT_BOLD}ain a solution, bug, design or concept the Feynman way — one concrete picture carried all the${DEFAULT_FG}`,
+			`${SELECTED}${" ".repeat(32)}way through, the tempting wrong answers and why they fail, no jargon without a plain-word twin, a…${DEFAULT_FG}`,
+		]),
+		"a description past two lines ends in an ellipsis drawn in the row's own colour (Claude 2.1.283, '/expl')",
+	);
+
+	const piItem = { name: "skill:explain", description: "[u] Explain a thing" };
+	check(same(skillMenuItem(piItem, { name: "explain", description: "Explain a thing" }, "u", [{ name: "clear" }]), { name: "explain", description: "Explain a thing (user)" }), "a user skill is /explain with Claude's ' (user)' suffix (2.1.283 lqe: description + source label)");
+	check(skillMenuItem(piItem, { name: "explain", description: "Explain a thing" }, "p", []).description === "Explain a thing (project)", "a project skill ends ' (project)'");
+	check(skillMenuItem({ name: "skill:ponytail", description: "[u:npm:x] Lazy" }, { name: "ponytail", description: "Lazy" }, "u:npm:x", [{ name: "ponytail" }]).name === "skill:ponytail", "a skill named like another command keeps its skill: name");
+	check(same(skillMenuItem({ name: "skill:setup", description: "[u:npm:x] Set up" }, { name: "setup", description: "Set up" }, "u:npm:x", []), { name: "setup", description: "[u:npm:x] Set up" }), "a package skill gets the bare name and keeps pi's source tag");
+	check(same(invocableNames([{ name: "skill:explain", source: "skill" }, { name: "mode", source: "extension" }]), ["skill:explain", "explain", "mode"]), "a skill is invocable by both names, other commands by their own");
 
 	console.log("\nAll claude-slash-menu checks passed.");
 }

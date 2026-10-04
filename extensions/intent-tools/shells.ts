@@ -159,6 +159,7 @@ export function adopt(run: Run, fields: Omit<Shell, "status" | "stop" | "started
 		try {
 			appendFileSync(shell.path, exitMark(shell.status, shell.exitCode));
 		} catch {}
+		registry.shells.delete(shell.id);
 		onExit(shell);
 	});
 	return shell;
@@ -203,5 +204,6 @@ if (process.env.INTENT_SHELLS_SELFTEST) {
 	await run.done;
 	await new Promise((resolve) => setTimeout(resolve, 0));
 	check(readFileSync(shell.path, "utf8") === "a\nb\n\n[exited with code 0]\n" && exited[0]?.status === "completed" && registry.runningCount() === 0, "output before and after the move lands in the file, then the exit mark, and the shell completes");
+	check(!registry.shells.has("b1"), "a finished shell leaves the registry, so a later TaskStop answers `No task found with ID` (Claude 2.1.283, live m6a-stop capture 2026-10-04: the shell's completion had been announced before the stop)");
 	console.log("All intent-tools shell checks passed.");
 }

@@ -25,7 +25,11 @@
    "keys": "\r"
   },
   {
-   "sleep": 4
+   "until": "(?m)^❯ /clear\\s*$[\\s\\S]*^  \\[PONYTAIL\\] · Haiku 4\\.5(?! · ctx)",
+   "timeout": 20
+  },
+  {
+   "sleep": 1
   },
   {
    "snap": "cleared"

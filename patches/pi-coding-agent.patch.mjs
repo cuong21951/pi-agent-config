@@ -344,6 +344,51 @@ const EDITS = [
 		"let column=clip.x+Math.floor((availableWidth-textWidth)/2),result=[...screen];",
 		"let column=clip.x+Math.ceil((availableWidth-textWidth)/2),result=[...screen];",
 	],
+	['${this.mouseEnabled?mouseSequence:""}', '${this.claudeMouseSequence=this.mouseEnabled?mouseSequence:""}'],
+	[
+		"beforeTerminalStop(_options){this.closeSearch(),",
+		"afterTerminalStart(){this.claudeMouseSequence&&this.terminal.write(this.claudeMouseSequence)}beforeTerminalStop(_options){this.closeSearch(),",
+	],
+	[
+		"list2.matchPrefix=prefix;",
+		"list2.matchPrefix=prefix;layout&&globalThis.__claudeSlashPreselect&&!globalThis.__claudeSlashPreselect(prefix,items[0])&&(list2.selectedIndex=-1);",
+	],
+	[
+		'if(kb.matches(keyData,"tui.select.up"))this.selectedIndex=this.selectedIndex===0?this.filteredItems.length-1:this.selectedIndex-1,this.notifySelectionChange();',
+		'if(kb.matches(keyData,"tui.select.up"))this.selectedIndex=this.selectedIndex<=0?this.filteredItems.length-1:this.selectedIndex-1,this.notifySelectionChange();',
+	],
+	[
+		'if(kb.matches(data,"tui.input.tab")){let selected=this.autocompleteList.getSelectedItem();',
+		'if(kb.matches(data,"tui.input.tab")){let selected=this.autocompleteList.getSelectedItem()??this.autocompleteList.filteredItems[0];',
+	],
+	[
+		"let commandName=`skill:${skill.name}`;this.skillCommands.set(commandName,skill.filePath),skillCommandList.push({name:commandName,description:this.prefixAutocompleteDescription(skill.description,skill.sourceInfo)})}",
+		"let commandName=`skill:${skill.name}`,item={name:commandName,description:this.prefixAutocompleteDescription(skill.description,skill.sourceInfo)};this.skillCommands.set(commandName,skill.filePath),skillCommandList.push(globalThis.__claudeSkillItem?.(item,skill,this.getAutocompleteSourceTag(skill.sourceInfo),[...slashCommands,...templateCommands,...extensionCommands])??item)}",
+	],
+	[
+		'_expandSkillCommand(text){if(!text.startsWith("/skill:"))return text;',
+		'_expandSkillCommand(text){let end=text.indexOf(" "),bare=text.startsWith("/")?text.slice(1,end===-1?void 0:end):void 0;if(bare&&this.resourceLoader.getSkills().skills.some(s=>s.name===bare)&&!this.promptTemplates.some(t=>t.name===bare))text="/skill:"+text.slice(1);if(!text.startsWith("/skill:"))return text;',
+	],
+	[
+		"let skillBlock=parseSkillBlock(textContent);if(skillBlock){let component=new SkillInvocationMessageComponent(skillBlock,this.getMarkdownThemeWithSettings());if(component.setExpanded(this.toolOutputExpanded),this.chatContainer.addChild(component),skillBlock.userMessage){this.chatContainer.addChild(new Spacer(1));let userComponent=new UserMessageComponent(skillBlock.userMessage,this.getMarkdownThemeWithSettings(),this.outputPad,this.getMarkdownTransformers());this.chatContainer.addChild(userComponent)}}else{let userComponent=new UserMessageComponent(textContent,this.getMarkdownThemeWithSettings(),this.outputPad,this.getMarkdownTransformers());this.chatContainer.addChild(userComponent)}",
+		'let skillBlock=parseSkillBlock(textContent);skillBlock&&(textContent=`/${skillBlock.name}${skillBlock.userMessage?` ${skillBlock.userMessage}`:""}`);let userComponent=new UserMessageComponent(textContent,this.getMarkdownThemeWithSettings(),this.outputPad,this.getMarkdownTransformers());this.chatContainer.addChild(userComponent);',
+	],
+	[
+		"descriptionSingleLine=item.description?normalizeToSingleLine(item.description):void 0;",
+		'descriptionSingleLine=item.description?normalizeToSingleLine(item.description):void 0;if(this.layout&&this.layout.claudeMenu&&globalThis.__claudeSlashRow){lines.push(...globalThis.__claudeSlashRow(item,isSelected,width,descriptionSingleLine,primaryColumnWidth,this.matchPrefix||""));continue}',
+	],
+	[
+		"if(startIndex>0||endIndex<this.filteredItems.length){let scrollText=`  (${this.selectedIndex+1}/${this.filteredItems.length})`;",
+		"if(!(this.layout&&this.layout.claudeMenu)&&(startIndex>0||endIndex<this.filteredItems.length)){let scrollText=`  (${this.selectedIndex+1}/${this.filteredItems.length})`;",
+	],
+	[
+		'let segmentKind=segmentIsSpace?"space":"word";current&&currentKind!==segmentKind&&flushCurrent(),',
+		'let segmentKind=segmentIsSpace?"space":"word";segmentIsSpace&&currentKind==="word"&&pendingAnsi&&(current+=pendingAnsi,pendingAnsi=""),current&&currentKind!==segmentKind&&flushCurrent(),',
+	],
+	[
+		'renderToken(token,width,nextTokenType,styleContext){let lines=[];switch(token.type){',
+		'renderToken(token,width,nextTokenType,styleContext){let lines=[];(token.type==="paragraph"||token.type==="code")&&(nextTokenType=void 0);switch(token.type){',
+	],
 ];
 
 const check = process.argv.includes("--check");

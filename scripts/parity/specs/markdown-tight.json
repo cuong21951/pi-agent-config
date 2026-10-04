@@ -1,0 +1,10 @@
+{
+  "turns": [
+    {
+      "prompt": "Show the markdown tight sample.",
+      "steps": [
+        {"assistant": [{"type": "text", "text": "Got it. notes.txt contains:\n```\nalpha: 1\nbeta: 2\ngamma: 3\n```\nThat is the whole file.\n\nA paragraph after a blank line, then code with a language:\n```ts\nconst total = 1 + 2;\n```\n\nDone."}], "gap": 2}
+      ]
+    }
+  ]
+}

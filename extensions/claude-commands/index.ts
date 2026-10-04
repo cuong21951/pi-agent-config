@@ -1,6 +1,7 @@
 import type { ExtensionAPI, Theme } from "@earendil-works/pi-coding-agent";
 import type { Component } from "@earendil-works/pi-tui";
 import { cardLines } from "../claude-help/index.ts";
+import { invocableNames } from "../claude-slash-menu/index.ts";
 
 const BUILTIN_COMMAND_NAMES = [
 	"settings", "model", "tree", "thinking", "scoped-models", "export", "import", "share", "copy", "name",
@@ -70,6 +71,10 @@ export function unknownCommandText(data: { command: string; suggestion?: string 
 
 const prompted = ((globalThis as { __claudeInputPrompted?: { submitted: boolean } }).__claudeInputPrompted ??= { submitted: false });
 
+function menuSelection(): unknown {
+	return (globalThis as { __claudeEditor?: { autocompleteList?: { getSelectedItem(): unknown } } }).__claudeEditor?.autocompleteList?.getSelectedItem();
+}
+
 export default function (pi: ExtensionAPI) {
 	pi.registerEntryRenderer(UNKNOWN_COMMAND_ENTRY, (entry, _options, theme) => {
 		const paint = paintOf(theme);
@@ -98,7 +103,8 @@ export default function (pi: ExtensionAPI) {
 			if (!ctx.isIdle()) return undefined;
 			const text = ctx.ui.getEditorText();
 			if (!text.startsWith("/")) return undefined;
-			const known = [...BUILTIN_COMMAND_NAMES, ...pi.getCommands().map((c) => c.name)];
+			if (menuSelection()) return undefined;
+			const known = [...BUILTIN_COMMAND_NAMES, ...invocableNames(pi.getCommands())];
 			const outcome = resolveSlashSubmit(text, known);
 			if (outcome.kind === "pass") return undefined;
 			ctx.ui.setEditorText("");

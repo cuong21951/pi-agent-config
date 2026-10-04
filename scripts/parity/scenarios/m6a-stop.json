@@ -2,7 +2,7 @@
  "prompt": "Run exactly one shell command in the background (run_in_background true), with the description \"Wait for the timer\": python -c \"import time; time.sleep(60); print('finished')\" . Then reply with exactly: Started. Do not write any other text.",
  "steps": [
   {
-   "until": "(?m)^\u25cf Started\\.[\\s\\S]*done[^\\n]*shell still running",
+   "until": "(?m)^\u25cf Started\\.?[\\s\\S]*done[^\\n]*shell still running",
    "timeout": 90
   },
   {
@@ -21,12 +21,12 @@
    "keys": "\r"
   },
   {
-   "until": "(?m)^\u25cf Stopped\\.\\s*\\n\\s*\\n\u273b \\S+ for [^\\n]*\u00b7 done",
+   "until": "(?m)^\u25cf Stopped\\.?\\s*\\n\\s*\\n\u273b \\S+ for [^\\n]*\u00b7 done",
    "timeout": 90
   },
   {
    "sleep": 2
   }
  ],
- "end": "(?m)^\u25cf Stopped\\.\\s*\\n\\s*\\n\u273b \\S+ for [^\\n]*\u00b7 done"
+ "end": "(?m)^\u25cf Stopped\\.?\\s*\\n\\s*\\n\u273b \\S+ for [^\\n]*\u00b7 done"
 }

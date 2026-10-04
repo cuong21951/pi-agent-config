@@ -437,10 +437,11 @@ class Handler(BaseHTTPRequestHandler):
             elif block["type"] == "tool_use":
                 self.event("content_block_start", {"type": "content_block_start", "index": index, "content_block": {"type": "tool_use", "id": block["id"], "name": block["name"], "input": {}}})
                 self.event("content_block_delta", {"type": "content_block_delta", "index": index, "delta": {"type": "input_json_delta", "partial_json": json.dumps(block["input"])}})
-            if hang and index == len(blocks) - 1:
-                while True:
+            if index == len(blocks) - 1:
+                while hang:
                     time.sleep(1)
                     self.event("ping", {"type": "ping"})
+                self.gap = 0
             self.event("content_block_stop", {"type": "content_block_stop", "index": index})
         self.event("message_delta", {"type": "message_delta", "delta": {"stop_reason": stop, "stop_sequence": None}, "usage": {"output_tokens": output_tokens}})
         self.event("message_stop", {"type": "message_stop"})

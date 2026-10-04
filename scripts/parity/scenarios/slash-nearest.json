@@ -1,0 +1,20 @@
+{
+ "prompt": "",
+ "bypass": true,
+ "steps": [
+  {"keys": "/resme"},
+  {"sleep": 1.5},
+  {"snap": "fuzzy-menu"},
+  {"keys": "\r"},
+  {"sleep": 2},
+  {"snap": "fuzzy-enter"},
+  {"keys": "/clea"},
+  {"sleep": 1.5},
+  {"snap": "prefix-menu"},
+  {"keys": "\r"},
+  {"until": "(?m)^❯ /clear\\s*$[\\s\\S]*^  \\[PONYTAIL\\] · ", "timeout": 20},
+  {"sleep": 1},
+  {"snap": "prefix-enter"}
+ ],
+ "end": "."
+}

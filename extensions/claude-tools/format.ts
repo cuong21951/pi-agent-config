@@ -53,7 +53,7 @@ const asKey = (path: string) => path.replace(SEP, "/").toLowerCase();
 // us forward slashes even on Windows, so comparing raw against os.homedir() never matched and every row
 // showed the whole absolute path.
 function shortPath(value: unknown, s: Roots): string {
-	const raw = typeof value === "string" ? value : "";
+	const raw = (typeof value === "string" ? value : "").replace(/^(?:\.[\\/])+/, "");
 	if (raw === "") return "";
 	const sep = s.home.includes("\\") ? "\\" : "/";
 	const native = (text: string) => text.replace(SEP, sep);
@@ -691,6 +691,7 @@ if (process.env.CLAUDE_TOOLS_SELFTEST) {
 	const win: Style = { ...plain, home: "C:\\Users\\me", cwd: "C:\\Work" };
 	check(writeCallLine("edit", { path: "C:/Users/me/.pi/x.ts" }, win) === "● Update(~\\.pi\\x.ts)", "Windows: pi's forward slashes still match home, and the row uses backslashes");
 	check(writeCallLine("edit", { path: "C:/Work/src/b.ts" }, win) === "● Update(src\\b.ts)", "Windows: inside the working directory wins over ~");
+	check(writeCallLine("edit", { path: "./src/app.ts" }, win) === "● Update(src\\app.ts)", "a leading ./ is dropped: Claude 2.1.283 drew Update(src\\app.ts) where pi drew Update(.\\src\\app.ts) (live plan capture, 2026-10-04)");
 
 	const declined = { text: "The user doesn't want to proceed with this tool use. The tool use was rejected (eg. if it was a file edit, the new_string was NOT written to the file). STOP what you are doing and wait for the user to tell you how to proceed.", isError: true };
 	check(resultRows("edit", { path: "/home/me/proj/src/app.ts", edits: [{ oldText: "a", newText: "b" }] }, declined, view(), tagged)!.head === "<muted>  ⎿ \u00a0</muted><dim>User rejected update to </dim><dim><b>src/app.ts</b></dim>", "a declined Update is Claude's grey \"User rejected update to\" + bold path, not an error row");

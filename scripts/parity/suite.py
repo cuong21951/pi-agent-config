@@ -8,7 +8,7 @@ REPLAYS = os.path.join(HERE, "replays")
 
 LIVE = ["task", "interrupt", "mcp", "skill", "question", "question-multi", "question-chat", "permission", "clear", "web", "agent", "modes", "modes-default", "retry-live", "plan",
         "spinner-states", "bash-no-thinking", "group-second-running", "parallel-calls", "slow-search", "stream-lines", "highlight", "slash-colour", "question-afk", "m4a-keys", "m4a-exit",
-        "m4b-unknown-command", "m4b-typo-command", "m4b-narrow-footer", "m2-permission-decline",
+        "m4b-unknown-command", "m4b-typo-command", "slash-nearest", "slash-skill", "m4b-narrow-footer", "m2-permission-decline",
         "m4c-long-line", "m4d-bash-rows", "m5a-parallel-fail", "m4d-decline-edit", "m6c-resume-empty",
         "m6a-bg", "m6a-timeout", "m6a-ctrlb", "m6a-stop", "m6a-details", "m6f-view",
         "m6g-notify", "m6g-types", "m6g-sendrun", "m6g-resume", "m6g-stop", "m6g-cap", "m6g-fable", "m6g-fork", "m6g-nest", "m6g-nofork", "m6j-input-clear",
@@ -17,6 +17,7 @@ REPLAYED = {
     "thinking.jsonl": "Thinking sample.",
     "markdown.jsonl": "Show the markdown sample.",
     "markdown-langs.jsonl": "Show the markdown langs sample.",
+    "markdown-tight.jsonl": "Show the markdown tight sample.",
     "error.jsonl": "Error sample.",
     "error-width.jsonl": "Error width sample.",
     "wrap.jsonl": "Wrap sample.",

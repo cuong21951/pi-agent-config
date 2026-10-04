@@ -332,14 +332,14 @@ export default function (pi: ExtensionAPI) {
 			}
 			const shell = registry.shells.get(key);
 			if (!shell) throw new Error(`No task found with ID: ${key}`);
-			if (shell.status !== "running") throw new Error(`Task ${key} is not running (status: ${shell.status})`);
 			shell.stoppedByModel = true;
 			shell.stop();
 			return { content: [{ type: "text", text: stopResult(shell) }], details: { command: shell.command } };
 		},
 
-		renderCall(_args, theme) {
-			return dynamic((width) => [truncateToWidth(stopCallLine(theme), width)]);
+		renderCall(_args, theme, context) {
+			const id = (context as { toolCallId?: string })?.toolCallId ?? "";
+			return dynamic((width) => [truncateToWidth(stopCallLine(failed.has(id), theme), width)]);
 		},
 
 		renderResult(result, { isPartial }, theme, context) {

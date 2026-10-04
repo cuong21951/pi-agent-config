@@ -65,3 +65,74 @@ Claude's `Monitor` tool; the Workflow tool and cron/wakeup tools (CronCreate/Lis
 ## At merge (M7)
 
 In the real `~/.pi/agent`: delete the untracked `agents/Explore.md`, `agents/Plan.md`, `agents/general-purpose.md` and drop the uncommitted model edits in `agents/{planner,reviewer,scout,worker}.md` (those files are deleted by fbd147e) — Cuong's decision 2026-09-29: pi's subagents use Claude's built-in defaults. Do it only at merge: pi-subagents reads the agents folder when an agent starts, so earlier it would change running sessions.
+
+# Round 2 (2026-10-04, target Claude Code 2.1.289)
+
+Cuong asked on 2026-10-04 to keep cloning, with a goal cut into milestones and the regression suite green at each one. `GOAL.md` still defines "done"; the ground rules above still hold, except the pinned Claude moves to 2.1.289 in M8. One milestone at a time, a report to Cuong after each.
+
+## State found on 2026-10-04 (investigation)
+
+- Installed: pi 0.85.1 in both installs (npm latest 1.0.2, not taken), Claude Code 2.1.289 (sandbox still pins 2.1.283).
+- `main` is 9 commits ahead of `origin/main`. M6b was merged and applied to the installs but never pushed.
+- In flight, uncommitted in both trees: the slash-menu round (Enter on a partly typed command, bare `/skill` names, no preselection on a fuzzy-only match, plus the three review fixes), cases `slash-nearest` and `slash-skill` (73 cases). Its first full run was cut off at 35/73 (33 clean; `question` and `question-chat` differed only on the footer's `openrouter ?` balance) when the session ended. The real installs show 71 of 76 core edits.
+- Only in `~/.pi/agent`, never in the sandbox: the wheel fix (core edits 67-68 and its two README paragraphs, 2026-10-03, uncommitted) and two commits (`/resume` titles, the Ajv logger hunk). The sandbox is therefore behind `main`, and a suite run there does not test what `main` holds until they are reconciled.
+- Cuong's own uncommitted edits in `~/.pi/agent` (`extensions/voice`, `extensions/intent-tools`, `skills/film-download`) are not part of this work and are left alone.
+
+## Regression gate (every milestone, in the sandbox, on the final code)
+
+1. `py -3.12 scripts/selfchecks.py` prints `all self-checks passed`.
+2. `node patches/apply.mjs` reports no `NEEDS PORT`, and `node patches/pi-coding-agent.patch.mjs --check` shows every edit present.
+3. `py -3.12 scripts/parity/suite.py --jobs 3` exits 0 on two consecutive runs: every earlier case plus the milestone's new ones. A case that differs once is run alone three times before it is called a flake, and its cause goes in the README ledger.
+4. Every `m6g-*` `reqdiff` is clean, and no Claude capture carries the classic-fallback line.
+
+Landing, after the gate: sync the sandbox files into `~/.pi/agent`, `node patches/apply.mjs` there (`--check` complete on the Volta and Roaming installs), commit, push `origin main`, add a Baseline row. Running pi sessions need a restart.
+
+## M7 — Land the slash-menu round (time box: 1 session)
+
+Investigate: done above.
+Work: fast-forward `parity-sandbox` to `main`, carry the wheel edits 67-68 and their README text into the sandbox, re-apply the core patch to the sandbox install, then the gate.
+Test: the 73 cases, with `slash-nearest` and `slash-skill`; `question` and `question-chat` rerun alone if the balance row differs again.
+Exit: gate green (73/73 twice), `--check` complete on all three installs, committed and pushed (Cuong's go, 2026-10-04: "Xong thì commit và push luôn").
+
+## M8 — Retarget to Claude Code 2.1.289 (time box: 2 sessions)
+
+Investigate: `findings/claude-drift-289.md`, the embedded changelog of 2.1.284-2.1.289 against 2.1.283, each UI item checked against the ledger. Pin `sandbox/claude-2.1.289.exe`, run the suite against it once, and triage every difference: Claude changed (port it), harness (fix the case), or flake.
+Work: port what changed, one scenario or replay per ported item; move the target line in the README ledger.
+Exit: gate green on 2.1.289; every drift item has a verdict (matched, ported, exception with its measurement, or deferred with a milestone).
+
+## M9 — Widen the regression net (time box: 1 session)
+
+What is only self-checked or kept out of the suite today.
+Investigate: capture Claude's `/context`, `/usage`, `/status` and `/mcp` panels and the queued-message screens on the pinned binary.
+Work: suite cases for the four panels (the account-only rows stay named exceptions); the queued-message layout (Claude's grey `❯` row after the tool, `ctrl+x ctrl+s to send now`, `Press up to edit queued messages`; pi draws `Steering: …` above it), which brings `m6a-sendnow` and `m6j-interrupt-queued` into the suite; thinking markdown in the ctrl+o view (inline code, nested lists).
+Exit: gate green with the new cases.
+
+## M10 — Dialogs and keys (time box: 2 sessions)
+
+Investigate: the measuring cases `m5d-perm-fetch`, `m5d-perm-mcp`, `m5d-perm-skill`; Claude's transcript key card in the ctrl+o view.
+Work: MCP, Fetch and Skill permission dialogs in manual mode (pi asks nothing today); the ctrl+o transcript keys (↑↓ j k, ctrl+u/d, space/b, g/G, `/` search, the `?` key card); a click on the sticky prompt row; the list dialog for several background shells and `x` in Shell details.
+Exit: gate green with a case for each.
+
+## M11 — Tools Claude has and pi lacks (time box: 3 sessions)
+
+Investigate: the `m6f-measure5` captures, re-measured on the pinned binary.
+Work: `Monitor`; CronCreate, CronList, CronDelete and ScheduleWakeup with their rows and the scheduled-task fire; the Workflow rows, `/workflows` and the `/tasks` Phases card; `/btw`.
+Exit: each one is built with its case, or moved to the ledger as an exception with its measurement; gate green.
+
+## M12 — Themes (time box: 1 session)
+
+Investigate: Claude's light, light-daltonized and ANSI palettes from the bundle; its `NO_COLOR` behaviour on screen.
+Work: a light theme, `NO_COLOR`.
+Exit: the replay cases run once per theme and are clean; gate green.
+
+## Decisions that are Cuong's (not started without a go)
+
+- pi 1.0.2: every one of the 76 anchored core edits and the seven package patches would need porting. Recommended as its own round after M8.
+- The public `pi-claude-harness` mirror is a month behind (11 extensions and most patches missing). `pi-agent-config` has been public since 2026-09-24, so either mirror it again or retire it.
+- Cuong's uncommitted `voice`, `intent-tools` and `film-download` edits: commit them or keep them local.
+
+## Round 2 baseline
+
+| Milestone | Date | Suite | Notes |
+| --- | --- | --- | --- |
+| M7 | 2026-10-04 | 74/74, 74/74 | runs 9 and 10 (`--jobs 3`, 74 cases with `slash-nearest`, `slash-skill`, `markdown-tight-replay`); runs 1-8: 71/73, 71/73, 72/73, 73/73, 72/73, 70/73, 72/74, 73/74, every difference read out of its captures (README, Suite state). Landed: the slash-menu round, the wheel edits 67-68, and four pi differences live Haiku turned up (wrap after inline code, edit 77; blank row between a sentence and a fence, edit 78; a leading `./` in a path; the refused `Stop Task` row). Harness: state waits in `clear` and `slash-nearest`, run.py waits for Claude's final `ctx N%`, mock.py ends the stream after the last block, `m6a-timeout` timer 25 s, `agent` prompt, `m6a-stop` and `m6f-view` waits. `m6g-stop`'s Claude-side race remains (once in ten runs). Every m6g `reqdiff` clean in runs 9 and 10; the classic-fallback line once, in run 10's uncompared `error-replay/claude-live` leg; self-checks green; core patch 78/78 |

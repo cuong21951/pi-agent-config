@@ -52,8 +52,6 @@ ROWS = [
      re.compile(r"^  ⎿[  ]{2}Tip: "), None, re.compile(r"^ {5}\S")),
     ("out-of-scope model warning: the harness pins Haiku 4.5, which is outside Cuong's enabledModels",
      None, re.compile(r"^ Warning: Agent \".*\" using out-of-scope model "), re.compile(r"^\s*$")),
-    ("slash-menu inventory: Claude's built-ins (/code-review, /doctor) vs Cuong's pi skills fuzzy-matching the same query; the blank rows above an open menu follow its height and are not compared",
-     re.compile(r"^  /(?:code-review|doctor) "), re.compile(r"^  /skill:\S+ "), re.compile(r"^ {32}\S")),
     ("session-start notice: each harness's own SessionStart line (Claude's agents-md hook, pi's Ponytail loader), drawn after the history on a resume",
      re.compile(r"^● agents-md: "), re.compile(r"^● Ponytail loaded: "), None),
 ]
@@ -109,6 +107,39 @@ def without_menu_filler(lines):
     while top > 0 and not lines[top - 1]["text"].strip():
         top -= 1
     return lines[:top] + lines[menu:]
+
+
+MENU_INVENTORY = "slash-menu inventory: each harness lists its own commands for a query, so only the rows both menus show are compared; the blank rows above an open menu follow its height and are not compared"
+MENU_NAME = re.compile(r"^  (/[a-z][\w:.-]*)")
+MENU_FOLLOWER = re.compile(r"^ {32}\S")
+
+
+def menu_block(lines):
+    texts = [line["text"].rstrip() for line in lines]
+    end = max((i for i in range(len(texts) - 1) if texts[i].startswith("─") and re.match(r"❯\s/", texts[i + 1])), default=0)
+    start = end
+    while start > 0 and (MENU_NAME.match(texts[start - 1]) or MENU_FOLLOWER.match(texts[start - 1])):
+        start -= 1
+    return start, end
+
+
+def menu_names(lines):
+    start, end = menu_block(lines)
+    return {m.group(1) for line in lines[start:end] if (m := MENU_NAME.match(line["text"]))}
+
+
+def shared_menu(lines, shared, applied):
+    start, end = menu_block(lines)
+    kept, keep = [], False
+    for line in lines[start:end]:
+        name = MENU_NAME.match(line["text"])
+        if name:
+            keep = name.group(1) in shared
+        if keep:
+            kept.append(line)
+        else:
+            applied.add(MENU_INVENTORY)
+    return lines[:start] + kept + lines[end:]
 
 
 def normalise(text, transcript=False):
@@ -233,8 +264,11 @@ for screen, claude_name, pi_name in screens:
         if gaps != (gap, gap):
             total += 1
             report += [f"## {screen} · gap: {gaps[0]} blank row(s) above the prompt box on Claude's side, {gaps[1]} on pi's (the case wants {gap})", ""]
-    _, c_body, c_foot = regions(load(claude_name, "claude", applied), bool(viewport))
-    _, p_body, p_foot = regions(load(pi_name, "pi", applied, viewport), bool(viewport))
+    c_lines, p_lines = load(claude_name, "claude", applied), load(pi_name, "pi", applied, viewport)
+    c_names, p_names = menu_names(c_lines), menu_names(p_lines)
+    shared = c_names & p_names if c_names and p_names else c_names | p_names
+    _, c_body, c_foot = regions(shared_menu(c_lines, shared, applied), bool(viewport))
+    _, p_body, p_foot = regions(shared_menu(p_lines, shared, applied), bool(viewport))
     for name, c, p in (("Transcript", c_body, p_body), ("Prompt and footer", c_foot, p_foot)):
         text_diffs, colour_diffs = compare(c, p, applied, name == "Prompt and footer")
         total += len(text_diffs) + len(colour_diffs)

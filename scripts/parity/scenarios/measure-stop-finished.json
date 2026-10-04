@@ -1,0 +1,13 @@
+{
+ "prompt": "Run exactly one shell command in the background (run_in_background true), with the description \"Quick timer\": python -c \"print('finished')\" . Then reply with exactly: Started. Later, only when a task notification arrives, reply with exactly: Noted. Do not write any other text.",
+ "steps": [
+  {"until": "(?m)^● Noted\\.?\\s*\\n\\s*\\n✻ \\S+ for [^\\n]*· done", "timeout": 120},
+  {"sleep": 1.5},
+  {"keys": "Call TaskStop on that background command's task id anyway, then reply with exactly: Stopped."},
+  {"sleep": 1.5},
+  {"keys": "\r"},
+  {"until": "(?m)^● Stopped\\.?\\s*\\n\\s*\\n✻ \\S+ for [^\\n]*· done", "timeout": 90},
+  {"sleep": 2}
+ ],
+ "end": "(?m)^● Stopped\\.?\\s*\\n\\s*\\n✻ \\S+ for [^\\n]*· done"
+}

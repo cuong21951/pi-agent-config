@@ -37,12 +37,12 @@ export function backgroundLines(command: string, s: Style): string[] {
 	return [verboseCallLine(command, false, s), s.fg("muted", `${RESULT_ELBOW}${RUNNING_IN_BACKGROUND}`)];
 }
 
-export function stopCallLine(s: Style): string {
-	return s.fg("borderAccent", "● ") + s.bold("Stop Task");
+export function stopCallLine(failed: boolean, s: Style): string {
+	return s.fg(failed ? "error" : "borderAccent", "● ") + s.bold("Stop Task");
 }
 
 export function stopResultLine(command: string | undefined, error: string | undefined, s: Style): string {
-	return s.fg("muted", RESULT_ELBOW) + (error !== undefined ? s.fg("error", error) : `${command ?? ""} · stopped`);
+	return s.fg("muted", RESULT_ELBOW) + (error !== undefined ? s.fg("error", `Error: ${error}`) : `${command ?? ""} · stopped`);
 }
 
 const TIMED_OUT = /(?:\n\n)?Command timed out after (\d+) seconds$/;
@@ -123,5 +123,6 @@ if (process.env.INTENT_TOOLS_SELFTEST) {
 	check(timedOutError(new Error("part\n\nCommand timed out after 5 seconds")).message === "Exit code 143\npart\nCommand timed out after 5s" && timedOutError(new Error("boom")).message === "boom", "output before the timeout stays; other errors pass through");
 	check(exitCodeOf(timedOut) === 143 && resultLines(displayOutput(timedOut, () => undefined), 143, true, tagged)!.join("|") === `<muted>${RESULT_ELBOW}</muted><error>Error: Exit code 143</error>|     <error>Command timed out after 2s</error>`, "ctrl+o draws it as Claude does: red Error: Exit code 143, then the timeout line");
 	check(backgroundLines("sleep 9", tagged).join("|") === `<borderAccent>● </borderAccent>Bash(sleep 9)|<muted>${RESULT_ELBOW}Running in the background (↓ to manage)</muted>`, "ctrl+o on a backgrounded call: blue dot, then Claude's grey Running in the background (↓ to manage)");
-	check(stopCallLine(tagged) === "<borderAccent>● </borderAccent>Stop Task" && stopResultLine("python x", undefined, tagged) === `<muted>${RESULT_ELBOW}</muted>python x · stopped`, "TaskStop draws Claude's Stop Task block, command · stopped under the elbow (m6a-measure-stop)");
+	check(stopCallLine(false, tagged) === "<borderAccent>● </borderAccent>Stop Task" && stopResultLine("python x", undefined, tagged) === `<muted>${RESULT_ELBOW}</muted>python x · stopped`, "TaskStop draws Claude's Stop Task block, command · stopped under the elbow (m6a-measure-stop)");
+	check(stopCallLine(true, tagged) === "<error>● </error>Stop Task" && stopResultLine(undefined, "No task found with ID: b1", tagged) === `<muted>${RESULT_ELBOW}</muted><error>Error: No task found with ID: b1</error>`, "a refused TaskStop: Claude 2.1.283's red dot and red `Error: <message>` under the elbow (live m6a-stop capture 2026-10-04)");
 }

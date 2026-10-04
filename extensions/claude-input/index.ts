@@ -1,4 +1,5 @@
 import { CustomEditor, type ExtensionAPI } from "@earendil-works/pi-coding-agent";
+import { invocableNames } from "../claude-slash-menu/index.ts";
 
 const ANSI = /\x1b\[[0-9;]*m/g;
 const PROMPT = "❯ ";
@@ -188,11 +189,12 @@ export default function (pi: ExtensionAPI) {
 		if (!ctx.hasUI) return;
 		const previous = ctx.ui.getEditorComponent();
 		const mutedPrompt = ctx.ui.theme.fg("muted" as never, PROMPT);
-		const command: CommandColour = { names: [...BUILTIN_COMMAND_NAMES, ...pi.getCommands().map((c) => c.name)], paint: commandPaint };
+		const command: CommandColour = { names: [...BUILTIN_COMMAND_NAMES, ...invocableNames(pi.getCommands())], paint: commandPaint };
 		const hasMessages = (ctx.sessionManager?.getEntries() ?? []).some((entry) => entry.type === "message");
 		const placeholder = placeholderText(ctx.sessionManager?.getSessionId() ?? "");
 		ctx.ui.setEditorComponent((tui, theme, keybindings) => {
 			const editor = previous ? previous(tui, theme, keybindings) : new CustomEditor(tui, theme, keybindings);
+			(globalThis as { __claudeEditor?: unknown }).__claudeEditor = editor;
 			const paint: Paint = (text) => theme.borderColor(text);
 			const render = editor.render.bind(editor);
 			const muted: Paint = (text) => ctx.ui.theme.fg("muted" as never, text);
