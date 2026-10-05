@@ -124,8 +124,8 @@
       "snap": "view-nosel"
     },
     {
-      "until": "(?m)\\A(?![\\s\\S]*^[·✢*✶✻✽] \\S+…)[\\s\\S]*Message @general-purpose",
-      "timeout": 120
+      "until": "(?m)^(?!.*reply with exactly).*All checked\\.\\s*$[\\s\\S]*Message @general-purpose",
+      "timeout": 240
     },
     {
       "sleep": 32

@@ -1,0 +1,13 @@
+{
+ "prompt": "Thinking markdown sample.",
+ "steps": [
+  {"sleep": 2},
+  {"snap": "collapsed"},
+  {"keys": "\u000f"},
+  {"sleep": 2},
+  {"snap": "ctrlo"},
+  {"keys": "q"},
+  {"sleep": 1}
+ ],
+ "end": "."
+}

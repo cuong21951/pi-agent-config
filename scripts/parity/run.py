@@ -88,6 +88,13 @@ def pi_context_shown():
     return [{"until": re.escape(text), "timeout": 12} for text in shown[-1:]]
 
 
+FALLBACK = "fullscreen renderer didn't finish starting"
+
+
+def claude_fell_back():
+    return any(FALLBACK in open(path, encoding="utf-8").read() for path in glob.glob(os.path.join(a.out, "claude*.txt")))
+
+
 def capture(side, cmd_args, env=(), steps=None, until=None, out=None):
     fresh_workdir()
     out = out or a.out
@@ -213,18 +220,22 @@ if a.only in (None, "claude"):
         open(session, "w").close()
     if not session:
         raise SystemExit("no pi session to replay; run the pi side first")
-    mock = start_mock(session, "req-claude" if pi_mock else "request", "mock.log")
-    permission = "--dangerously-skip-permissions" if bypass else "--permission-mode default --allow-dangerously-skip-permissions"
-    try:
-        command = f'"{slash(a.claude)}" --model {a.claude_model} {permission} {scenario.get("claude_args", "")}'
-        claude_env = [f"ANTHROPIC_BASE_URL=http://127.0.0.1:{a.port}", "ANTHROPIC_AUTH_TOKEN=parity-mock", "ENABLE_CLAUDEAI_MCP_SERVERS=false", "CLAUDE_CODE_ALWAYS_ENABLE_EFFORT=1", "DISABLE_AUTOUPDATER=1", f"CLAUDE_CONFIG_DIR={os.environ['CLAUDE_CONFIG_DIR']}", *scenario.get("claude_env", [])]
-        if a.replay and not a.fresh_claude:
-            capture("claude", ["--cmd", command], claude_env, steps=[{"until": ready, "timeout": 90}, {"sleep": 1.5}, {"keys": prompt}, {"sleep": 1.5}, {"keys": "\r"}, {"until": SUBMITTED, "timeout": 6, "retries": 2, "retry_keys": "\r"}], until=DONE, out=os.path.join(a.out, "claude-live"))
-            resumed = steps_for("claude", typed=False) if scenario.get("steps") else [{"until": ready, "timeout": 90}, {"sleep": 1.5}]
-            capture("claude", ["--cmd", f"{command} --resume {resumable_copy()}"], claude_env, steps=resumed, until=None if scenario.get("steps") else ready)
-        else:
-            capture("claude", ["--cmd", command], claude_env, steps=steps_for("claude") + pi_context_shown())
-    finally:
-        stop_mock(mock)
-        if not a.keep_claude_session:
-            shutil.rmtree(claude_project_dir(), ignore_errors=True)
+    for attempt in range(2):
+        mock = start_mock(session, "req-claude" if pi_mock else "request", "mock.log")
+        permission = "--dangerously-skip-permissions" if bypass else "--permission-mode default --allow-dangerously-skip-permissions"
+        try:
+            command = f'"{slash(a.claude)}" --model {a.claude_model} {permission} {scenario.get("claude_args", "")}'
+            claude_env = [f"ANTHROPIC_BASE_URL=http://127.0.0.1:{a.port}", "ANTHROPIC_AUTH_TOKEN=parity-mock", "ENABLE_CLAUDEAI_MCP_SERVERS=false", "CLAUDE_CODE_ALWAYS_ENABLE_EFFORT=1", "DISABLE_AUTOUPDATER=1", f"CLAUDE_CONFIG_DIR={os.environ['CLAUDE_CONFIG_DIR']}", *scenario.get("claude_env", [])]
+            if a.replay and not a.fresh_claude:
+                capture("claude", ["--cmd", command], claude_env, steps=[{"until": ready, "timeout": 90}, {"sleep": 1.5}, {"keys": prompt}, {"sleep": 1.5}, {"keys": "\r"}, {"until": SUBMITTED, "timeout": 6, "retries": 2, "retry_keys": "\r"}], until=DONE, out=os.path.join(a.out, "claude-live"))
+                resumed = steps_for("claude", typed=False) if scenario.get("steps") else [{"until": ready, "timeout": 90}, {"sleep": 1.5}]
+                capture("claude", ["--cmd", f"{command} --resume {resumable_copy()}"], claude_env, steps=resumed, until=None if scenario.get("steps") else ready)
+            else:
+                capture("claude", ["--cmd", command], claude_env, steps=steps_for("claude") + pi_context_shown())
+        finally:
+            stop_mock(mock)
+            if not a.keep_claude_session:
+                shutil.rmtree(claude_project_dir(), ignore_errors=True)
+        if not claude_fell_back():
+            break
+        sys.stdout.write("claude: the capture carries the classic-renderer fallback line, running Claude's side again\n")

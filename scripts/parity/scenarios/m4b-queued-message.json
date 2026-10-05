@@ -1,9 +1,12 @@
 {
- "prompt": "Use your Grep tool exactly once to search the current directory recursively for the pattern needle-token. Do not write any text before the tool call.",
+ "prompt": "Run exactly one shell command in the foreground (do not set run_in_background), with the description \"Wait for the timer\": python -c \"import time; time.sleep(12); print('finished')\" . Do not write any text before the tool call. When a message from me arrives, reply with exactly: Got your message. Do not write any other text.",
  "steps": [
   {
-   "until": "(?ms)^● Searching for needle-token[^\n]*\n  ⎿  \"needle-token\".*ctx \\d+%",
+   "until": "\\(ctrl\\+b to run in background\\)",
    "timeout": 90
+  },
+  {
+   "sleep": 1
   },
   {
    "keys": "second message"
@@ -15,7 +18,7 @@
    "keys": "\r"
   },
   {
-   "sleep": 1
+   "sleep": 1.5
   },
   {
    "snap": "queued"
@@ -30,6 +33,5 @@
   {
    "snap": "finished"
   }
- ],
- "search_data": 12000
+ ]
 }

@@ -393,6 +393,34 @@ const EDITS = [
 		'errors.push("description is required"):description.length>MAX_DESCRIPTION_LENGTH2&&errors.push(`description exceeds ${MAX_DESCRIPTION_LENGTH2} characters (${description.length})`),errors}function createSkillSourceInfo(',
 		'errors.push("description is required"):void 0,errors}function createSkillSourceInfo(',
 	],
+	[
+		'this.statusContainer=new Container,this.widgetContainerAbove=new Container,',
+		'this.documentContainer.addChild(this.pendingMessagesContainer),this.statusContainer=new Container,this.widgetContainerAbove=new Container,',
+	],
+	[
+		'pendingMessages:this.pendingMessagesContainer,status:',
+		'pendingMessages:new Container,status:',
+	],
+	[
+		'[this.documentContainer,this.pendingMessagesContainer,this.statusContainer,',
+		'[this.documentContainer,this.statusContainer,',
+	],
+	[
+		'this.pendingMessagesContainer.addChild(new Spacer(1));for(let message of steeringMessages){let text=theme.fg("dim",`Steering: ${message}`);this.pendingMessagesContainer.addChild(new TruncatedText(text,1,0))}for(let message of followUpMessages){let text=theme.fg("dim",`Follow-up: ${message}`);this.pendingMessagesContainer.addChild(new TruncatedText(text,1,0))}let dequeueHint=this.getAppKeyDisplay("app.message.dequeue"),hintText=theme.fg("dim",`\\u21B3 ${dequeueHint} to edit all queued messages`);this.pendingMessagesContainer.addChild(new TruncatedText(hintText,1,0))}}',
+		'for(let message of[...steeringMessages,...followUpMessages]){this.pendingMessagesContainer.addChild(new Spacer(1)),globalThis.__claudeQueuedBuild=!0;let row=new UserMessageComponent(message,this.getMarkdownThemeWithSettings(),this.outputPad,this.getMarkdownTransformers());globalThis.__claudeQueuedBuild=!1,this.pendingMessagesContainer.addChild(row)}this.pendingMessagesContainer.addChild(new TruncatedText(theme.fg("muted","  ctrl+x ctrl+s to send now"),0,0))}globalThis.__claudeQueued={count:steeringMessages.length+followUpMessages.length,restore:()=>this.restoreQueuedMessagesToEditor()}}',
+	],
+	[
+		'let queuedText=allQueued.join(`\n\n`),currentText=options?.currentText??this.editor.getText(),combinedText=[queuedText,currentText].filter(t=>t.trim()).join(`\n\n`);',
+		'let queuedText=allQueued.join(`\n`),currentText=options?.currentText??this.editor.getText(),combinedText=[queuedText,currentText].filter(t=>t.trim()).join(`\n`);',
+	],
+	[
+		'lines.push(...this.renderList(itemToken,depth+1,width,styleContext)),renderedAnyLine=!0;continue}',
+		'lines.push(...this.renderList(itemToken,continuationPrefix,width,styleContext)),renderedAnyLine=!0;continue}',
+	],
+	[
+		'startNumber=typeof token.start=="number"?token.start:1;for(let i=0;i<token.items.length;i++){let item=token.items[i],isLastItem',
+		'startNumber=typeof token.start=="number"?token.start:1;typeof depth=="string"&&(indent=depth);for(let i=0;i<token.items.length;i++){let item=token.items[i],isLastItem',
+	],
 ];
 
 const check = process.argv.includes("--check");

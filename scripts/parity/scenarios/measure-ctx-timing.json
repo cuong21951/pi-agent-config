@@ -1,0 +1,226 @@
+{
+ "prompt": "Do not use any tool. Write exactly three paragraphs about lighthouses, separated by blank lines. Each paragraph has four long sentences.",
+ "steps": [
+  {
+   "sleep": 0.5
+  },
+  {
+   "snap": "t01"
+  },
+  {
+   "sleep": 0.5
+  },
+  {
+   "snap": "t02"
+  },
+  {
+   "sleep": 0.5
+  },
+  {
+   "snap": "t03"
+  },
+  {
+   "sleep": 0.5
+  },
+  {
+   "snap": "t04"
+  },
+  {
+   "sleep": 0.5
+  },
+  {
+   "snap": "t05"
+  },
+  {
+   "sleep": 0.5
+  },
+  {
+   "snap": "t06"
+  },
+  {
+   "sleep": 0.5
+  },
+  {
+   "snap": "t07"
+  },
+  {
+   "sleep": 0.5
+  },
+  {
+   "snap": "t08"
+  },
+  {
+   "sleep": 0.5
+  },
+  {
+   "snap": "t09"
+  },
+  {
+   "sleep": 0.5
+  },
+  {
+   "snap": "t10"
+  },
+  {
+   "sleep": 0.5
+  },
+  {
+   "snap": "t11"
+  },
+  {
+   "sleep": 0.5
+  },
+  {
+   "snap": "t12"
+  },
+  {
+   "sleep": 0.5
+  },
+  {
+   "snap": "t13"
+  },
+  {
+   "sleep": 0.5
+  },
+  {
+   "snap": "t14"
+  },
+  {
+   "sleep": 0.5
+  },
+  {
+   "snap": "t15"
+  },
+  {
+   "sleep": 0.5
+  },
+  {
+   "snap": "t16"
+  },
+  {
+   "sleep": 0.5
+  },
+  {
+   "snap": "t17"
+  },
+  {
+   "sleep": 0.5
+  },
+  {
+   "snap": "t18"
+  },
+  {
+   "sleep": 0.5
+  },
+  {
+   "snap": "t19"
+  },
+  {
+   "sleep": 0.5
+  },
+  {
+   "snap": "t20"
+  },
+  {
+   "sleep": 0.5
+  },
+  {
+   "snap": "t21"
+  },
+  {
+   "sleep": 0.5
+  },
+  {
+   "snap": "t22"
+  },
+  {
+   "sleep": 0.5
+  },
+  {
+   "snap": "t23"
+  },
+  {
+   "sleep": 0.5
+  },
+  {
+   "snap": "t24"
+  },
+  {
+   "sleep": 0.5
+  },
+  {
+   "snap": "t25"
+  },
+  {
+   "sleep": 0.5
+  },
+  {
+   "snap": "t26"
+  },
+  {
+   "sleep": 0.5
+  },
+  {
+   "snap": "t27"
+  },
+  {
+   "sleep": 0.5
+  },
+  {
+   "snap": "t28"
+  },
+  {
+   "sleep": 0.5
+  },
+  {
+   "snap": "t29"
+  },
+  {
+   "sleep": 0.5
+  },
+  {
+   "snap": "t30"
+  },
+  {
+   "sleep": 0.5
+  },
+  {
+   "snap": "t31"
+  },
+  {
+   "sleep": 0.5
+  },
+  {
+   "snap": "t32"
+  },
+  {
+   "sleep": 0.5
+  },
+  {
+   "snap": "t33"
+  },
+  {
+   "sleep": 0.5
+  },
+  {
+   "snap": "t34"
+  },
+  {
+   "sleep": 0.5
+  },
+  {
+   "snap": "t35"
+  },
+  {
+   "sleep": 0.5
+  },
+  {
+   "snap": "t36"
+  },
+  {
+   "until": "✻ \\S+ for [^\n]*· done",
+   "timeout": 90
+  }
+ ],
+ "end": "✻ \\S+ for [^\\n]*· done"
+}

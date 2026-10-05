@@ -1,6 +1,6 @@
 import { dirname, isAbsolute, join, resolve } from "node:path";
 import { getAgentDir } from "@earendil-works/pi-coding-agent";
-import { visibleWidth, wrapTextWithAnsi } from "@earendil-works/pi-tui";
+import { Markdown, type MarkdownTheme, visibleWidth, wrapTextWithAnsi } from "@earendil-works/pi-tui";
 import { isAbort, isRejected, thoughtText } from "./rows.ts";
 
 export type Paint = (role: string, text: string) => string;
@@ -121,8 +121,26 @@ export function stampRow(timestamp: number, model: string, width: number, s: Sty
 	return " ".repeat(Math.max(0, width - visibleWidth(text))) + s.fg("muted", text.trimEnd()) + " ".repeat(MODEL_TAIL);
 }
 
-function inlineCode(line: string): string {
-	return line.replace(/`([^`]+)`/g, "\x1b[38;2;153;204;255m$1\x1b[39m");
+function thinkingTheme(s: Style): MarkdownTheme {
+	const plain = (text: string) => text;
+	return {
+		heading: plain,
+		link: (text) => `\x1b[94m${text}\x1b[39m`,
+		linkUrl: () => "",
+		code: (text) => `\x1b[38;2;153;204;255m${text}\x1b[39m`,
+		codeBlock: plain,
+		codeBlockBorder: plain,
+		quote: plain,
+		quoteBorder: plain,
+		hr: plain,
+		listBullet: (text) => UNDIM + s.fg("muted", text) + DIM,
+		bold: plain,
+		italic: (text) => `\x1b[3m${text}\x1b[23m`,
+		strikethrough: plain,
+		underline: plain,
+		highlightCode: (code, lang) => globalThis.__claudeFenceHighlight?.(code, lang) ?? code.split("\n"),
+		codeBlockIndent: "",
+	};
 }
 
 export function thinkingRows(content: ReadonlyArray<{ type: string; thinking?: string }>, width: number, s: Style): string[] {
@@ -131,16 +149,10 @@ export function thinkingRows(content: ReadonlyArray<{ type: string; thinking?: s
 		.map((block) => (block.thinking ?? "").trim())
 		.join("\n\n");
 	if (text === "") return [];
-	const room = Math.max(1, width - 2);
 	const dim = (line: string) => (line === "" ? "" : DIM + line + UNDIM);
-	const listed = (line: string, first: boolean) => {
-		const marker = first ? line.match(/^(?:\d+\.|-) /)?.[0] : undefined;
-		return marker ? s.fg("muted", marker) + dim(line.slice(marker.length)) : dim(line);
-	};
-	return text
-		.split("\n")
-		.flatMap((line) => (line.trim() === "" ? [""] : wrapTextWithAnsi(inlineCode(line), room).map((piece, i) => listed(piece, i === 0))))
-		.map((line, i) => (i === 0 ? s.fg("muted", "\x1b[3m∴ \x1b[23m") : "  ") + line);
+	return new Markdown(text, 0, 0, thinkingTheme(s))
+		.render(Math.max(1, width - 2))
+		.map((line, i) => (i === 0 ? s.fg("muted", "\x1b[3m∴ \x1b[23m") : "  ") + dim(line.trimEnd()));
 }
 
 function searchInput(args: Record<string, unknown>): string {
@@ -720,9 +732,11 @@ if (process.env.CLAUDE_TOOLS_SELFTEST) {
 	const thought = thinkingRows([{ type: "thinking", thinking: "alpha beta gamma" }, { type: "text" }], 12, plain);
 	check(thought.join("|") === "\x1b[3m∴ \x1b[23m\x1b[2malpha beta\x1b[22m|  \x1b[2mgamma\x1b[22m", "ctrl+o shows the thinking: italic ∴, the text dim, continuation rows hang two columns");
 	check(thinkingRows([{ type: "text" }], 40, plain).length === 0, "no thinking, no rows");
-	check(thinkingRows([{ type: "thinking", thinking: "Plan:\n1. Run it" }], 40, tagged)[1] === "  <muted>1. </muted>\x1b[2mRun it\x1b[22m", "a numbered step keeps its number grey and upright, the step itself dim (m4c-long-line)");
-	check(thinkingRows([{ type: "thinking", thinking: "First call:\n- command: echo ok" }], 40, tagged)[1] === "  <muted>- </muted>\x1b[2mcommand: echo ok\x1b[22m", "a bullet keeps its dash grey, the item dim (m5a-parallel-fail, Claude 2.1.283)");
-	check(thinkingRows([{ type: "thinking", thinking: "Plan:\n1. command: `echo ok`" }], 60, tagged)[1] === "  <muted>1. </muted>\x1b[2mcommand: \x1b[38;2;153;204;255mecho ok\x1b[39m\x1b[22m", "inline code in ctrl+o thinking drops its backticks and turns 99ccff, still dim (m5a-parallel-fail suite run, Claude 2.1.283)");
+	check(thinkingRows([{ type: "thinking", thinking: "Plan:\n1. Run it" }], 40, tagged)[1] === "  \x1b[2m\x1b[22m<muted>1. </muted>\x1b[2mRun it\x1b[22m", "a numbered step keeps its number grey and upright, the step itself dim (m4c-long-line)");
+	check(thinkingRows([{ type: "thinking", thinking: "First call:\n- command: echo ok" }], 40, tagged)[1] === "  \x1b[2m\x1b[22m<muted>- </muted>\x1b[2mcommand: echo ok\x1b[22m", "a bullet keeps its dash grey, the item dim (m5a-parallel-fail, Claude 2.1.283)");
+	check(thinkingRows([{ type: "thinking", thinking: "Plan:\n1. command: `echo ok`" }], 60, tagged)[1] === "  \x1b[2m\x1b[22m<muted>1. </muted>\x1b[2mcommand: \x1b[38;2;153;204;255mecho ok\x1b[39m\x1b[22m", "inline code in ctrl+o thinking drops its backticks and turns 99ccff, still dim (m5a-parallel-fail suite run, Claude 2.1.283)");
+	check(thinkingRows([{ type: "thinking", thinking: "Then check **src** with *care*." }], 80, tagged)[0] === "<muted>\x1b[3m∴ \x1b[23m</muted>\x1b[2mThen check src with \x1b[3mcare\x1b[23m.\x1b[22m", "ctrl+o thinking is rendered as markdown like Claude 2.1.289's: bold markers gone with no bold, emphasis italic, all dim (measure-thinking-md; links, fences and nested lists are locked by the thinking-md replay, where pi's patched renderer runs)");
+	check(thinkingRows([{ type: "thinking", thinking: "## A heading" }], 40, tagged)[0] === "<muted>\x1b[3m∴ \x1b[23m</muted>\x1b[2mA heading\x1b[22m", "a heading in thinking loses its # and is neither bold nor coloured (Claude 2.1.289: one dim run)");
 	check(resultRows("read", { path: "a" }, ok(""), { ...view(), isPartial: true }, tagged) === null, "a running read draws no rows of its own: the active group row carries its hint");
 	check(resultRows("write", { path: "a" }, ok(""), { ...view(), isPartial: true }, plain)!.head === "  ⎿  …", "a running write keeps its own elbow row");
 	check(resultRows("read", {}, { text: "ENOENT\nmore", isError: true, details: undefined }, view(), tagged) === null, "a failed read folds into the group like any other call; its row draws nothing");

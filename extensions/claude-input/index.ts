@@ -88,6 +88,16 @@ export function withPlaceholder(lines: string[], placeholder: string): string[] 
 	return lines.map((line, i) => (i === topRuleIndex + 1 ? filled : line));
 }
 
+export const QUEUED_PLACEHOLDER = "Press up to edit queued messages";
+
+type Queued = { count: number; restore: () => number };
+
+const queued = () => (globalThis as { __claudeQueued?: Queued }).__claudeQueued;
+
+export function pullsQueued(count: number, text: string): boolean {
+	return count > 0 && !text.startsWith("/");
+}
+
 export const CLAUDE_ARGUMENT_HINTS: Readonly<Record<string, string>> = {
 	clear: "[name]",
 	compact: "<optional custom summarization instructions>",
@@ -187,6 +197,14 @@ export default function (pi: ExtensionAPI) {
 	});
 	pi.on("session_start", (_event, ctx) => {
 		if (!ctx.hasUI) return;
+		void import("@earendil-works/pi-tui").then(({ matchesKey }) =>
+			ctx.ui.onTerminalInput((data: string) => {
+				const pending = queued();
+				if (!matchesKey(data, "up") || !pending || !pullsQueued(pending.count, ctx.ui.getEditorText())) return undefined;
+				pending.restore();
+				return { consume: true };
+			}),
+		);
 		const previous = ctx.ui.getEditorComponent();
 		const mutedPrompt = ctx.ui.theme.fg("muted" as never, PROMPT);
 		const command: CommandColour = { names: [...BUILTIN_COMMAND_NAMES, ...invocableNames(pi.getCommands())], paint: commandPaint };
@@ -203,6 +221,7 @@ export default function (pi: ExtensionAPI) {
 				const text = editor.getText();
 				const view = viewedAgent();
 				if (view && text === "") return withPlaceholder(lines, agentViewPlaceholder(view.name));
+				if (text === "" && (queued()?.count ?? 0) > 0) return withPlaceholder(lines, QUEUED_PLACEHOLDER);
 				return text === "" && !prompted.submitted && !hasMessages ? withPlaceholder(lines, placeholder) : withArgumentHint(lines, text, muted);
 			};
 			editor.render = (width: number) => {

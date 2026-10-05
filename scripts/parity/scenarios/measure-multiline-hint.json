@@ -1,0 +1,15 @@
+{
+ "prompt": "",
+ "bypass": true,
+ "steps": [
+  {"keys": "\u001b[200~line one\nline two\u001b[201~"},
+  {"sleep": 1.5},
+  {"snap": "multi"},
+  {"keys": "\u007f\u007f\u007f\u007f\u007f\u007f\u007f\u007f\u007f\u007f\u007f\u007f\u007f\u007f\u007f\u007f\u007f"},
+  {"sleep": 1},
+  {"keys": "\u001b[200~a\nb\nc\nd\ne\u001b[201~"},
+  {"sleep": 1.5},
+  {"snap": "five"}
+ ],
+ "end": "."
+}

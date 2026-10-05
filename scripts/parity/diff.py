@@ -244,16 +244,17 @@ def excepted(texts, side, applied, exceptions=EXCEPTIONS):
     return out
 
 
-STATUS_TIMER = "status-line refresh: Claude re-runs its status line while a reply streams, so a mid-turn snapshot may already show the `ctx N%` that pi shows when the reply ends"
+STATUS_TIMER = "status-line refresh: Claude re-runs its status line command half a second to a second after a reply starts streaming, pi updates its footer on the first streamed event, so a mid-turn snapshot inside that window shows `ctx N%` on one side only"
 EARLY_CONTEXT = re.compile(r" · ctx \d+%")
 
 
 def without_early_context(ct, pt, applied):
     midturn = all(any(text.startswith("<spinner>") for text in side) for side in (ct, pt))
-    early = midturn and any(EARLY_CONTEXT.search(text) for text in ct) and not any(EARLY_CONTEXT.search(text) for text in pt)
+    shown = [any(EARLY_CONTEXT.search(text) for text in side) for side in (ct, pt)]
+    early = midturn and shown[0] != shown[1]
     if early:
         applied.add(STATUS_TIMER)
-    return [EARLY_CONTEXT.sub("", text) if early else text for text in ct]
+    return [[EARLY_CONTEXT.sub("", text) if early else text for text in side] for side in (ct, pt)]
 
 
 def compare(claude, pi, applied, footer=False):
@@ -264,7 +265,7 @@ def compare(claude, pi, applied, footer=False):
     rewritten = {i for i, (x, y) in enumerate(zip(before, ct)) if x != y}
     if footer:
         ct, pt = excepted(ct, "claude", applied), excepted(pt, "pi", applied)
-        ct = without_early_context(ct, pt, applied)
+        ct, pt = without_early_context(ct, pt, applied)
     text_diffs, colour_diffs = [], []
     matcher = difflib.SequenceMatcher(a=ct, b=pt, autojunk=False)
     for op, i1, i2, j1, j2 in matcher.get_opcodes():

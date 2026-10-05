@@ -11,8 +11,9 @@ const PROMPT_RESERVE = 3;
 const shared = ((globalThis as any)[Symbol.for("claude-messages:gutter")] ??= {
 	patched: false,
 	paint: ((_role, text) => text) as Paint,
-}) as { patched: boolean; paint: Paint; awaiting?: boolean; latest?: object; seen?: WeakSet<object> };
+}) as { patched: boolean; paint: Paint; awaiting?: boolean; latest?: object; seen?: WeakSet<object>; queued?: WeakSet<object> };
 const seen = (shared.seen ??= new WeakSet<object>());
+const queued = (shared.queued ??= new WeakSet<object>());
 const FOREGROUND = /\x1b\[(?:3[0-7]|9[0-7]|38;5;\d+|38;2;\d+;\d+;\d+|39)m/g;
 
 export function setPaint(paint: Paint): void {
@@ -69,7 +70,7 @@ function pending(block: Block, message: object): Block {
 	return {
 		render: (width) => {
 			const lines = block.render(width);
-			return shared.awaiting && shared.latest === message ? lines.map(awaitingLine) : lines;
+			return queued.has(message) || (shared.awaiting && shared.latest === message) ? lines.map(awaitingLine) : lines;
 		},
 		invalidate: () => block.invalidate(),
 	};
@@ -80,7 +81,8 @@ export function markUser(message: { children: Parent[] }): void {
 	if (!box) return;
 	if (!seen.has(message)) {
 		seen.add(message);
-		shared.latest = message;
+		if ((globalThis as { __claudeQueuedBuild?: boolean }).__claudeQueuedBuild) queued.add(message);
+		else shared.latest = message;
 	}
 	box.paddingX = 0;
 	box.paddingY = 0;
@@ -167,6 +169,11 @@ if (process.env.CLAUDE_MESSAGES_SELFTEST) {
 	check(older.children[0].children[0].render(40)[0] === "[38;2;153;153;153m❯[39m hello" && newer.children[0].children[0].render(40)[0] === "[38;2;153;153;153m❯[39m \x1b[38;2;153;153;153mnext", "only the newest prompt waits, even when an older one rebuilds later");
 	setAwaiting(false);
 	check(newer.children[0].children[0].render(40)[0] === "[38;2;153;153;153m❯[39m next", "once the model answers or the turn ends the prompt is white again");
+	(globalThis as { __claudeQueuedBuild?: boolean }).__claudeQueuedBuild = true;
+	const waitingRow = { children: [box([new Markdown(["queued"])])] };
+	markUser(waitingRow);
+	(globalThis as { __claudeQueuedBuild?: boolean }).__claudeQueuedBuild = false;
+	check(waitingRow.children[0].children[0].render(40)[0].endsWith("\x1b[38;2;153;153;153mqueued") && shared.latest !== waitingRow, "a queued message is 999999 whole (Claude 2.1.289: the mark and the text on 373737) and never becomes the newest prompt, so the real prompts keep their own waiting state");
 	const wide = { children: [box([new Markdown(["x".repeat(200)])])] };
 	markUser(wide);
 	check(wide.children[0].children[0].render(132)[0].length === "[38;2;153;153;153m❯[39m ".length + 129, "the prompt text is 129 columns wide at 132: Claude 2.1.280's wrapped prompt rows reach column 131 (68 of 377 captured rows) and never 132");

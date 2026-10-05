@@ -1,0 +1,22 @@
+{
+  "turns": [
+    {
+      "prompt": "Thinking markdown sample.",
+      "steps": [
+        {
+          "assistant": [
+            {
+              "type": "thinking",
+              "thinking": "Plan for this:\n\n1. Read `notes.txt` first\n2. Then check **src**\n   - nested `clamp()` call\n   - another nested item\n\nSome `inline code` in a sentence with *emphasis* and a [link](https://example.com).\n\n```ts\nconst x = 1;\n```\n\n- top bullet\n  - nested bullet\n\n## A heading\n\nLast line."
+            },
+            {
+              "type": "text",
+              "text": "All done:\n\n1. First step\n   - nested detail\n10. Tenth step\n    - under two digits"
+            }
+          ],
+          "gap": 2
+        }
+      ]
+    }
+  ]
+}

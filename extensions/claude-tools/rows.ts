@@ -615,6 +615,7 @@ export function track(pi: { on: (event: string, handler: (event: any, ctx: any) 
 	pi.on("message_end", (event) => {
 		const message = event.message;
 		const now = Date.now();
+		if (message?.role === "user") shared.pendingBreak = true;
 		if (message?.role === "assistant") {
 			if (message.timestamp !== undefined) ended.delete(message.timestamp);
 			shared.thinkingSince = undefined;
@@ -928,5 +929,10 @@ if (process.env.CLAUDE_ROWS_SELFTEST) {
 	check(thoughtText("Run `ls` now.").includes("\x1b[38;2;153;204;255mls\x1b[39m") && bare(thoughtText("Run `ls` now.")) === "Run ls now.", "inline code in a thought is 99ccff with no backticks, like Claude 2.1.280's raw output");
 	check(wrapWords("a bb ccc", 3).join("|") === "a|bb|ccc" && wrapWords("aaaa", 3).join("|") === "aaaa", "wrapWords breaks at spaces and never cuts a single word that overruns the room");
 	check(wrapWords("aaaa b cc", 4).join("|") === "aaaa|b|cc" && wrapWords("aaa b cc", 4).join("|") === "aaa|b cc", "a row after an exactly full row holds one column less, Ink's wrap-ansi trim:false (slow-search thought hint: `preamble. The` at 127 of 127 after a full row)");
+	calls.agent_start({}, {});
+	run("steer1", "read");
+	calls.message_end({ message: { role: "user" } }, {});
+	run("steer2", "read");
+	check(summaryFor("steer1") === "  Read 1 file" && summaryFor("steer2") === "  Read 1 file", "a message sent while the turn runs breaks the group like a new prompt: Claude draws its row after the group's sentence, the later calls start a sentence of their own (m4b-queued-message, 2.1.289)");
 	console.log("ok - claude-tools rows");
 }

@@ -134,6 +134,9 @@ export default function (pi: ExtensionAPI) {
 	pi.on("ui_prompt_end", (event) => {
 		if (event.kind === "custom") dialogOpen = false;
 	});
+	pi.on("message_update", (event) => {
+		usage = reportedUsage(event.message as Message) ?? usage;
+	});
 	pi.on("message_end", (event) => {
 		usage = reportedUsage(event.message as Message) ?? usage;
 	});

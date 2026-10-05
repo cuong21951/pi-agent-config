@@ -263,12 +263,20 @@ def blocks_for_claude(reply, claude_tools, plan_file=None, schemas=None):
     return blocks
 
 
+QUEUED_IN_RESULT = re.compile(r"The user sent a new message while you were working:\n(.*?)\n\nThis is how", re.S)
+
+
+def queued_in_results(content):
+    return "".join(found for c in content if c.get("type") == "tool_result" and isinstance(c.get("content"), str) for found in QUEUED_IN_RESULT.findall(c["content"]))
+
+
 def user_prompt(message):
     content = message.get("content")
     if isinstance(content, str):
         return content
     text = "".join(c.get("text", "") for c in content if c.get("type") == "text")
     if any(c.get("type") == "tool_result" for c in content):
+        text += queued_in_results(content)
         return text if any(turn["prompt"] and turn["prompt"] in text for turn in TURNS[1:]) else None
     return text
 
