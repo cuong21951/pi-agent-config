@@ -1,0 +1,72 @@
+{
+ "prompt": "",
+ "bypass": true,
+ "steps": [
+  {
+   "sleep": 13
+  },
+  {
+   "snap": "idle"
+  },
+  {
+   "keys": "/clear"
+  },
+  {
+   "sleep": 1.5
+  },
+  {
+   "keys": "\r"
+  },
+  {
+   "sleep": 1.5
+  },
+  {
+   "snap": "c01"
+  },
+  {
+   "sleep": 1.5
+  },
+  {
+   "snap": "c02"
+  },
+  {
+   "sleep": 1.5
+  },
+  {
+   "snap": "c03"
+  },
+  {
+   "sleep": 1.5
+  },
+  {
+   "snap": "c04"
+  },
+  {
+   "sleep": 1.5
+  },
+  {
+   "snap": "c05"
+  },
+  {
+   "sleep": 1.5
+  },
+  {
+   "snap": "c06"
+  },
+  {
+   "sleep": 1.5
+  },
+  {
+   "snap": "c07"
+  },
+  {
+   "sleep": 1.5
+  },
+  {
+   "snap": "c08"
+  }
+ ],
+ "end": ".",
+ "pi_model": "github-copilot/claude-sonnet-5",
+ "claude_model": "claude-sonnet-5"
+}

@@ -168,7 +168,7 @@ export default function (pi: ExtensionAPI) {
 			renderShell: "self",
 			renderCall(args: Record<string, unknown>, theme: Theme, context: { toolCallId?: string; expanded?: boolean; invalidate?: () => void }) {
 				const s = style(theme);
-				if (WRITE_TOOLS.has(tool)) return dynamic((width) => [truncateToWidth(writeCallLine(tool, args, s, failed.has(context.toolCallId ?? ""), context.expanded === true), width)]);
+				if (WRITE_TOOLS.has(tool)) return dynamic((width) => [truncateToWidth(writeCallLine(tool, args, s, failed.has(context.toolCallId ?? ""), context.expanded === true, !finished.has(context.toolCallId ?? "")), width)]);
 				const id = context.toolCallId ?? "";
 				if (id !== "" && context.invalidate) watch(id, context.invalidate);
 				return dynamic((width) => (context.expanded && finished.has(id) ? [] : groupRow(id, width, s).map((line) => truncateToWidth(line, width))));

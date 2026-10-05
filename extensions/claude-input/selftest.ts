@@ -13,7 +13,7 @@ const jiti = createJiti(import.meta.url, {
 });
 
 const here = path.dirname(fileURLToPath(import.meta.url));
-const { promptLines, withArgumentHint, argumentHint, default: install } = await jiti.import(path.join(here, "index.ts"));
+const { promptLines, withArgumentHint, argumentHint, editorName, externalEditorCommand, stepHint, hintShowing, hintRow, NO_HINT, HINT_MS, default: install } = await jiti.import(path.join(here, "index.ts"));
 const { CustomEditor } = await jiti.import(path.join(PI_DIR, "dist/index.js"));
 const { KeybindingsManager } = await jiti.import(path.join(PI_DIR, "dist/core/keybindings.js"));
 const { setKeybindings } = await jiti.import(path.join(PI_DIR, "node_modules/@earendil-works/pi-tui/dist/keybindings.js"));
@@ -149,6 +149,21 @@ const id = (t: string) => t;
 	assert.equal(argumentHint("/import "), undefined, "pi's /import takes a session file, so Claude's codex|gemini|cursor hint stays off");
 	assert.equal(withArgumentHint(["──────────", "/resume   ", "──────────"], "/resume ", (t: string) => t)[1], "/resume  …", "a hint wider than the row is cut with an ellipsis (Claude's truncate-end)");
 	assert.deepEqual(withArgumentHint(box, "hello", (t: string) => t), box, "plain text is untouched");
+}
+
+{
+	assert.equal(editorName("notepad"), "Notepad", "Windows' default editor is named like Claude 2.1.289's `ctrl+g to edit in Notepad`");
+	assert.equal(editorName("code"), "VS Code", "Claude's editor table names `code` VS Code");
+	assert.equal(editorName("code -w"), "VS Code", "the first word names an editor with arguments");
+	assert.equal(externalEditorCommand({}, "win32"), "notepad", "pi's external editor falls back to notepad on Windows");
+	assert.equal(externalEditorCommand({ EDITOR: "vim", VISUAL: "code" }, "linux"), "code", "VISUAL beats EDITOR");
+	const hint = stepHint(NO_HINT, true, 1000);
+	assert.equal(hintShowing(hint, 1000 + HINT_MS - 1), true, "the hint shows 5 s (timeoutMs 5000) after the box turns multi-line (measured 2026-10-05: there at 4.5 s, gone at 5.5 s)");
+	assert.equal(hintShowing(hint, 1000 + HINT_MS), false, "and is gone at 5 s even though the text is still multi-line");
+	assert.equal(stepHint(hint, true, 9000), hint, "typing a third row does not restart the timer (measured: nothing new on a third row after expiry)");
+	assert.deepEqual(stepHint(hint, false, 2000), NO_HINT, "back to one line removes it and the next multi-line text shows it again (measured: `again` snapshot)");
+	assert.equal(hintShowing({ ...hint, dismissed: true }, 1500), false, "Esc's `Esc again to clear` notice displaces the hint for good (measured: blank at 2.9 s)");
+	assert.equal(hintRow("notepad", 132, id), " ".repeat(105) + "ctrl+g to edit in Notepad", "right-aligned, two columns from the edge: 105 spaces at 132 like Claude's row");
 }
 
 console.log("claude-input selftest: all assertions passed");

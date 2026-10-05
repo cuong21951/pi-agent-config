@@ -1,0 +1,11 @@
+{
+ "prompt": "",
+ "bypass": true,
+ "steps": [
+  {"keys": "a\u001b\rb"}, {"sleep": 1}, {"snap": "two"},
+  {"keys": "\u001b"}, {"sleep": 0.3}, {"snap": "esc"},
+  {"sleep": 1.6}, {"snap": "after"},
+  {"keys": "\u001b"}, {"sleep": 0.2}, {"keys": "\u001b"}, {"sleep": 0.5}, {"snap": "cleared"}
+ ],
+ "end": "."
+}

@@ -107,8 +107,8 @@ function callLabel(tool: string, args: Record<string, unknown>): string {
 	return tool === "edit" && editCreation(args) ? "Create" : (LABEL[tool] ?? tool);
 }
 
-export function writeCallLine(tool: string, args: Record<string, unknown>, s: Style, failed = false, verbose = false): string {
-	const dot = s.fg(failed ? "error" : "borderAccent", "● ");
+export function writeCallLine(tool: string, args: Record<string, unknown>, s: Style, failed = false, verbose = false, pending = false): string {
+	const dot = s.fg(failed ? "error" : pending ? "muted" : "borderAccent", "● ");
 	if (isPlanFile(args.path)) return dot + s.bold("Updated plan");
 	return dot + s.bold(callLabel(tool, args)) + `(${verbose ? fullPath(args.path, s) : shortPath(args.path, s)})`;
 }
@@ -699,6 +699,7 @@ if (process.env.CLAUDE_TOOLS_SELFTEST) {
 
 	check(writeCallLine("edit", { path: "/home/me/x.ts" }, tagged) === "<borderAccent>● </borderAccent><b>Update</b>(~/x.ts)", "update call: blue dot, bold label, plain path");
 	check(writeCallLine("write", { path: "n.ts" }, plain) === "● Write(n.ts)", "write call");
+	check(writeCallLine("edit", { path: "n.ts" }, tagged, false, false, true) === "<muted>● </muted><b>Update</b>(n.ts)", "a write call that has not resolved keeps a steady 999999 dot: Claude 2.1.289 drew it grey in 8 of 8 samples 0.3 s apart while its permission dialog was open, blue once applied (measure-edit-pending; the same on 2.1.283)");
 	check(writeCallLine("write", { path: "/home/me/proj/src/a.ts" }, plain) === "● Write(src/a.ts)", "a file inside the working directory is named relative to it");
 	const win: Style = { ...plain, home: "C:\\Users\\me", cwd: "C:\\Work" };
 	check(writeCallLine("edit", { path: "C:/Users/me/.pi/x.ts" }, win) === "● Update(~\\.pi\\x.ts)", "Windows: pi's forward slashes still match home, and the row uses backslashes");

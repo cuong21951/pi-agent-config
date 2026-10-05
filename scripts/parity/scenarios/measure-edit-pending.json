@@ -1,0 +1,71 @@
+{
+ "bypass": false,
+ "prompt": "Read notes.txt first. Then use the Edit tool to change the line \"alpha: 1\" to \"alpha: 100\" in notes.txt. Then reply with exactly: edited.",
+ "steps": [
+  {
+   "until": "(?m)^(?!❯ ).*(proceed|Allow|allow|Yes)",
+   "timeout": 90
+  },
+  {
+   "sleep": 0.5
+  },
+  {
+   "sleep": 0.3
+  },
+  {
+   "snap": "p1"
+  },
+  {
+   "sleep": 0.3
+  },
+  {
+   "snap": "p2"
+  },
+  {
+   "sleep": 0.3
+  },
+  {
+   "snap": "p3"
+  },
+  {
+   "sleep": 0.3
+  },
+  {
+   "snap": "p4"
+  },
+  {
+   "sleep": 0.3
+  },
+  {
+   "snap": "p5"
+  },
+  {
+   "sleep": 0.3
+  },
+  {
+   "snap": "p6"
+  },
+  {
+   "sleep": 0.3
+  },
+  {
+   "snap": "p7"
+  },
+  {
+   "sleep": 0.3
+  },
+  {
+   "snap": "p8"
+  },
+  {
+   "keys": "1"
+  },
+  {
+   "until": "✻ \\S+ for [^\n]*· done",
+   "timeout": 60
+  },
+  {
+   "sleep": 1
+  }
+ ]
+}

@@ -1,0 +1,26 @@
+{
+ "prompt": "",
+ "bypass": true,
+ "steps": [
+  {"keys": "one"}, {"sleep": 1}, {"snap": "r1"},
+  {"keys": "\u001b\rtwo"}, {"sleep": 1}, {"snap": "r2"},
+  {"keys": "\u001b\rthree"}, {"sleep": 1}, {"snap": "r3"},
+  {"keys": "\u007f\u007f\u007f\u007f\u007f\u007f"}, {"sleep": 1}, {"snap": "back-r2"},
+  {"keys": "\u007f\u007f\u007f\u007f"}, {"sleep": 1}, {"snap": "back-r1"},
+  {"keys": "\u0003"}, {"sleep": 1},
+  {"keys": "this is one single long line of text that is typed without any newline so that it wraps over the width of the terminal, and then it keeps going for a good while longer than that so it needs a third row"}, {"sleep": 1.5}, {"snap": "wrap"},
+  {"keys": "\u0003"}, {"sleep": 1},
+  {"keys": "!ls"}, {"sleep": 1}, {"snap": "bash1"},
+  {"keys": "\u001b\rpwd"}, {"sleep": 1}, {"snap": "bash2"},
+  {"keys": "\u0003"}, {"sleep": 1},
+  {"keys": "/compact"}, {"sleep": 1}, {"keys": "\u001b\rmore"}, {"sleep": 1.5}, {"snap": "slash2"},
+  {"keys": "\u0003"}, {"sleep": 1},
+  {"keys": "\u001b[200~l1\nl2\nl3\nl4\nl5\nl6\nl7\nl8\nl9\nl10\nl11\nl12\u001b[201~"}, {"sleep": 1.5}, {"snap": "pasted"},
+  {"keys": "\u001b\rtail"}, {"sleep": 1.5}, {"snap": "pasted-nl"},
+  {"keys": "\u0003"}, {"sleep": 1},
+  {"keys": "a\u001b\r\u001b\rb"}, {"sleep": 1.5}, {"snap": "blank-mid"},
+  {"keys": "\u0003"}, {"sleep": 1},
+  {"keys": "\u001b\r"}, {"sleep": 1.5}, {"snap": "only-nl"}
+ ],
+ "end": "."
+}

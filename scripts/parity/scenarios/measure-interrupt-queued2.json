@@ -3,15 +3,25 @@
  "steps": [
   {"until": "\\(ctrl\\+b to run in background\\)", "timeout": 90},
   {"sleep": 1},
-  {"keys": "Please confirm."},
+  {"keys": "first queued"},
   {"sleep": 0.5},
   {"keys": "\r"},
-  {"sleep": 1.5},
-  {"snap": "queued"},
+  {"sleep": 1},
+  {"keys": "second queued"},
+  {"sleep": 0.5},
+  {"keys": "\r"},
+  {"sleep": 1},
+  {"keys": "my draft"},
+  {"sleep": 1},
+  {"snap": "typed"},
   {"keys": "\u001b"},
-  {"until": "(?m)^● Got your message", "timeout": 60},
-  {"sleep": 2},
-  {"snap": "interrupted"}
+  {"sleep": 0.4},
+  {"snap": "esc-fast"},
+  {"sleep": 2.5},
+  {"snap": "esc-late"},
+  {"keys": "\u001b"},
+  {"sleep": 1},
+  {"snap": "esc2"}
  ],
- "end": "· done"
+ "end": "."
 }

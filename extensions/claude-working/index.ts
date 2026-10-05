@@ -352,9 +352,10 @@ export default function claudeWorking(pi: ExtensionAPI) {
 	pi.on("ui_prompt_end", (event) => {
 		if (event.kind === "custom") dialogOpen = false;
 	});
-	pi.on("session_start", (_event, ctx) => {
+	pi.on("session_start", (event, ctx) => {
 		effortShown = effortText(ctx.thinkingLevel ?? "off", ctx.model?.id);
-		effortUntil = 0;
+		effortUntil = event.reason === "startup" && effortShown !== null ? Date.now() + EFFORT_NOTICE_MS : 0;
+		setTimeout(() => requestRender(), EFFORT_NOTICE_MS).unref?.();
 		if (!ctx.hasUI) return;
 		ctx.ui.setWorkingIndicator({ frames: [""], intervalMs: TICK_MS });
 		ctx.ui.setWorkingMessage("");
@@ -572,12 +573,14 @@ if (process.env.CLAUDE_WORKING_SELFTEST) {
 			setWorkingVisible: (visible: boolean) => workingVisible.push(visible),
 		},
 	};
-	handlers.session_start({}, ctx);
+	handlers.session_start({ reason: "startup" }, ctx);
 	handlers.agent_start({}, ctx);
 	let renders = 0;
 	const widget = (widgets["claude-working"] as unknown as (tui: unknown, theme: unknown) => { render: (width: number) => string[] })({ requestRender: () => renders++ }, { fg: (_role: string, text: string) => text });
+	check(visible(widget.render(132)[1]).trim() === "● high · /effort", "the app's start shows the effort row for its 10 s: Claude 2.1.289 on claude-sonnet-5 drew it in the 5 samples up to 7.5 s and in none from 9 s (measure-effort-row; 2.1.280 drew none at 2 s)");
+	handlers.session_start({ reason: "new" }, ctx);
 	const firstPaint = widget.render(132);
-	check(firstPaint.length === 2 && firstPaint[1] === "", "no effort row at startup: real Claude 2.1.280 on Sonnet 5 (\"with high effort\") showed none at 2 s and 13 s");
+	check(firstPaint.length === 2 && firstPaint[1] === "", "a session started inside the running app shows no effort row: Claude 2.1.289 drew none in 8 samples after /clear (measure-effort-clear)");
 	handlers.thinking_level_select({ level: "xhigh", previousLevel: "high" }, ctx);
 	ctx.thinkingLevel = "xhigh";
 	check(visible(widget.render(132)[1]).trim() === "◉ xhigh · /effort", "a changed effort shows as the notice row under the spinner: Claude posts it as a 10 s feedback notification (key effort-level, timeoutMs 1e4)");
@@ -592,7 +595,7 @@ if (process.env.CLAUDE_WORKING_SELFTEST) {
 	handlers.ui_prompt_start({ kind: "custom" }, ctx);
 	handlers.ui_prompt_end({ kind: "custom" }, ctx);
 	handlers.ui_prompt_start({ kind: "select" }, ctx);
-	check(workingVisible.join("|") === "false", "the built-in working loader stays hidden from session start: its two blank rows sat between the transcript and the spinner (measured 2026-10-02 at 16 rows: three blank rows above the spinner where Claude 2.1.283 has one); dialogs no longer toggle it");
+	check(workingVisible.join("|") === "false|false", "the built-in working loader stays hidden from session start: its two blank rows sat between the transcript and the spinner (measured 2026-10-02 at 16 rows: three blank rows above the spinner where Claude 2.1.283 has one); dialogs no longer toggle it");
 	check(!firstPaint[0]?.includes("("), "a fresh turn's first paint has no kind, no tokens and elapsedMs 0: no parenthesised status at all, matching Claude (measured: 1.5 s in Claude showed the bare verb, pi showed '(esc to interrupt)')");
 	handlers.agent_end({ messages: [{ role: "assistant", stopReason: "error", errorMessage: "Request timed out." }] }, ctx);
 	const rendersBefore = renders;

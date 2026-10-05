@@ -88,6 +88,48 @@ export function withPlaceholder(lines: string[], placeholder: string): string[] 
 	return lines.map((line, i) => (i === topRuleIndex + 1 ? filled : line));
 }
 
+const EDITOR_NAMES: Readonly<Record<string, string>> = {
+	code: "VS Code", cursor: "Cursor", windsurf: "Devin Desktop", antigravity: "Antigravity", vi: "Vim", vim: "Vim", nano: "nano",
+	notepad: "Notepad", "start /wait notepad": "Notepad", emacs: "Emacs", subl: "Sublime Text", atom: "Atom",
+};
+
+export function editorName(command: string): string {
+	const key = command.toLowerCase().trim();
+	return EDITOR_NAMES[key] ?? EDITOR_NAMES[key.split(" ")[0]] ?? command;
+}
+
+export function externalEditorCommand(env: Readonly<Record<string, string | undefined>>, platform: string): string {
+	return env.VISUAL || env.EDITOR || (platform === "win32" ? "notepad" : "nano");
+}
+
+export const HINT_MS = 5000;
+const HINT_MARGIN = 2;
+
+export type Hint = { since: number | null; dismissed: boolean };
+
+export const NO_HINT: Hint = { since: null, dismissed: false };
+
+export function stepHint(hint: Hint, multiline: boolean, now: number): Hint {
+	if (!multiline) return NO_HINT;
+	return hint.since === null ? { since: now, dismissed: false } : hint;
+}
+
+export function hintShowing(hint: Hint, now: number): boolean {
+	return hint.since !== null && !hint.dismissed && now - hint.since < HINT_MS;
+}
+
+export function hintRow(editor: string, width: number, muted: Paint): string {
+	const text = `ctrl+g to edit in ${editorName(editor)}`;
+	return " ".repeat(Math.max(0, width - text.length - HINT_MARGIN)) + muted(text);
+}
+
+type Margin = { render: (width: number) => string[]; hinted?: boolean };
+
+function viewportMargin(): Margin | undefined {
+	const root = (globalThis as { __claudeViewport?: { root: { entries: { component: { entries?: { component: Margin }[] } }[] } } }).__claudeViewport?.root;
+	return root?.entries[1]?.component.entries?.[0]?.component;
+}
+
 export const QUEUED_PLACEHOLDER = "Press up to edit queued messages";
 
 type Queued = { count: number; restore: () => number };
@@ -184,6 +226,16 @@ const prompted = ((globalThis as { __claudeInputPrompted?: { submitted: boolean 
 
 export default function (pi: ExtensionAPI) {
 	let busy = false;
+	let hint = NO_HINT;
+	let marginRow: (width: number) => string[] | undefined = () => undefined;
+	const hintInMargin = (tui: { requestRender: () => void }) => {
+		const margin = viewportMargin();
+		if (!margin || margin.hinted) return;
+		const base = margin.render.bind(margin);
+		margin.hinted = true;
+		margin.render = (width) => marginRow(width) ?? base(width);
+		tui.requestRender();
+	};
 	pi.on("input", () => {
 		prompted.submitted = true;
 		return { action: "continue" as const };
@@ -199,6 +251,7 @@ export default function (pi: ExtensionAPI) {
 		if (!ctx.hasUI) return;
 		void import("@earendil-works/pi-tui").then(({ matchesKey }) =>
 			ctx.ui.onTerminalInput((data: string) => {
+				if (matchesKey(data, "escape") && ctx.ui.getEditorText() && ctx.isIdle()) hint = { ...hint, dismissed: true };
 				const pending = queued();
 				if (!matchesKey(data, "up") || !pending || !pullsQueued(pending.count, ctx.ui.getEditorText())) return undefined;
 				pending.restore();
@@ -216,6 +269,14 @@ export default function (pi: ExtensionAPI) {
 			const paint: Paint = (text) => theme.borderColor(text);
 			const render = editor.render.bind(editor);
 			const muted: Paint = (text) => ctx.ui.theme.fg("muted" as never, text);
+			marginRow = (width) => {
+				const now = Date.now();
+				const started = hint.since === null;
+				hint = stepHint(hint, editor.getText().includes("\n"), now);
+				if (started && hint.since !== null) setTimeout(() => tui.requestRender(), HINT_MS + 50).unref?.();
+				return hintShowing(hint, now) ? [hintRow(externalEditorCommand(process.env, process.platform), width, muted)] : undefined;
+			};
+			hintInMargin(tui);
 			const inner = (width: number) => {
 				const lines = render(width);
 				const text = editor.getText();
@@ -225,6 +286,7 @@ export default function (pi: ExtensionAPI) {
 				return text === "" && !prompted.submitted && !hasMessages ? withPlaceholder(lines, placeholder) : withArgumentHint(lines, text, muted);
 			};
 			editor.render = (width: number) => {
+				hintInMargin(tui);
 				const rows = promptLines(inner(width - PROMPT.length), paint, busy ? mutedPrompt : PROMPT, command, noMatchRow(editor.getText(), muted, command.names));
 				const view = viewedAgent();
 				return view ? agentViewRules(rows, view) : rows;

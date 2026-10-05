@@ -248,7 +248,7 @@ if (process.env.CLAUDE_SLASH_MENU_SELFTEST) {
 		{ name: "new", description: "Start a new session" },
 		{ name: "clear", description: "Start a new session with empty context; previous session stays on disk (resumable with /resume)" },
 		{ name: "compact", description: "Manually compact the session context" },
-		{ name: "resume", description: "Resume a different session" },
+		{ name: "resume", description: "Resume a previous conversation" },
 		{ name: "reload", description: "Reload keybindings, extensions, skills, prompts, themes, and context files" },
 		{ name: "quit", description: "Quit pi" },
 		{

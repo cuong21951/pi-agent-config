@@ -1,0 +1,14 @@
+{
+ "prompt": "",
+ "bypass": true,
+ "steps": [
+  {"keys": "a\u001b\rb"}, {"sleep": 3}, {"snap": "t3"},
+  {"sleep": 1.5}, {"snap": "t45"},
+  {"sleep": 1.0}, {"snap": "t55"},
+  {"sleep": 2}, {"snap": "t75"},
+  {"keys": "\u001b\rc"}, {"sleep": 1}, {"snap": "three"},
+  {"keys": "\u007f\u007f\u007f\u007f"}, {"sleep": 1}, {"snap": "one"},
+  {"keys": "\u001b\rd"}, {"sleep": 1}, {"snap": "again"}
+ ],
+ "end": "."
+}

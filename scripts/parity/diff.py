@@ -178,7 +178,10 @@ def regions(lines, cut=False):
     end = above
     while end > start and not texts[end - 1].strip():
         end -= 1
-    return lines[:start], lines[start:end], lines[above:]
+    box = next((i for i in range(1, len(texts) - 1) if texts[i].startswith("─") and texts[i + 1].startswith("❯")), None)
+    menu_start, menu_end = menu_block(lines)
+    above_box = lines[menu_start:menu_end] or (lines[box - 1:box] if box is not None else [])
+    return lines[:start], lines[start:end] or above_box, lines[above:]
 
 
 def gap_above_box(lines):

@@ -421,6 +421,14 @@ const EDITS = [
 		'startNumber=typeof token.start=="number"?token.start:1;for(let i=0;i<token.items.length;i++){let item=token.items[i],isLastItem',
 		'startNumber=typeof token.start=="number"?token.start:1;typeof depth=="string"&&(indent=depth);for(let i=0;i<token.items.length;i++){let item=token.items[i],isLastItem',
 	],
+	[
+		'if(this.session.isStreaming)this.restoreQueuedMessagesToEditor({abort:!0});else if(this.session.isBashRunning)this.session.abortBash();else if(this.isBashMode)',
+		'if(this.session.isStreaming){let{steering,followUp}=this.clearAllQueues(),sent=[...steering,...followUp];if(sent.length===0)this.restoreQueuedMessagesToEditor({abort:!0});else{this.updatePendingMessagesDisplay();let[first,...rest]=sent;this.session._pendingNextTurnMessages.push(...rest.map(text=>({role:"user",content:[{type:"text",text}],timestamp:Date.now()}))),this.session.abort().then(()=>this.session.prompt(first)).catch(error=>this.showError(error instanceof Error?error.message:String(error)))}}else if(this.session.isBashRunning)this.session.abortBash();else if(this.isBashMode)',
+	],
+	[
+		'{name:"resume",description:"Resume a different session"}',
+		'{name:"resume",description:"Resume a previous conversation"}',
+	],
 ];
 
 const check = process.argv.includes("--check");
