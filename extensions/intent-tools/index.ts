@@ -1,5 +1,6 @@
 import { createBashTool, createLocalBashOperations, type ExtensionAPI } from "@earendil-works/pi-coding-agent";
 import { matchesKey, truncateToWidth } from "@earendil-works/pi-tui";
+import { randomUUID } from "node:crypto";
 import { closeSync, fstatSync, openSync, readSync } from "node:fs";
 import { Type } from "typebox";
 import { describeTool, dynamic, failed, finished, groupRow, joinOnExecute, watch } from "../claude-tools/rows.ts";
@@ -180,6 +181,40 @@ export default function (pi: ExtensionAPI) {
 		return movedAny;
 	};
 
+	const USER_BASH = "user-bash";
+	pi.on("user_bash", (event) => ({
+		operations: {
+			exec: (command: string, execCwd: string, options: { onData: (data: Buffer) => void; signal?: AbortSignal; env?: NodeJS.ProcessEnv }) => {
+				const run = startRun(exec, command, execCwd, options.env);
+				run.sink = options.onData;
+				let moved: (result: { exitCode: number | null }) => void = () => {};
+				const movedResult = new Promise<{ exitCode: number | null }>((resolve) => (moved = resolve));
+				foreground.set(USER_BASH, {
+					run,
+					move(reason) {
+						if (run.backgrounded) return false;
+						options.onData(Buffer.from(background(run, `${randomUUID()}:inner`, { command: event.command }, reason).content[0].text));
+						moved({ exitCode: 0 });
+						return true;
+					},
+				});
+				const onAbort = () => {
+					if (!run.backgrounded) run.abort();
+				};
+				options.signal?.addEventListener("abort", onAbort, { once: true });
+				const finished = run.done.then((result) => {
+					if (result === "aborted") throw new Error("aborted");
+					return result;
+				});
+				finished.catch(() => {});
+				return Promise.race([finished, movedResult]).finally(() => {
+					foreground.delete(USER_BASH);
+					options.signal?.removeEventListener("abort", onAbort);
+				});
+			},
+		},
+	}));
+
 	pi.on("session_start", (_event, ctx) => {
 		sessionId = ctx.sessionManager.getSessionId();
 		if (!ctx.hasUI) return;
@@ -248,6 +283,7 @@ export default function (pi: ExtensionAPI) {
 	});
 
 	pi.on("session_shutdown", () => {
+		refreshStatus = () => {};
 		for (const shell of registry.shells.values()) {
 			if (shell.status !== "running") continue;
 			shell.stoppedByModel = true;

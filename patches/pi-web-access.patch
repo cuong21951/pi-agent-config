@@ -1,6 +1,6 @@
 --- a/index.ts
 +++ b/index.ts
-@@ -58,6 +58,33 @@
+@@ -58,6 +58,40 @@
  import { isFirecrawlAvailable } from "./firecrawl.ts";
  import { isJinaSearchAvailable } from "./jina-search.ts";
  import { isSerpdiveAvailable } from "./serpdive.ts";
@@ -31,10 +31,308 @@
 +	return `${trim((mb / 1024).toFixed(1))}GB`;
 +}
 +
++export function searchSummary(count: number, durationMs: number | undefined): string {
++	const searches = `${count} ${count === 1 ? "search" : "searches"}`;
++	if (durationMs === undefined) return `Did ${searches}`;
++	const took = durationMs >= 1000 ? `${Math.round(durationMs / 1000)}s` : `${Math.round(durationMs)}ms`;
++	return `Did ${searches} in ${took}`;
++}
++
  import { isKagiAvailable } from "./kagi.ts";
  import { isBochaAvailable } from "./bocha.ts";
  import { isOllamaAvailable } from "./ollama.ts";
-@@ -2663,6 +2690,8 @@
+@@ -1814,7 +1848,8 @@
+ 		}),
+ 
+ 		async execute(callId, params, signal, onUpdate, ctx) {
+-			return runWithProxy(typeof params.proxy === "string" ? params.proxy : undefined, async () => {
++			const startedAt = Date.now();
++			const outcome = await runWithProxy(typeof params.proxy === "string" ? params.proxy : undefined, async () => {
+ 				const rawQueryList: unknown[] = Array.isArray(params.queries)
+ 					? params.queries
+ 					: (params.query !== undefined ? expandQueryString(params.query) : []);
+@@ -2126,261 +2161,34 @@
+ 				proxy: typeof params.proxy === "string" ? params.proxy : undefined,
+ 			});
+ 			});
++			return { ...outcome, details: { ...outcome.details, durationMs: Date.now() - startedAt } };
+ 		},
+ 
+-		renderCall(args, theme) {
++		renderShell: "self",
++
++		renderCall(args, theme, context) {
+ 			const input = args as { query?: unknown; queries?: unknown };
+ 			const rawQueryList: unknown[] = Array.isArray(input.queries)
+ 				? input.queries
+ 				: (input.query !== undefined ? expandQueryString(input.query) : []);
+ 			const queryList = normalizeQueryList(rawQueryList);
+-			if (queryList.length === 0) {
+-				return new Text(theme.fg("toolTitle", theme.bold("search ")) + theme.fg("error", "(no query)"), 0, 0);
+-			}
+-			if (queryList.length === 1) {
+-				const q = queryList[0];
+-				const display = q.length > 60 ? q.slice(0, 57) + "..." : q;
+-				return new Text(theme.fg("toolTitle", theme.bold("search ")) + theme.fg("accent", `"${display}"`), 0, 0);
+-			}
+-			const lines = [theme.fg("toolTitle", theme.bold("search ")) + theme.fg("accent", `${queryList.length} queries`)];
+-			for (const q of queryList.slice(0, 5)) {
+-				const display = q.length > 50 ? q.slice(0, 47) + "..." : q;
+-				lines.push(theme.fg("muted", `  "${display}"`));
+-			}
+-			if (queryList.length > 5) {
+-				lines.push(theme.fg("muted", `  ... and ${queryList.length - 5} more`));
+-			}
+-			return new Text(lines.join("\n"), 0, 0);
++			const label = queryList.length === 0 ? '"..."' : queryList.map((q) => `"${q}"`).join(", ");
++			const id = (context as { toolCallId?: string } | undefined)?.toolCallId ?? "";
++			return claudeRow((width) => [truncateToWidth(claudeDot(id, theme) + theme.bold("Web Search") + `(${label})`, width)]);
+ 		},
+ 
+-		renderResult(result, { expanded, isPartial }, theme) {
+-			type QueryDetail = {
+-				query: string;
+-				provider: string | null;
+-				answer: string | null;
+-				sources: Array<{ title: string; url: string }>;
+-				error: string | null;
+-			};
+-			const details = result.details as {
+-				queryCount?: number;
+-				successfulQueries?: number;
+-				totalResults?: number;
+-				error?: string;
+-				fetchId?: string;
+-				fetchUrls?: string[];
+-				phase?: string;
+-				progress?: number;
+-				currentQuery?: string;
+-				curated?: boolean;
+-				curatedFrom?: number;
+-				curatedQueries?: QueryDetail[];
+-				cancelled?: boolean;
+-				cancelReason?: string;
+-				browserConnected?: boolean;
+-				lastHeartbeatAgeMs?: number | null;
+-				cancelledQueries?: import("./render-search-error.ts").CancelledQueryDetail[];
+-				curatorUrl?: string;
+-				browserOpenError?: string;
+-				timeoutSeconds?: number;
+-				shortcut?: string;
+-				summary?: {
+-					text: string;
+-					workflow: SummaryWorkflow;
+-					model: string | null;
+-					durationMs: number;
+-					tokenEstimate: number;
+-					fallbackUsed: boolean;
+-					fallbackReason?: string;
+-					phase?: "summary-model" | "deterministic-fallback";
+-					edited?: boolean;
+-				};
+-			};
+-
+-			if (isPartial) {
+-				if (details?.phase === "curator-fallback") {
+-					const lines = [theme.fg("warning", "Open the search curator manually:")];
+-					if (details?.curatorUrl) lines.push(theme.fg("muted", `  ${details.curatorUrl}`));
+-					if (details?.browserOpenError) lines.push(theme.fg("dim", `  auto-open failed: ${details.browserOpenError}`));
+-					const timeout = typeof details?.timeoutSeconds === "number" ? details.timeoutSeconds : undefined;
+-					const shortcut = typeof details?.shortcut === "string" ? details.shortcut : curateKey;
+-					lines.push(theme.fg("dim", timeout ? `  auto-submits after ${timeout}s idle; ${shortcut} reopens` : `  ${shortcut} reopens`));
+-					return new Text(lines.join("\n"), 0, 0);
+-				}
+-				if (details?.phase === "curating" || details?.phase === "waiting-for-approval" || details?.phase === "generating-summary") {
+-					const phaseText = details?.phase === "generating-summary"
+-						? "generating summary draft..."
+-						: details?.phase === "waiting-for-approval"
+-							? "summary draft ready; approve in browser..."
+-							: "waiting for summary approval in browser...";
+-					const lines = [theme.fg("accent", phaseText)];
+-					if (details?.curatorUrl) {
+-						lines.push(theme.fg("muted", `  ${details.curatorUrl}`));
+-					}
+-					const timeout = typeof details?.timeoutSeconds === "number" ? details.timeoutSeconds : undefined;
+-					const shortcut = typeof details?.shortcut === "string" ? details.shortcut : curateKey;
+-					if (timeout) {
+-						lines.push(theme.fg("dim", `  auto-submits after ${timeout}s idle; ${shortcut} reopens`));
+-					} else {
+-						lines.push(theme.fg("dim", `  ${shortcut} reopens`));
+-					}
+-					return new Text(lines.join("\n"), 0, 0);
+-				}
+-				if (details?.phase === "searching") {
+-					const progress = details?.progress ?? 0;
+-					const bar = "\u2588".repeat(Math.floor(progress * 10)) + "\u2591".repeat(10 - Math.floor(progress * 10));
+-					const query = details?.currentQuery || "";
+-					const display = query.length > 40 ? query.slice(0, 37) + "..." : query;
+-					return new Text(theme.fg("accent", `[${bar}] ${display}`), 0, 0);
+-				}
+-				const progress = details?.progress ?? 0;
+-				const bar = "\u2588".repeat(Math.floor(progress * 10)) + "\u2591".repeat(10 - Math.floor(progress * 10));
+-				return new Text(theme.fg("accent", `[${bar}] ${details?.phase || "searching"}`), 0, 0);
+-			}
+-
+-			if (details?.error) {
+-				// Expandable Ctrl+O diagnostics: which queries completed, per-query errors,
+-				// browser connection state, cancel reason. See render-search-error.ts.
+-				const plan = buildSearchErrorPlan(details as SearchErrorDetails);
+-				if (plan) return renderSearchErrorPlan(plan, expanded, theme);
+-				return new Text(theme.fg("error", `Error: ${details.error}`), 0, 0);
+-			}
+-
+-			let statusLine: string;
+-			const queryInfo = details?.queryCount === 1 ? "" : `${details?.successfulQueries}/${details?.queryCount} queries, `;
+-			statusLine = theme.fg("success", `${queryInfo}${details?.totalResults ?? 0} sources`);
+-			if (details?.curated && details?.curatedFrom) {
+-				statusLine += theme.fg("muted", ` (${details.queryCount}/${details.curatedFrom} queries curated)`);
+-			}
+-			if (details?.fetchId && details?.fetchUrls) {
+-				statusLine += theme.fg("muted", ` (fetching ${details.fetchUrls.length} URLs)`);
+-			} else if (details?.fetchId) {
+-				statusLine += theme.fg("muted", " (content ready)");
+-			}
+-
+-			// Build expanded lines first so collapsed view can reference total count
+-			const lines = [statusLine];
+-			if (details?.summary?.text) {
+-				lines.push("");
+-				lines.push(theme.fg("accent", `── Summary (${details.summary.workflow}) ` + "─".repeat(32)));
+-				lines.push("");
+-				for (const line of details.summary.text.split("\n")) {
+-					lines.push(`  ${line}`);
+-				}
+-				lines.push("");
+-				const metaParts = [
+-					details.summary.model ? `model=${details.summary.model}` : "model=deterministic",
+-					`duration=${details.summary.durationMs}ms`,
+-					`tokens~${details.summary.tokenEstimate}`,
+-					details.summary.fallbackUsed ? "fallback=true" : "fallback=false",
+-					details.summary.phase ? `phase=${details.summary.phase}` : "",
+-					details.summary.edited ? "edited=true" : "edited=false",
+-				];
+-				if (details.summary.fallbackReason) {
+-					metaParts.push(`reason=${details.summary.fallbackReason}`);
+-				}
+-				lines.push(theme.fg("dim", "  " + metaParts.filter(Boolean).join(" · ")));
+-			}
+-
+-			const queryDetails = details?.curatedQueries;
+-			if (queryDetails?.length) {
+-				const kept = queryDetails.length;
+-				const from = details?.curatedFrom ?? kept;
+-				lines.push("");
+-				lines.push(theme.fg("accent", `\u2500\u2500 Curated Results (${kept} of ${from} queries kept) ` + "\u2500".repeat(24)));
+-
+-				for (const cq of queryDetails) {
+-					lines.push("");
+-					const dq = cq.query.length > 65 ? cq.query.slice(0, 62) + "..." : cq.query;
+-					const providerLabel = cq.provider ? ` (${cq.provider})` : "";
+-					lines.push(theme.fg("accent", `  "${dq}"${providerLabel}`));
+-
+-					if (cq.error) {
+-						lines.push(theme.fg("error", `  ${cq.error}`));
+-					} else if (cq.answer) {
+-						lines.push("");
+-						for (const line of cq.answer.split("\n")) {
+-							lines.push(`  ${line}`);
+-						}
+-					}
+-
+-					if (cq.sources.length > 0) {
+-						lines.push("");
+-						for (const s of cq.sources) {
+-							const domain = s.url.replace(/^https?:\/\//, "").replace(/\/.*$/, "");
+-							const title = s.title.length > 50 ? s.title.slice(0, 47) + "..." : s.title;
+-							lines.push(theme.fg("muted", `  \u25b8 ${title}`) + theme.fg("dim", ` \u00b7 ${domain}`));
+-						}
+-					}
+-				}
+-				lines.push("");
+-			} else {
+-				const textContent = result.content.find((c) => c.type === "text")?.text || "";
+-				const preview = textContent.length > 500 ? textContent.slice(0, 500) + "..." : textContent;
+-				for (const line of preview.split("\n")) {
+-					lines.push(theme.fg("dim", line));
+-				}
+-			}
+-
+-			if (details?.fetchUrls && details.fetchUrls.length > 0) {
+-				if (details.curated) {
+-					lines.push(theme.fg("muted", `Fetching ${details.fetchUrls.length} URLs in background`));
+-				} else {
+-					lines.push(theme.fg("muted", "Fetching:"));
+-					for (const u of details.fetchUrls.slice(0, 5)) {
+-						const display = u.length > 60 ? u.slice(0, 57) + "..." : u;
+-						lines.push(theme.fg("dim", "  " + display));
+-					}
+-					if (details.fetchUrls.length > 5) {
+-						lines.push(theme.fg("dim", `  ... and ${details.fetchUrls.length - 5} more`));
+-					}
+-				}
+-			}
+-
+-			const totalLines = lines.length;
+-
+-			if (!expanded) {
+-				const box = new Box(1, 0);
+-				box.addChild(new Text(statusLine, 0, 0));
+-
+-				let collapsedLines = 1; // statusLine
+-				const summaryPreview = details?.summary?.text?.trim() || "";
+-				if (summaryPreview) {
+-					const preview = summaryPreview.length > 120 ? summaryPreview.slice(0, 117) + "..." : summaryPreview;
+-					box.addChild(new Text(theme.fg("dim", preview), 0, 0));
+-					collapsedLines++;
+-				} else if (details?.curatedQueries?.length) {
+-					for (const cq of details.curatedQueries.slice(0, 3)) {
+-						const dq = cq.query.length > 55 ? cq.query.slice(0, 52) + "..." : cq.query;
+-						const srcCount = cq.sources?.length ?? 0;
+-						const suffix = cq.error ? theme.fg("error", " (error)") : theme.fg("dim", ` · ${srcCount} sources`);
+-						box.addChild(new Text(theme.fg("accent", `  "${dq}"`) + suffix, 0, 0));
+-						collapsedLines++;
+-					}
+-					if (details.curatedQueries.length > 3) {
+-						box.addChild(new Text(theme.fg("dim", `  ... and ${details.curatedQueries.length - 3} more`), 0, 0));
+-						collapsedLines++;
+-					}
+-				} else {
+-					const textContent = result.content.find((c) => c.type === "text")?.text || "";
+-					const firstContentLine = textContent.split("\n").find(l => {
+-						const t = l.trim();
+-						return t && !t.startsWith("[") && !t.startsWith("#") && !t.startsWith("---");
+-					});
+-					const fallbackLine = (firstContentLine?.trim() || "").replace(/\*\*/g, "");
+-					if (fallbackLine) {
+-						const preview = fallbackLine.length > 120 ? fallbackLine.slice(0, 117) + "..." : fallbackLine;
+-						box.addChild(new Text(theme.fg("dim", preview), 0, 0));
+-						collapsedLines++;
+-					}
+-				}
+-				const moreLines = Math.max(0, totalLines - collapsedLines);
+-				if (moreLines > 0) {
+-					box.addChild(new Text(theme.fg("muted", `\n... (${moreLines} more lines, ${totalLines} total, ctrl+o to expand)`), 0, 0));
+-				}
+-				return box;
+-			}
+-
+-			return new Text(lines.join("\n"), 0, 0);
++		renderResult(result, { expanded, isPartial }, theme, context) {
++			const details = result.details as { error?: string; queryCount?: number; durationMs?: number } | undefined;
++			const elbow = theme.fg("muted", CLAUDE_ELBOW);
++			if (isPartial) return claudeRow(() => [elbow + theme.fg("muted", "Searching…")]);
++			const text = result.content.find((c) => c.type === "text")?.text ?? "";
++			if (details?.error || (context as { isError?: boolean } | undefined)?.isError) {
++				return claudeRow((width) => [truncateToWidth(elbow + theme.fg("error", text.split("\n")[0] || `Error: ${details?.error}`), width)]);
++			}
++			const head = elbow + searchSummary(details?.queryCount ?? 1, details?.durationMs);
++			if (!expanded) return claudeRow(() => [head]);
++			const answer = text.split("\n").slice(0, 20).map((line) => theme.fg("muted", `     ${line}`));
++			return claudeRow((width) => [head, ...answer].map((line) => truncateToWidth(line, width)));
+ 		},
+ 	});
+ 
+@@ -2663,6 +2471,8 @@
  							mode,
  							mimeType: result.mimeType,
  							status: result.status,
@@ -43,7 +341,7 @@
  							totalBytes: slice.totalBytes,
  							totalLines: slice.totalLines,
  							shownBytes: slice.shownBytes,
-@@ -2692,136 +2721,30 @@
+@@ -2692,136 +2502,30 @@
  			});
  		},
  
@@ -91,7 +389,8 @@
 -			}
 -			return new Text(lines.join("\n"), 0, 0);
 -		},
--
++		renderShell: "self",
+ 
 -		renderResult(result, { expanded, isPartial }, theme) {
 -			const details = result.details as {
 -				urlCount?: number;
@@ -110,7 +409,13 @@
 -				frames?: number;
 -				duration?: number;
 -			};
--
++		renderCall(args, theme, context) {
++			const { urlList } = normalizeFetchContentParams(args);
++			const label = urlList.length === 1 ? urlList[0] : `${urlList.length} URLs`;
++			const id = (context as { toolCallId?: string } | undefined)?.toolCallId ?? "";
++			return claudeRow((width) => [truncateToWidth(claudeDot(id, theme) + theme.bold("Fetch") + `(${label})`, width)]);
++		},
+ 
 -			if (isPartial) {
 -				const progress = details?.progress ?? 0;
 -				const bar = "\u2588".repeat(Math.floor(progress * 10)) + "\u2591".repeat(10 - Math.floor(progress * 10));
@@ -132,8 +437,7 @@
 -				if (plan) return renderSearchErrorPlan(plan, expanded, theme);
 -				return new Text(theme.fg("error", `Error: ${details.error}`), 0, 0);
 -			}
-+		renderShell: "self",
- 
+-
 -			if (details?.urlCount === 1) {
 -				const title = details?.title || "Untitled";
 -				const imgCount = details?.imageCount ?? (details?.hasImage ? 1 : 0);
@@ -169,13 +473,7 @@
 -				lines.push(theme.fg("dim", preview));
 -				return new Text(lines.join("\n"), 0, 0);
 -			}
-+		renderCall(args, theme, context) {
-+			const { urlList } = normalizeFetchContentParams(args);
-+			const label = urlList.length === 1 ? urlList[0] : `${urlList.length} URLs`;
-+			const id = (context as { toolCallId?: string } | undefined)?.toolCallId ?? "";
-+			return claudeRow((width) => [truncateToWidth(claudeDot(id, theme) + theme.bold("Fetch") + `(${label})`, width)]);
-+		},
- 
+-
 -			const countColor = (details?.successful ?? 0) > 0 ? "success" : "error";
 -			const statusLine = theme.fg(countColor, `${details?.successful}/${details?.urlCount} URLs`) + theme.fg("muted", getSearchContentEnabled ? " (content stored)" : " (content fetched)");
 -			if (!expanded) {
@@ -201,6 +499,85 @@
 +			return claudeRow((width) => [head, ...preview].map((line) => truncateToWidth(line, width)));
  		},
  	});
+ 
+@@ -3086,78 +2790,6 @@
+ 				details: { error: "Invalid data" },
+ 			};
+ 		},
+-
+-		renderCall(args, theme) {
+-			const { responseId, query, queryIndex, url, urlIndex, offset, findText } = args as {
+-				responseId: string;
+-				query?: string;
+-				queryIndex?: number;
+-				url?: string;
+-				urlIndex?: number;
+-				offset?: number;
+-				findText?: string | string[];
+-			};
+-			let target = "";
+-			if (query) target = `query="${query}"`;
+-			else if (queryIndex !== undefined) target = `queryIndex=${queryIndex}`;
+-			else if (url) target = url.length > 30 ? url.slice(0, 27) + "..." : url;
+-			else if (urlIndex !== undefined) target = `urlIndex=${urlIndex}`;
+-			if (offset !== undefined) target += target ? ` @ ${offset}` : `offset=${offset}`;
+-			if (findText !== undefined) {
+-				const queries = Array.isArray(findText) ? findText : [findText];
+-				target += `${target ? " · " : ""}find ${queries.length}`;
+-			}
+-			return new Text(theme.fg("toolTitle", theme.bold("get_content ")) + theme.fg("accent", target || responseId.slice(0, 8)), 0, 0);
+-		},
+-
+-		renderResult(result, { expanded }, theme) {
+-			const details = result.details as {
+-				error?: string;
+-				query?: string;
+-				url?: string;
+-				title?: string;
+-				resultCount?: number;
+-				contentLength?: number;
+-				offset?: number;
+-				returnedChars?: number;
+-				nextOffset?: number | null;
+-				matchCount?: number;
+-				returnedMatches?: number;
+-			};
+-
+-			if (details?.error) {
+-				const extras: string[] = [];
+-				if (details.query) extras.push(`query: ${details.query}`);
+-				if (details.url) extras.push(`url: ${details.url}`);
+-				else if (details.title) extras.push(`resource: ${details.title}`);
+-				const plan = buildSearchErrorPlan({ error: details.error, extraLines: extras });
+-				if (plan) return renderSearchErrorPlan(plan, expanded, theme);
+-				return new Text(theme.fg("error", `Error: ${details.error}`), 0, 0);
+-			}
+-
+-			let statusLine: string;
+-			if (typeof details?.matchCount === "number") {
+-				statusLine = theme.fg("success", details?.title || details?.query || "Content") + theme.fg("muted", ` (${details.matchCount} matches, ${details.returnedMatches ?? 0} shown)`);
+-			} else if (details?.query) {
+-				statusLine = theme.fg("success", `"${details.query}"`) + theme.fg("muted", ` (${details.resultCount} results)`);
+-			} else {
+-				const start = details?.offset ?? 0;
+-				const returned = details?.returnedChars ?? details?.contentLength ?? 0;
+-				const end = start + returned;
+-				const slice = details?.nextOffset !== undefined || start > 0
+-					? `, showing ${start}-${end}`
+-					: "";
+-				statusLine = theme.fg("success", details?.title || "Content") + theme.fg("muted", ` (${details?.contentLength ?? 0} chars${slice})`);
+-			}
+-
+-			if (!expanded) {
+-				return new Text(statusLine, 0, 0);
+-			}
+-
+-			const textContent = result.content.find((c) => c.type === "text")?.text || "";
+-			const preview = textContent.length > 500 ? textContent.slice(0, 500) + "..." : textContent;
+-			return new Text(statusLine + "\n" + theme.fg("dim", preview), 0, 0);
+-		},
+ 	});
+ 	}
  
 --- a/extract.ts
 +++ b/extract.ts

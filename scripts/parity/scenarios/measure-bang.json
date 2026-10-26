@@ -1,0 +1,21 @@
+{
+ "prompt": "",
+ "bypass": true,
+ "steps": [
+  {"keys": "!echo hi"}, {"sleep": 1}, {"snap": "typed"},
+  {"keys": "\r"}, {"sleep": 3}, {"snap": "done-short"},
+  {"keys": "!python -c \"import sys,time; print('start'); sys.stdout.flush(); sys.stderr.write('WARNING: warn line\\n'); sys.stderr.flush(); time.sleep(8); print('end')\""}, {"sleep": 1},
+  {"keys": "\r"}, {"sleep": 3}, {"snap": "running"},
+  {"sleep": 9}, {"snap": "done-slow"},
+  {"keys": "!python -c \"print('\\n'.join('row %d' % i for i in range(1, 31)))\""}, {"sleep": 1},
+  {"keys": "\r"}, {"sleep": 4}, {"snap": "done-long"},
+  {"keys": "!python -c \"import sys; print('boom'); sys.exit(3)\""}, {"sleep": 1},
+  {"keys": "\r"}, {"sleep": 4}, {"snap": "done-fail"},
+  {"keys": "!python -c \"pass\""}, {"sleep": 1},
+  {"keys": "\r"}, {"sleep": 4}, {"snap": "done-empty"},
+  {"keys": "!python -c \"import time; time.sleep(30)\""}, {"sleep": 1},
+  {"keys": "\r"}, {"sleep": 3}, {"snap": "running-silent"},
+  {"keys": "\u001b"}, {"sleep": 2}, {"snap": "cancelled"}
+ ],
+ "end": "."
+}

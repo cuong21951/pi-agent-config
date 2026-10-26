@@ -1,0 +1,17 @@
+{
+ "prompt": "",
+ "bypass": true,
+ "steps": [
+  {"keys": "!python -u -c \"import time; [(print('tick', i), time.sleep(1)) for i in range(14)]\""}, {"sleep": 1},
+  {"keys": "\r"},
+  {"sleep": 1.2}, {"snap": "t1"},
+  {"sleep": 1}, {"snap": "t2"},
+  {"sleep": 1}, {"snap": "t3"},
+  {"sleep": 1}, {"snap": "t4"},
+  {"sleep": 1}, {"snap": "t5"},
+  {"sleep": 3}, {"snap": "t8"},
+  {"sleep": 3}, {"snap": "t11"},
+  {"sleep": 6}, {"snap": "done"}
+ ],
+ "end": "."
+}

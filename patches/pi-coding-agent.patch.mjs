@@ -429,6 +429,30 @@ const EDITS = [
 		'{name:"resume",description:"Resume a different session"}',
 		'{name:"resume",description:"Resume a previous conversation"}',
 	],
+	[
+		'this.contentContainer.addChild(this.loader),this.addChild(new DynamicBorder(borderColor))}setExpanded(expanded)',
+		'this.contentContainer.addChild(this.loader),this.addChild(new DynamicBorder(borderColor))}render(width){return globalThis.__claudeBang?.(this,width)??super.render(width)}setExpanded(expanded)',
+	],
+	[
+		':void 0,result.fullOutputPath)}catch(error){this.bashComponent&&this.bashComponent.setComplete(void 0,!1)',
+		':void 0,result.fullOutputPath),result.cancelled&&globalThis.__claudeBang&&!this.editor.getText()&&this.editor.setText((excludeFromContext?"!!":"!")+command)}catch(error){this.bashComponent&&this.bashComponent.setComplete(void 0,!1)',
+	],
+	[
+		'await this.handleBashCommand(command,isExcluded),this.isBashMode=!1,this.updateEditorBorderColor();return',
+		'await this.handleBashCommand(command,isExcluded),this.isBashMode=this.editor.getText().trimStart().startsWith("!"),this.updateEditorBorderColor();return',
+	],
+	[
+		'isBashMode=!1;bashComponent=void 0;',
+		'isBashMode=!1;bashComponent=(globalThis.__claudeMode=this,void 0);',
+	],
+	[
+		'content:[{type:"text",text:bashExecutionToText(m2)}]',
+		'content:globalThis.__claudeBangBlocks?.(m2,messages)??[{type:"text",text:bashExecutionToText(m2)}]',
+	],
+	[
+		'content:[{type:"text",text:bashExecutionToText2(m2)}]',
+		'content:globalThis.__claudeBangBlocks?.(m2,messages)??[{type:"text",text:bashExecutionToText2(m2)}]',
+	],
 ];
 
 const check = process.argv.includes("--check");

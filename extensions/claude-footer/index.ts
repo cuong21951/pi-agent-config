@@ -111,6 +111,12 @@ export function transcriptOn(): boolean {
 	return (globalThis as { __claudeTranscript?: boolean }).__claudeTranscript === true;
 }
 
+const BANG_HINT = "! for shell mode";
+
+function bangTyped(): boolean {
+	return (globalThis as { __claudeEditor?: { getText(): string } }).__claudeEditor?.getText().startsWith("!") === true;
+}
+
 export function transcriptRows(width: number, paint: Paint): string[] {
 	const full = ["Showing detailed transcript", "ctrl+o to toggle", TRANSCRIPT_KEYS].join(SEPARATOR);
 	const keys = GUTTER.length + visibleWidth(full) + TRANSCRIPT_STATUS.length < width ? TRANSCRIPT_KEYS : "? for shortcuts";
@@ -155,6 +161,7 @@ export default function (pi: ExtensionAPI) {
 				render(fullWidth: number) {
 					if (dialogOpen) return [];
 					if (transcriptOn()) return transcriptRows(fullWidth, paint);
+					if (bangTyped()) return [GUTTER + paint("bashMode", BANG_HINT)];
 					const width = Math.max(1, fullWidth - GUTTER.length);
 					const statuses = footerData.getExtensionStatuses();
 					const line = composeFooter(

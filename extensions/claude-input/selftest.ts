@@ -30,6 +30,13 @@ const id = (t: string) => t;
 }
 
 {
+	const { bangBox } = await jiti.import(path.join(here, "index.ts"));
+	assert.deepEqual(promptLines(bangBox(["────────", "!ls     ", "────────"]), id, "! "), ["──────────", "! ls      ", "──────────"], "in bash mode the mark is \"!\" and the typed \"!\" is not drawn twice, like Claude 2.1.289");
+	assert.equal(bangBox(["────────", "ls      ", "────────"]), undefined, "ordinary text keeps the prompt");
+	assert.equal(bangBox(["────────", "\x1b[7m!\x1b[27mls", "────────"]), undefined, "with the cursor on the \"!\" the row is left as typed");
+}
+
+{
 	const rows = promptLines(["────────", "hi      ", "────────", "auto1", "auto2"], id);
 	assert.deepEqual(rows.slice(0, 2), ["auto1", "auto2"], "every autocomplete row moves above the box, not just the first");
 	assert.equal(rows[2], "──────────", "the top rule sits directly under the menu, no blank row between");

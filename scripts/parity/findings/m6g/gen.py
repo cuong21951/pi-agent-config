@@ -59,8 +59,8 @@ session("notify", [
 session("types2", [
     ("M6G types2 run.", [[("Agent", {"description": "Explore", "subagent_type": "Explore", "prompt": "M6G-SUB-EX2: reply with the word exreport."})], [("Agent", {"description": "Plan", "subagent_type": "Plan", "prompt": "M6G-SUB-PL2: reply with the word plreport."})], [("Agent", {"description": "Custom", "subagent_type": "m6g-custom", "prompt": "M6G-SUB-CU2: reply with the word cureport."})], ["typesdone"], ["exseen"], ["plseen"], ["cuseen"]]),
     ("M6G-SUB-EX2: reply with the word exreport.", [["exreport", 2000]]),
-    ("M6G-SUB-PL2: reply with the word plreport.", [["plreport", 5000]]),
-    ("M6G-SUB-CU2: reply with the word cureport.", [["cureport", 8000]]),
+    ("M6G-SUB-PL2: reply with the word plreport.", [["plreport", 13000]]),
+    ("M6G-SUB-CU2: reply with the word cureport.", [["cureport", 24000]]),
 ])
 session("sendrun", [
     ("M6G sendrun run.", [[("Agent", {"description": "Long sleeper", "subagent_type": "general-purpose", "prompt": "M6G-SUB-SR: run the long timer, then reply with the word srreport."})], [("ListAgents", {})], [("SendMessage", {"to": "@FIRST", "message": "M6G-SUB-SM2: also reply with the word smreport.", "summary": "ask more"})], ["asked"], ["srdone"]]),
@@ -82,6 +82,13 @@ session("nest", [
 session("fable", [
     ("M6G fable run.", [[("Agent", {"description": "Explore", "subagent_type": "Explore", "prompt": "M6G-SUB-FE: reply with the word fereport."})], [("Agent", {"description": "Plan", "subagent_type": "Plan", "prompt": "M6G-SUB-FP: reply with the word fpreport."})], [("Agent", {"description": "General", "subagent_type": "general-purpose", "prompt": "M6G-SUB-FG: reply with the word fgreport."})], ["fabledone"], ["feseen"], ["fpseen"], ["fgseen"]]),
     ("M6G-SUB-FE: reply with the word fereport.", [["fereport", 2000]]),
-    ("M6G-SUB-FP: reply with the word fpreport.", [["fpreport", 5000]]),
-    ("M6G-SUB-FG: reply with the word fgreport.", [["fgreport", 8000]]),
+    ("M6G-SUB-FP: reply with the word fpreport.", [["fpreport", 13000]]),
+    ("M6G-SUB-FG: reply with the word fgreport.", [["fgreport", 24000]]),
+])
+session("bang", [
+    ("M13 bang run.", [["ready"]]),
+    ("echo m13-one", [["oneseen", 800]]),
+    ("print('boom'); sys.exit(3)", [["failseen", 800]]),
+    ("sys.stdout.buffer.write", [["longseen", 800]]),
+    ("echo m13-end", [["endseen", 800]]),
 ])

@@ -1,0 +1,82 @@
+{
+ "prompt": "",
+ "bypass": true,
+ "steps": [
+  {
+   "keys": "!python -c \"for i in range(1,9): print('row', i)\""
+  },
+  {
+   "sleep": 1
+  },
+  {
+   "keys": "\r"
+  },
+  {
+   "sleep": 4
+  },
+  {
+   "snap": "eight"
+  },
+  {
+   "keys": "!python -c \"print('y'*140); print('z')\""
+  },
+  {
+   "sleep": 1
+  },
+  {
+   "keys": "\r"
+  },
+  {
+   "sleep": 4
+  },
+  {
+   "snap": "wrap"
+  },
+  {
+   "keys": "!python -c \"import sys; print('out'); print('err', file=sys.stderr)\""
+  },
+  {
+   "sleep": 1
+  },
+  {
+   "keys": "\r"
+  },
+  {
+   "sleep": 4
+  },
+  {
+   "snap": "stderr"
+  },
+  {
+   "keys": "!echo x"
+  },
+  {
+   "sleep": 1
+  },
+  {
+   "keys": "\r"
+  },
+  {
+   "sleep": 4
+  },
+  {
+   "snap": "last"
+  },
+  {
+   "keys": "hello there"
+  },
+  {
+   "sleep": 1
+  },
+  {
+   "keys": "\r"
+  },
+  {
+   "sleep": 4
+  },
+  {
+   "snap": "prompt"
+  }
+ ],
+ "end": "."
+}
