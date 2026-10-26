@@ -1,6 +1,6 @@
 import { runningDescription } from "./verbs.ts";
 
-type Kind = "search" | "read" | "list" | "bash" | "write" | "own" | "other" | "thought" | "none" | `mcp:${string}`;
+type Kind = "search" | "read" | "page" | "list" | "bash" | "write" | "own" | "other" | "thought" | "none" | `mcp:${string}`;
 type Args = Record<string, unknown>;
 export type Brush = { fg: (role: string, text: string) => string; bold: (text: string) => string };
 export type Describe = (args: Args) => { activity?: string; hint?: string };
@@ -58,6 +58,7 @@ export const BLINK_MS = 600;
 // as nothing at all, and every remaining tool falls into the catch-all that reads "called N tools".
 const KIND: Record<string, Kind> = {
 	read: "read",
+	get_search_content: "page",
 	grep: "search",
 	find: "search",
 	ls: "list",
@@ -310,6 +311,7 @@ function isActive(group: string[]): boolean {
 const LEADING: Array<[Kind, string, string, string, string]> = [
 	["search", "searched for", "searching for", "pattern", "patterns"],
 	["read", "read", "reading", "file", "files"],
+	["page", "read", "reading", "fetched page", "fetched pages"],
 	["list", "listed", "listing", "directory", "directories"],
 ];
 
@@ -791,6 +793,13 @@ if (process.env.CLAUDE_ROWS_SELFTEST) {
 	check(summaryFor("o3") === "  Searched for 1 pattern, called 1 tool, ran 1 shell command", "a tool nobody renders folds into the same sentence as 'called 1 tool' instead of splitting the group");
 	run("o4", "todo");
 	check(summaryFor("o4") === "  Searched for 1 pattern, called 2 tools, ran 1 shell command", "two unknown tools pluralise");
+	calls.agent_start({}, {});
+	run("pg1", "get_search_content", { responseId: "x", urlIndex: 0 }, "page one");
+	check(summaryFor("pg1") === "  Read 1 fetched page", "get_search_content folds into the grey sentence as a fetched page");
+	run("pg2", "get_search_content", { responseId: "x", urlIndex: 2 }, "page two");
+	check(summaryFor("pg1") === "" && summaryFor("pg2", (t) => `<b>${t}</b>`) === "  Read <b>2</b> fetched pages", "two stored pages merge and pluralise");
+	run("pg3", "read");
+	check(summaryFor("pg3") === "  Read 1 file, read 2 fetched pages", "a fetched page follows the read clause");
 	check((globalThis as any).__claudeRows.summaryFor === summaryFor && (globalThis as any).__claudeRows.groupRow === groupRow, "the MCP patch can reach summaryFor and groupRow through globalThis");
 	check(duration(0) === "0s" && duration(59_999) === "59s" && duration(65_400) === "1m 5s" && duration(119_600) === "2m 0s" && duration(3_723_000) === "1h 2m 3s" && duration(90_061_000) === "1d 1h 1m", "durations use Claude's formatter");
 	const at = (s: number) => new Date(Date.UTC(2026, 8, 23, 7, 0, s)).toISOString();

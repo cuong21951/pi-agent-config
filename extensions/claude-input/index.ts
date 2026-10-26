@@ -191,6 +191,12 @@ export function promptLines(lines: string[], paint: Paint, promptMark: string = 
 	return [...menu, ...box];
 }
 
+export function bangBox(lines: string[]): string[] | undefined {
+	const row = lines.findIndex(isRule) + 1;
+	if (row === 0 || !lines[row]?.startsWith("!")) return undefined;
+	return lines.map((line, i) => (i === row ? `${line.slice(1)} ` : line));
+}
+
 export type AgentView = { label: string; name: string; color: string };
 
 export function agentViewPlaceholder(name: string): string {
@@ -240,6 +246,9 @@ export default function (pi: ExtensionAPI) {
 		prompted.submitted = true;
 		return { action: "continue" as const };
 	});
+	pi.on("user_bash", () => {
+		prompted.submitted = true;
+	});
 	pi.on("agent_start", () => {
 		busy = true;
 		prompted.submitted = true;
@@ -260,13 +269,14 @@ export default function (pi: ExtensionAPI) {
 		);
 		const previous = ctx.ui.getEditorComponent();
 		const mutedPrompt = ctx.ui.theme.fg("muted" as never, PROMPT);
+		const bangPrompt = `${ctx.ui.theme.fg("bashMode" as never, "!")}\u00a0`;
 		const command: CommandColour = { names: [...BUILTIN_COMMAND_NAMES, ...invocableNames(pi.getCommands())], paint: commandPaint };
 		const hasMessages = (ctx.sessionManager?.getEntries() ?? []).some((entry) => entry.type === "message");
 		const placeholder = placeholderText(ctx.sessionManager?.getSessionId() ?? "");
 		ctx.ui.setEditorComponent((tui, theme, keybindings) => {
 			const editor = previous ? previous(tui, theme, keybindings) : new CustomEditor(tui, theme, keybindings);
 			(globalThis as { __claudeEditor?: unknown }).__claudeEditor = editor;
-			const paint: Paint = (text) => theme.borderColor(text);
+			const paint: Paint = (text) => (editor.borderColor ?? theme.borderColor)(text);
 			const render = editor.render.bind(editor);
 			const muted: Paint = (text) => ctx.ui.theme.fg("muted" as never, text);
 			marginRow = (width) => {
@@ -287,7 +297,9 @@ export default function (pi: ExtensionAPI) {
 			};
 			editor.render = (width: number) => {
 				hintInMargin(tui);
-				const rows = promptLines(inner(width - PROMPT.length), paint, busy ? mutedPrompt : PROMPT, command, noMatchRow(editor.getText(), muted, command.names));
+				const box = inner(width - PROMPT.length);
+				const bang = bangBox(box);
+				const rows = promptLines(bang ?? box, paint, bang ? bangPrompt : busy ? mutedPrompt : PROMPT, command, noMatchRow(editor.getText(), muted, command.names));
 				const view = viewedAgent();
 				return view ? agentViewRules(rows, view) : rows;
 			};

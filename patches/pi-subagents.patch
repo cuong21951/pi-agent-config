@@ -437,7 +437,7 @@
      ...(structuredRetried ? { structuredRetried } : {}),
 --- a/src/claude-contract.ts
 +++ b/src/claude-contract.ts
-@@ -0,0 +1,245 @@
+@@ -0,0 +1,249 @@
 +import { existsSync, readFileSync } from "node:fs";
 +import { dirname, join } from "node:path";
 +import type { AgentConfig, AgentRecord } from "./types.js";
@@ -648,6 +648,10 @@
 +
 +export function coordinatorMessage(message: string): string {
 +  return `The coordinator sent a message while you were working:\n${message}\n\nAddress this before completing your current task.`;
++}
++
++export function stillRunningInBackground(record: Pick<AgentRecord, "workflowId" | "isBackground" | "resumed" | "status" | "notifiedEarly" | "notificationSent">): boolean {
++  return record.workflowId === undefined && record.isBackground === true && !record.resumed && (record.status === "running" || record.status === "queued" || (record.notifiedEarly === true && record.notificationSent !== true));
 +}
 +
 +export function listStatus(status: AgentRecord["status"]): string {
@@ -1036,7 +1040,7 @@
  import { fullWorkflowToolDescription } from "./workflow/tool-description.js";
  import { isWorktreeIsolationEnabled, setWorktreeIsolationEnabled } from "./worktree.js";
 -import { escapeXml } from "./xml.js";
-+import { agentToolsLabel, CLAUDE_TOOLS, forkGateOff, formatHandBack, lastTurnTokens, refusedGroupLines, concurrentLimitError, concurrentSubagentLimit, coordinatorMessage, formatListAgents, listStatus, isClaudeModelAlias, launchedGroupLines, placeNotifications, remoteIsolationFallback, resolveClaudeModelAlias, formatAgentTypesReminder, formatLaunchResult, formatTaskNotification } from "./claude-contract.js";
++import { agentToolsLabel, CLAUDE_TOOLS, forkGateOff, formatHandBack, lastTurnTokens, refusedGroupLines, concurrentLimitError, concurrentSubagentLimit, coordinatorMessage, formatListAgents, listStatus, isClaudeModelAlias, launchedGroupLines, placeNotifications, remoteIsolationFallback, stillRunningInBackground, resolveClaudeModelAlias, formatAgentTypesReminder, formatLaunchResult, formatTaskNotification } from "./claude-contract.js";
  
  // ---- Shared helpers ----
  
@@ -1149,7 +1153,7 @@
          const total = formatCost(all.reduce((sum, a) => sum + (a.totalCost ?? 0), 0));
          if (total) {
            const tokens = all.reduce((sum, a) => sum + a.totalTokens, 0);
-@@ -470,18 +455,31 @@
+@@ -470,18 +455,32 @@
    }
  
    // ---- Individual nudge helper (async join mode) ----
@@ -1175,6 +1179,7 @@
 +        display: true,
 +        details,
 +      }, { deliverAs: "steer", triggerTurn: true });
++      for (const record of ready) record.notificationSent = true;
 +    } catch { /* ignore stale completion side-effect errors */ }
 +  }
  
@@ -1191,7 +1196,7 @@
    }
  
    function sendIndividualNudge(record: AgentRecord) {
-@@ -492,40 +490,6 @@
+@@ -492,40 +491,6 @@
      widget.update();
    }
  
@@ -1232,7 +1237,7 @@
    /** Helper: build event data for lifecycle events from an AgentRecord. */
    function buildEventData(record: AgentRecord) {
      const durationMs = record.completedAt ? record.completedAt - record.startedAt : Date.now() - record.startedAt;
-@@ -564,6 +528,31 @@
+@@ -564,6 +529,31 @@
      };
    }
  
@@ -1264,7 +1269,7 @@
    // Background completion: route through group join or send individual nudge
    const manager = new AgentManager((record) => {
      // Owned children — nested, or a workflow's — report only through their
-@@ -574,6 +563,7 @@
+@@ -574,6 +564,7 @@
  
      // Emit lifecycle event based on terminal status
      const isError = record.status === "error" || record.status === "stopped" || record.status === "aborted";
@@ -1272,7 +1277,7 @@
      const eventData = buildEventData(record);
      if (isError) {
        pi.events.emit("subagents:failed", eventData);
-@@ -597,19 +587,7 @@
+@@ -597,19 +588,7 @@
        return;
      }
  
@@ -1293,18 +1298,18 @@
      widget.update();
    }, undefined, (record) => {
      if (!isTopLevelAgent(record)) return;
-@@ -735,6 +713,10 @@
+@@ -735,6 +714,10 @@
      return resolved?.kind === "live" ? resolved.record : undefined;
    };
  
 +  function backgroundRunningCount(): number {
-+    return manager.listAgents().filter(r => r.workflowId === undefined && r.isBackground === true && !r.resumed && (r.status === "running" || r.status === "queued" || r.notifiedEarly === true)).length;
++    return manager.listAgents().filter(stillRunningInBackground).length;
 +  }
 +
    const registryEntry = {
      waitForAll: () => manager.waitForAll(),
      hasRunning: () => manager.hasRunning(),
-@@ -743,6 +725,24 @@
+@@ -743,6 +726,24 @@
        const record = manager.getRecord(id);
        return record !== undefined && isTopLevelAgent(record) ? record : undefined;
      },
@@ -1329,7 +1334,7 @@
    };
    const ownsManagerRegistry = (globalThis as any)[MANAGER_KEY] === undefined;
    if (ownsManagerRegistry) {
-@@ -1133,10 +1133,7 @@
+@@ -1133,10 +1134,7 @@
    function setWidgetMode(m: WidgetMode): void { widgetMode = m; widget.update(); }
  
    // Claude Code-style FleetView: navigable list of main + subagents below the editor.
@@ -1341,7 +1346,7 @@
    let fleetViewEnabled = true;
    function isFleetViewEnabled(): boolean { return fleetViewEnabled; }
    function setFleetViewEnabled(b: boolean): void { fleetViewEnabled = b; fleet.setEnabled(b); }
-@@ -1220,49 +1217,6 @@
+@@ -1220,49 +1218,6 @@
    function getToolDescriptionMode(): ToolDescriptionMode { return toolDescriptionMode; }
    function setToolDescriptionMode(mode: ToolDescriptionMode): void { toolDescriptionMode = mode; }
  
@@ -1391,7 +1396,7 @@
    /**
     * Launch a detached resume of an existing agent and wire everything a
     * re-running agent needs: transcript anchoring, activity tracking, join-mode
-@@ -1288,6 +1242,7 @@
+@@ -1288,6 +1243,7 @@
      // id left by the spawn that created the record. Keeping it would point the
      // orchestrator's new result at a tool call that was answered runs ago.
      existing.toolCallId = opts.toolCallId;
@@ -1399,7 +1404,7 @@
      if (joinMode) existing.joinMode = joinMode;
      // Reuse the agent's transcript rather than starting a fresh one: the
      // path is deterministic per agent+session, so writing an initial entry
-@@ -1327,12 +1282,6 @@
+@@ -1327,12 +1283,6 @@
      });
      if (!record) return undefined;
  
@@ -1412,7 +1417,7 @@
      agentActivity.set(id, bgState);
      // This agent already finished once, so the widget holds a finished-age
      // for it that is past the linger limit — without clearing it, the
-@@ -1429,6 +1378,7 @@
+@@ -1429,6 +1379,7 @@
      },
      (event, payload) => pi.events.emit(event, payload),
    );
@@ -1420,7 +1425,7 @@
  
    // ---- Agent tool ----
  
-@@ -1572,16 +1522,46 @@
+@@ -1572,16 +1523,46 @@
        if (custom) return custom;
        console.warn('[pi-subagents] toolDescriptionMode is "custom" but no agent-tool-description.md found — using "full"');
      }
@@ -1469,7 +1474,7 @@
      promptSnippet: "Launch autonomous sub-agents for complex multi-step tasks",
      promptGuidelines: [
        "Use Agent with specialized agents when the task matches an agent type's description. Subagents are valuable for parallelizing independent queries or for protecting the main context window from excessive results, but should not be used excessively when not needed. Importantly, avoid duplicating work that subagents are already doing — if you delegate research to a subagent, do not also perform the same searches yourself.",
-@@ -1589,84 +1569,36 @@
+@@ -1589,84 +1570,36 @@
        "When an agent runs in the background, you will be notified on completion — do not poll or sleep waiting for it. Continue with other work instead.",
        "Trust but verify: an agent's summary describes intent, not outcome. When an agent writes or edits code, check the actual changes before reporting work as done.",
      ],
@@ -1579,7 +1584,7 @@
      },
  
      renderResult(result, { expanded, isPartial }, theme, renderContext) {
-@@ -1675,6 +1607,7 @@
+@@ -1675,6 +1608,7 @@
        // Pi reports pre-execution failures (extension block, abort, argument
        // validation) as `{ content: [reason], details: {} }` with isError set —
        // no status to render, so show the reason instead of inventing one (#199).
@@ -1587,7 +1592,7 @@
        if (renderContext.isError || !details?.status) {
          return new Text(text, 0, 0);
        }
-@@ -1703,9 +1636,10 @@
+@@ -1703,9 +1637,10 @@
          return renderRunningAgentStatus(frame, s, details.activity ?? "thinking…", theme);
        }
  
@@ -1599,7 +1604,7 @@
        }
  
        // ---- Completed / Steered ----
-@@ -1729,8 +1663,10 @@
+@@ -1729,8 +1664,10 @@
              }
            }
          } else {
@@ -1612,7 +1617,7 @@
          }
          return new Text(line, 0, 0);
        }
-@@ -1771,18 +1707,21 @@
+@@ -1771,18 +1708,21 @@
        // Reload custom agents so new project/global .md files are picked up without restart
        reloadCustomAgents();
  
@@ -1636,7 +1641,7 @@
        const subagentType = dispatch.ok ? dispatch.type : rawType;
        // What the caller actually asked for, named once: `fellBackFrom` is "" for
        // a blank request, so reading it inline invites the `??`-vs-`||` slip that
-@@ -1802,18 +1741,23 @@
+@@ -1802,18 +1742,23 @@
        // Get agent config (if any)
        const customConfig = getAgentConfig(subagentType);
  
@@ -1664,7 +1669,7 @@
          } else {
            model = resolved;
          }
-@@ -1832,8 +1776,11 @@
+@@ -1832,8 +1777,11 @@
        });
        if (scopeVerdict.kind === "error") return textResult(scopeVerdict.message);
        if (scopeVerdict.kind === "warn") ctx.ui.notify(scopeVerdict.message, "warning");
@@ -1677,7 +1682,7 @@
        const inheritContext = resolvedConfig.inheritContext;
        const runInBackground = resolvedConfig.runInBackground;
        const isolated = resolvedConfig.isolated;
-@@ -2064,6 +2011,7 @@
+@@ -2064,6 +2012,7 @@
            isolation,
            invocation: agentInvocation,
            rootSessionId: ctx.sessionManager.getSessionId(),
@@ -1685,7 +1690,7 @@
            ...bgCallbacks,
          });
  
-@@ -2083,17 +2031,6 @@
+@@ -2083,17 +2032,6 @@
          // call instead of being reported as a subagent that ran (#179).
          await manager.awaitStartup(id);
  
@@ -1703,7 +1708,7 @@
          agentActivity.set(id, bgState);
          widget.ensureTimer();
          widget.update();
-@@ -2108,17 +2045,8 @@
+@@ -2108,17 +2046,8 @@
            isBackground: true,
          });
  
@@ -1722,7 +1727,7 @@
            { ...detailBaseFor(record), toolUses: 0, tokens: "", durationMs: 0, status: "background" as const, agentId: id },
          );
        }
-@@ -2253,18 +2181,7 @@
+@@ -2253,18 +2182,7 @@
          return textResult(`${fallbackNote}Agent failed: ${record.error}${partialOutputSuffix(record)}`, details);
        }
  
@@ -1742,7 +1747,7 @@
      },
    });
    /**
-@@ -2292,13 +2209,17 @@
+@@ -2292,13 +2210,17 @@
        },
      };
    }
@@ -1761,7 +1766,7 @@
    pi.registerTool(registeredAgentTool);
  
    // ---- Workflow tool ----
-@@ -2407,11 +2328,11 @@
+@@ -2407,11 +2329,11 @@
    // switch changes exactly one thing: whether pi is ever told about the tool.
    const workflowTool = defineTool({
      name: SUBAGENT_TOOL_NAMES.WORKFLOW,
@@ -1775,7 +1780,7 @@
        "Prefer `pipeline` over `parallel` — a barrier costs wall-clock whenever the stages are unevenly sized.",
        "A workflow runs in the background and notifies you when it finishes — do not poll or sleep waiting for it.",
      ],
-@@ -2458,9 +2379,11 @@
+@@ -2458,9 +2380,11 @@
        ),
      }),
  
@@ -1788,7 +1793,7 @@
          0,
          0,
        );
-@@ -2572,14 +2495,17 @@
+@@ -2572,14 +2496,17 @@
                  ? `Nothing to replay from ${params.resumeFromRunId} — every agent runs live.\n`
                  : "") +
              `\nYou will be notified when it finishes — do NOT poll or sleep waiting for it.\n` +
@@ -1808,7 +1813,7 @@
  
    /**
     * Act on {@link decideWorkflowCollision} — the half that needs the host.
-@@ -2729,7 +2655,7 @@
+@@ -2729,7 +2656,7 @@
  
    // ---- get_subagent_result tool ----
  
@@ -1817,7 +1822,7 @@
      name: SUBAGENT_TOOL_NAMES.GET_RESULT,
      label: "Get Agent Result",
      description:
-@@ -2819,6 +2745,59 @@
+@@ -2819,6 +2746,59 @@
    // ---- steer_subagent tool ----
  
    registerToolReportingUsage(defineTool({
@@ -1877,7 +1882,7 @@
      name: SUBAGENT_TOOL_NAMES.STEER,
      label: "Steer Agent",
      description:
-@@ -3052,33 +3031,10 @@
+@@ -3052,33 +3032,10 @@
      if (!record) return;
  
      await viewAgentConversation(ctx, record);
@@ -2097,17 +2102,18 @@
    builtinToolNames?: string[];
    /** Raw `ext:` selector entries from the `tools:` CSV, e.g. ["ext:foo", "ext:bar/x"].
     * Presence of any entry flips extension tools to an explicit allowlist. */
-@@ -172,6 +176,9 @@
+@@ -172,6 +176,10 @@
    alias?: string;
    description: string;
    status: "queued" | "running" | "completed" | "steered" | "aborted" | "stopped" | "error";
 +  killedBy?: "user" | "parent";
 +  notifiedEarly?: boolean;
++  notificationSent?: boolean;
 +  turnLimit?: number;
    result?: string;
    error?: string;
    toolUses: number;
-@@ -205,7 +212,8 @@
+@@ -205,7 +213,8 @@
    /** Worktree info if the agent is running in an isolated worktree. */
    worktree?: { path: string; branch: string; baseSha: string; workPath: string };
    /** Worktree cleanup result after agent completion. */
@@ -2117,7 +2123,7 @@
    /** The tool_use_id from the original Agent tool call. */
    toolCallId?: string;
    /** Path to the streaming output transcript file. */
-@@ -280,6 +288,15 @@
+@@ -280,6 +289,15 @@
   */
  export type EffectiveThinkingLevel = ThinkingLevel | "off";
  
@@ -2133,7 +2139,7 @@
  export interface AgentInvocation {
    /** Short display name for tight rows, e.g. "haiku 4.5". Always set once known. */
    modelName?: string;
-@@ -307,6 +324,7 @@
+@@ -307,6 +325,7 @@
  /** Details attached to custom notification messages for visual rendering. */
  export interface NotificationDetails {
    id: string;

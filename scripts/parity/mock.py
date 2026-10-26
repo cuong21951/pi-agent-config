@@ -77,7 +77,8 @@ def load_searches(path):
                 calls[block["id"]] = block.get("arguments") or {}
         if message.get("role") == "toolResult" and message.get("toolName") == "web_search":
             details = message.get("details") or {}
-            query = calls.get(message.get("toolCallId"), {}).get("query", "")
+            asked = calls.get(message.get("toolCallId"), {})
+            query = asked.get("query") or (asked.get("queries") or [""])[0]
             searches.append({"query": query, "sources": details.get("sources") or [], "ms": details.get("durationMs", 1000)})
     return searches
 

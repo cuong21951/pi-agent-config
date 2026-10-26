@@ -12,7 +12,7 @@ VOLATILE = [
     (PLACEHOLDER, '❯ Try "<example>"'),
     (re.compile(r"✻ \S+ for .*?· done .*$"), "✻ <verb> for <time> · done <clock>"),
     (re.compile(r"^[·✢*✶✻✽] \S+…"), "<spinner> <verb>…"),
-    (DURATION := re.compile(r"\b(?:\d+d )?(?:\d+h )?(?:\d+m )?\d+(?:\.\d+)?s\b"), "<n>s"),
+    (DURATION := re.compile(r"\b(?:\d+d )?(?:\d+h )?(?:\d+m )?\d+(?:\.\d+)?m?s\b"), "<n>s"),
     (re.compile(r"↓ \d+(?:\.\d+)?k? tokens"), "↓ <n> tokens"),
     (re.compile(r"(?<=\S) {2,}(?=<n>s · ↓ <n> tokens$)"), "  "),
     (re.compile(r"(?<= · )\d+(?:\.\d+)?k? tokens · \d+ tools?(?= · )"), "<n> tokens · <n> tools"),

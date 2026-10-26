@@ -1,0 +1,22 @@
+{
+ "prompt": "Run exactly one shell command in the foreground (do not set run_in_background), with the description \"Wait for the timer\": python -c \"import time; time.sleep(20); print('finished')\" . Do not write any text before the tool call. After it returns reply with exactly: Timer done. Do not write any other text.",
+ "steps": [
+  {"until": "\\(ctrl\\+b to run in background\\)", "timeout": 90},
+  {"sleep": 1},
+  {"keys": "!echo queued"},
+  {"sleep": 0.5},
+  {"keys": "\r"},
+  {"sleep": 1.5},
+  {"snap": "queued"},
+  {"keys": "\u001b[A"},
+  {"sleep": 1.5},
+  {"snap": "up"},
+  {"keys": "\r"},
+  {"sleep": 1.5},
+  {"snap": "requeued"},
+  {"keys": "\u001b"},
+  {"sleep": 8},
+  {"snap": "esc"}
+ ],
+ "end": "."
+}

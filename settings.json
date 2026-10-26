@@ -29,7 +29,6 @@
     "git:github.com/badlogic/pi-skills",
     "npm:pi-mcp-adapter",
     "npm:@dietrichgebert/ponytail",
-    "npm:pi-deepseek-search",
     "npm:pi-web-access",
     "npm:@juicesharp/rpiv-ask-user-question",
     "npm:pi-worktree",

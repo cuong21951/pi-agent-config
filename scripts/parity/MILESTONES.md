@@ -145,3 +145,59 @@ Exit: the replay cases run once per theme and are clean; gate green.
 | M8 | 2026-10-04 | 74/74, 74/74 | runs 7 and 8 against the pinned 2.1.289 (`--jobs 2`; runs 1-6: 70, 72, 73, 72, 71, 73 of 74, read out in README, Suite state). The first run against 2.1.289 was 8/74. Ported: `❯` `999999` on transcript prompt rows, an idle prompt white at once, the Bash/Edit/Write permission frame (description or path under the title, body between dashed rules), no session-start row (`ponytail.patch`) and a header ending in two blank rows, no `[Skill conflicts]` block for a long skill description (edit 79). Harness: Sonnet cases pin `claude-sonnet-5`, the scripted `asked` reply takes 1.5 s, `--patience 3` on every step timeout, longer `m6a-bg`/`m6a-ctrlb` timers and `m6f-view` wait, a named diff.py rule for Claude's early `ctx N%` (M9 measures it), suite.py keeps `run.log`. Every drift item has a verdict in `findings/claude-drift-289.md`. Every m6g `reqdiff` clean, no classic-fallback line, self-checks green, core patch 79/79 |
 | M9a | 2026-10-05 | 76/76, 76/76 | runs 2 and 3 (`--jobs 2`, 76 cases with `m6d-panels` and `m6e-mcp-panel`; run 1 75/76: `m6g-fable`, two finished notices in the other order on pi's side, unexplained, clean 3 of 3 alone). Ported on 2.1.289: `/status` and `/usage` as a modal pane with Claude's frame, tab row, row order and value column; `/context` as a transcript block with estimates before the first reply; `/mcp` with the `▔` rule, Claude's colours, bare tool names and the dynamic-scope labels. Named exceptions: the account, bus and harness rows of `/status`, pi's Provider row and balances, Claude's `Messages` row in a fresh `/context`, the MCP tool's full name. No missed wait, every m6g `reqdiff` clean, no classic-fallback line, self-checks green, core patch 79/79 |
 | M9b | 2026-10-05 | 79/79, 79/79 | runs 5 and 6 (`--jobs 2`, 79 cases with `m4b-queued-message`, `m6a-sendnow`, `thinking-md-replay`; runs 1-4: 78, 78, 79, 78 of 79, each a harness or machine cause read out in README, Suite state). Ported on 2.1.289: a queued message as a grey `❯` row in the conversation with one `ctrl+x ctrl+s to send now` hint, the `Press up to edit queued messages` placeholder and Up pulling the queue back (core edits 80-84); a tool group that ends at a user message; thinking as dim markdown in the ctrl+o view; a nested list under its parent's text (edits 85-86); `ctx N%` from the first streamed event. Harness: mock.py serves the reply to a message merged into a tool result, the status-line rule is symmetric, `slow-search` fixture 48000 files, run.py repeats Claude's side on a classic-renderer capture, `m6f-view` waits for the agent's last reply, generated replays carry the live model id. Left: Esc with a queued message (`m6j-interrupt-queued`, 7 differences, out of the suite), `ctrl+g to edit in Notepad` over a box of two or more rows, Up in a multi-line draft with a queue. No missed wait, every m6g `reqdiff` clean, no classic-fallback line, self-checks green, core patch 86/86 |
+| M10a | 2026-10-09 | not recorded | landed as `415dde5` without a baseline row: the pending write-row dot, Esc with queued messages (core edit 87), the `ctrl+g to edit in Notepad` hint, the start-up `● high · /effort` notice, the `/resume` description (edit 88); new cases `m2-edit-permission`, `m6j-interrupt-queued`, `m10-multiline-hint` (82). Its first recorded gate is M13's |
+
+# Round 3 (2026-10-27, target Claude Code 2.1.310)
+
+Cuong asked on 2026-10-27 to carry on until pi is the same as Claude Code: a goal, milestones, then the work. `GOAL.md` still defines "done" and the Round 2 regression gate still holds at every milestone; the pinned Claude moves to 2.1.310 in M14.
+
+## Goal of the round
+
+On the Windows terminal, at 132x60, 80x24 and 60x40, nobody can tell pi from Claude Code 2.1.310 in any screen the suite reaches, and the suite reaches every element Claude 2.1.310 draws that pi can produce. Every element pi cannot produce is a named exception in the README ledger with its measurement. Exit for the round: the gate green on 2.1.310 with every case of M13-M17, every item of `findings/claude-drift-310.md` with a verdict, everything committed and pushed, both installs at the full `--check` count.
+
+## State found on 2026-10-27 (investigation)
+
+- Installed: Claude Code 2.1.310 (21 versions past the 2.1.289 pin; now also pinned as `sandbox/claude-2.1.310.exe`), pi 0.85.1 in both installs (npm latest 1.4.0, not taken).
+- `main` = `origin/main` = `415dde5` (M10a); M10a has no baseline row yet.
+- Uncommitted in both trees: bash mode `!cmd` (2026-10-09; `bang.ts`, `bang-mode.ts`, core edits 89-94, six `measure-bang*` scenarios, applied to both installs).
+- Uncommitted only in the sandbox: pi-web-access rows (`● Web Search(…)`, `Read 1 fetched page`, pi-deepseek-search dropped, 2026-10-14), the stopped-agent fix in pi-subagents, the late-subagent-start pacing in `m6g-*`, `claude-tools/rows.ts` `page` kind.
+- Only in `~/.pi/agent`: Cuong's own edits (`AGENTS.md` model routing, `settings.json` models and thinking level, `extensions/voice`, `extensions/pi-permission-system/config.json`, `skills/*`, the `refreshStatus` reset in `intent-tools`). Not part of this work; left uncommitted unless Cuong says otherwise.
+
+## M13 — Land the work in flight (time box: 1 session)
+
+Work: bring the bash-mode and web-access work together in the sandbox (the sandbox's `intent-tools` must keep main's `refreshStatus` reset), add M10a's baseline row, run the gate on the 2.1.289 pin, land: sync to `~/.pi/agent` without touching Cuong's files, `apply.mjs` on both installs, commit, push.
+Test: the 79 cases plus M10a's (`m6j-interrupt-queued`, `m10-multiline-hint`, `m2-edit-permission`), a `web` case for the new rows, and a bash-mode case that does not depend on the model's reply (mock-served answer).
+Exit: gate green twice; `--check` complete on both installs; pushed.
+
+## M14 — Retarget to Claude Code 2.1.310 (time box: 2 sessions)
+
+Investigate: `findings/claude-drift-310.md` (release notes 2.1.290-2.1.310 from the bundle, each UI item against the ledger). Point `PARITY_CLAUDE` at `claude-2.1.310.exe`, refresh `sandbox/claude-config` for the new version (fullscreen boot strikes are per version), run the suite once and triage every difference: Claude changed (port), harness (fix the case), flake.
+Work: port what changed, one case per ported item; move the README target line to 2.1.310.
+Exit: gate green on 2.1.310; every drift item has a verdict.
+
+## M15 — Dialogs and keys left from M10 (time box: 2 sessions)
+
+Work: the ctrl+o transcript keys (↑↓ j k, ctrl+u/d, space/b, g/G, `/` search, the `?` card); a click on the sticky prompt row and the row/pill hover colour; the list dialog for several background shells and `x` in Shell details; a loose markdown list; paste numbering after a cleared paste; the compaction screen (`m5d-compact`: `❯ /compact` row, history kept, spinner, re-attached files). The MCP and Fetch permission dialogs in manual mode wait for Cuong's word (pi would ask more often than today).
+Exit: a case for each, gate green.
+
+## M16 — Tools Claude has and pi lacks (time box: 3 sessions)
+
+Work: `Monitor`; CronCreate, CronList, CronDelete and ScheduleWakeup with their rows and the scheduled fire; the Workflow rows, `/workflows` and the `/tasks` Phases card; `/btw`; anything M14's drift list marks `new`.
+Exit: each built with its case, or a README exception with its measurement; gate green.
+
+## M17 — Themes (time box: 1 session)
+
+Work: Claude's light, light-daltonized and ANSI palettes from the bundle; `NO_COLOR`.
+Exit: the replay cases run once per theme and are clean; gate green.
+
+## Cuong's decisions for Round 3
+
+- pi 1.4.0: every anchored core edit (94) and the package patches would need porting; its own round, not started without a go.
+- MCP/Fetch permission dialogs in manual mode (M15).
+- His uncommitted edits in `~/.pi/agent`: commit or keep local.
+
+## Round 3 baseline
+
+| Milestone | Date | Suite | Notes |
+| --- | --- | --- | --- |
+| M13 | 2026-10-27 | 83/83, 83/83 | runs 2 and 3 on the 2.1.289 pin (`--jobs 2`, `--port 27900`, `28200`, 83 cases with `m13-bang`); run 1 81/83: `web` (a `859ms` search timer, diff.py now folds `ms` timers) and `modes-default` (Claude's 10 s `● high · /effort` notice still up while pi's had expired, clean 3 of 3 alone). Landed: bash mode `!cmd`, the pi-web-access rows in place of pi-deepseek-search, the stopped-agent done line, main's `intent-tools` status reset. Measured, port in M15: the newest `!` output folds only when the next `!` command is submitted. Every m6g `reqdiff` clean, no classic-fallback line, self-checks green, `apply.mjs --check` complete |

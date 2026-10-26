@@ -1,0 +1,82 @@
+{
+ "prompt": "",
+ "bypass": true,
+ "steps": [
+  {
+   "keys": "!python -c \"print(*'abcd', sep=chr(10))\""
+  },
+  {
+   "sleep": 1
+  },
+  {
+   "keys": "\r"
+  },
+  {
+   "sleep": 4
+  },
+  {
+   "snap": "four"
+  },
+  {
+   "keys": "!python -c \"print(*'abcde', sep=chr(10))\""
+  },
+  {
+   "sleep": 1
+  },
+  {
+   "keys": "\r"
+  },
+  {
+   "sleep": 4
+  },
+  {
+   "snap": "five"
+  },
+  {
+   "keys": "!python -c \"import sys; print(*'12345', sep=chr(10)); sys.exit(2)\""
+  },
+  {
+   "sleep": 1
+  },
+  {
+   "keys": "\r"
+  },
+  {
+   "sleep": 4
+  },
+  {
+   "snap": "fail-five"
+  },
+  {
+   "keys": "!python -c \"print('y'*140, *'bcd', sep=chr(10))\""
+  },
+  {
+   "sleep": 1
+  },
+  {
+   "keys": "\r"
+  },
+  {
+   "sleep": 4
+  },
+  {
+   "snap": "wrap-count"
+  },
+  {
+   "keys": "!python -c \"print('  lead'); print(); print('tail')\""
+  },
+  {
+   "sleep": 1
+  },
+  {
+   "keys": "\r"
+  },
+  {
+   "sleep": 4
+  },
+  {
+   "snap": "blank-mid"
+  }
+ ],
+ "end": "."
+}

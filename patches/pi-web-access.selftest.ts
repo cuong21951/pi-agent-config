@@ -16,11 +16,12 @@ const jiti = createJiti(import.meta.url, {
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const mod = await jiti.import(path.join(here, "../npm/node_modules/pi-web-access/index.ts"));
-const { claudeDot, formatBytes, default: extension } = mod;
+const { claudeDot, formatBytes, searchSummary, default: extension } = mod;
 
 const tagged = { fg: (role, text) => `<${role}>${text}</${role}>`, bold: (text) => `<b>${text}</b>` };
 const plain = { fg: (_role, text) => text, bold: (text) => text };
 const render = (component, width = 200) => component.render(width).map((line) => line.trimEnd()).join("\n");
+const stripAnsi = (text) => text.replace(/\u001b\[[0-9;]*m/g, "");
 
 const tools = [];
 const fake = new Proxy(
@@ -98,4 +99,114 @@ const rows = (globalThis.__claudeRows ??= { finished: new Set(), failed: new Set
   assert.equal(formatBytes(1024 * 1024 * 1024), "1GB");
   console.log("PASS: formatBytes matches Claude's Dt()");
 }
+const search = tools.find((t) => t.label === "Web Search");
+assert.ok(search, "web search tool registered");
+assert.equal(search.name, "web_search");
+assert.equal(search.renderShell, "self");
+
+const searchHead = (query) => {
+  const row = render(search.renderCall(query, tagged, { toolCallId: "s-run" }));
+  assert.ok(row.startsWith("<muted>● </muted><b>Web Search</b>(") || row.startsWith("  <b>Web Search</b>("), row);
+  return row.replace(/^<muted>● <\/muted>|^  /, "");
+};
+
+{
+  assert.equal(searchHead({ query: "example domain iana" }), '<b>Web Search</b>("example domain iana")');
+  console.log("PASS: one query ->", searchHead({ query: "example domain iana" }));
+}
+{
+  assert.equal(searchHead({ queries: ["react vs vue", "react ecosystem"] }), '<b>Web Search</b>("react vs vue", "react ecosystem")');
+  assert.equal(searchHead({ query: '["a", "b"]' }), '<b>Web Search</b>("a", "b")');
+  assert.equal(searchHead({ queries: ["  a  ", "", 3] }), '<b>Web Search</b>("a")');
+  console.log("PASS: several queries ->", searchHead({ queries: ["react vs vue", "react ecosystem"] }));
+}
+{
+  assert.equal(searchHead({}), '<b>Web Search</b>("...")');
+  const row = render(search.renderCall({ query: "x".repeat(300) }, plain, { toolCallId: "s-long" }), 60);
+  assert.ok(stripAnsi(row).length <= 60, row);
+  console.log("PASS: no query and a long query stay on one row");
+}
+{
+  rows.finished.add("s-done");
+  const row = render(search.renderCall({ query: "q" }, tagged, { toolCallId: "s-done" }));
+  assert.equal(row, '<borderAccent>● </borderAccent><b>Web Search</b>("q")');
+  console.log("PASS: the dot turns blue once the call finished");
+}
+{
+  const row = render(search.renderResult({ content: [], details: {} }, { expanded: false, isPartial: true }, tagged, {}));
+  assert.equal(row, "<muted>  ⎿ \u00a0</muted><muted>Searching…</muted>");
+  console.log("PASS: running ->", JSON.stringify(row));
+}
+{
+  const result = { content: [{ type: "text", text: "Answer line one\nAnswer line two" }], details: { queryCount: 1, durationMs: 12_400 } };
+  const row = render(search.renderResult(result, { expanded: false, isPartial: false }, tagged, {}));
+  assert.equal(row, "<muted>  ⎿ \u00a0</muted>Did 1 search in 12s");
+  const expanded = render(search.renderResult(result, { expanded: true, isPartial: false }, plain, {}));
+  assert.equal(expanded, "  ⎿ \u00a0Did 1 search in 12s\n     Answer line one\n     Answer line two");
+  console.log("PASS: one search ->", JSON.stringify(row));
+}
+{
+  const long = { content: [{ type: "text", text: Array.from({ length: 30 }, (_, i) => `line ${i}`).join("\n") }], details: { queryCount: 1, durationMs: 1000 } };
+  const lines = render(search.renderResult(long, { expanded: true, isPartial: false }, plain, {})).split("\n");
+  assert.equal(lines.length, 21);
+  console.log("PASS: ctrl+o shows the first 20 answer lines");
+}
+{
+  const result = { content: [{ type: "text", text: "## Query: \"a\"\n\nx\n\n## Query: \"b\"\n\ny" }], details: { queryCount: 2, durationMs: 3_200, summary: { text: "Curated summary" }, curatedQueries: [{ query: "a" }] } };
+  const row = render(search.renderResult(result, { expanded: false, isPartial: false }, plain, {}));
+  assert.equal(row, "  ⎿ \u00a0Did 2 searches in 3s");
+  console.log("PASS: several queries, no summary or curator block in the transcript ->", JSON.stringify(row));
+}
+{
+  assert.equal(searchSummary(1, undefined), "Did 1 search");
+  assert.equal(searchSummary(3, undefined), "Did 3 searches");
+  assert.equal(searchSummary(1, 450), "Did 1 search in 450ms");
+  assert.equal(searchSummary(1, 999), "Did 1 search in 999ms");
+  assert.equal(searchSummary(1, 1000), "Did 1 search in 1s");
+  assert.equal(searchSummary(2, 59_600), "Did 2 searches in 60s");
+  console.log("PASS: searchSummary wording and units");
+}
+{
+  const result = { content: [{ type: "text", text: "Error: No query provided. Use 'query' or 'queries' parameter." }], details: { error: "No query provided" } };
+  const row = render(search.renderResult(result, { expanded: false, isPartial: false }, tagged, {}));
+  assert.equal(row, "<muted>  ⎿ \u00a0</muted><error>Error: No query provided. Use 'query' or 'queries' parameter.</error>");
+  const thrown = render(search.renderResult({ content: [{ type: "text", text: "Error: boom" }], details: {} }, { expanded: false, isPartial: false }, tagged, { isError: true }));
+  assert.equal(thrown, "<muted>  ⎿ \u00a0</muted><error>Error: boom</error>");
+  console.log("PASS: error ->", JSON.stringify(row));
+}
+{
+  const result = await search.execute("s-exec", {}, undefined, undefined, undefined);
+  assert.equal(result.details.error, "No query provided");
+  assert.equal(typeof result.details.durationMs, "number");
+  console.log("PASS: execute stamps durationMs on the result details, errors included");
+}
+
+const stored = tools.find((t) => t.label === "Get Search Content");
+assert.ok(stored, "get_search_content registered");
+assert.equal(stored.renderCall, undefined);
+assert.equal(stored.renderResult, undefined);
+console.log("PASS: get_search_content has no renderer of its own, so claude-tools' fallback draws it");
+
+{
+  const rowsModule = await jiti.import(path.join(here, "../extensions/claude-tools/rows.ts"));
+  const handlers = {};
+  rowsModule.track({ on: (name, handler) => (handlers[name] = handler) });
+  handlers.agent_start({}, {});
+  const run = (id, args) => {
+    handlers.tool_execution_start({ toolCallId: id, toolName: stored.name, args }, {});
+    handlers.tool_call({ toolCallId: id, toolName: stored.name, input: args }, {});
+  };
+  run("g1", { responseId: "r", urlIndex: 0 });
+  assert.equal(rowsModule.summaryFor("g1"), "  Read 1 fetched page");
+  assert.equal(render({ render: (width) => rowsModule.groupRow("g1", width, plain) }).includes("Reading 1 fetched page…"), true, "running");
+  handlers.tool_execution_end({ toolCallId: "g1", toolName: stored.name, isError: false }, {});
+  run("g2", { responseId: "r", urlIndex: 2 });
+  handlers.tool_execution_end({ toolCallId: "g2", toolName: stored.name, isError: false }, {});
+  handlers.agent_end({}, {});
+  assert.equal(rowsModule.summaryFor("g1"), "");
+  assert.equal(rowsModule.summaryFor("g2"), "  Read 2 fetched pages");
+  assert.equal(render({ render: (width) => rowsModule.groupRow("g2", width, plain) }), "  Read 2 fetched pages");
+  console.log("PASS: get_search_content joins claude-tools' grey sentence: running 'Reading 1 fetched page…', finished 'Read 2 fetched pages'");
+}
+
 console.log("ok - pi-web-access fetch rows");
