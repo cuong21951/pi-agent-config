@@ -139,7 +139,7 @@ export default function (pi: ExtensionAPI) {
 	pi.on("input", (event, ctx) => {
 		if (event.source !== "interactive" || event.text.trim() === "") return;
 		appendEntry({
-			display: event.text,
+			display: (globalThis as { __claudePasteShown?: (text: string) => string }).__claudePasteShown?.(event.text) ?? event.text,
 			pastedContents: {},
 			timestamp: Date.now(),
 			project: ctx.cwd,

@@ -1,0 +1,17 @@
+{
+ "prompt": "",
+ "bypass": true,
+ "rows": 40,
+ "steps": [
+  {"keys": "Reply with exactly: ok. "}, {"sleep": 0.5},
+  {"keys": "\u001b[200~a1\na2\na3\na4\u001b[201~"}, {"sleep": 1},
+  {"keys": "\r"}, {"until": "✻ \\S+ for [^\\n]*· done", "timeout": 90}, {"sleep": 1.5}, {"snap": "space-before"},
+  {"keys": "Reply with exactly: ok."}, {"sleep": 0.5},
+  {"keys": "\u001b[200~b1\nb2\nb3\nb4\u001b[201~"}, {"sleep": 1},
+  {"keys": "\r"}, {"until": "(?s)✻ \\S+ for [^\\n]*· done.*✻ \\S+ for [^\\n]*· done", "timeout": 90}, {"sleep": 1.5}, {"snap": "no-space"},
+  {"keys": "\u001b[200~c1\nc2\nc3\nc4\u001b[201~"}, {"sleep": 0.5},
+  {"keys": " Reply with exactly: ok."}, {"sleep": 1},
+  {"keys": "\r"}, {"until": "(?s)(✻ \\S+ for [^\\n]*· done.*){3}", "timeout": 90}, {"sleep": 1.5}, {"snap": "paste-first"}
+ ],
+ "end": "."
+}

@@ -179,6 +179,7 @@ Exit: gate green on 2.1.310; every drift item has a verdict.
 
 Work: the ctrl+o transcript keys (↑↓ j k, ctrl+u/d, space/b, g/G, `/` search, the `?` card); a click on the sticky prompt row and the row/pill hover colour; the list dialog for several background shells and `x` in Shell details; a loose markdown list; paste numbering after a cleared paste; the compaction screen (`m5d-compact`: `❯ /compact` row, history kept, spinner, re-attached files). The MCP and Fetch permission dialogs in manual mode wait for Cuong's word (pi would ask more often than today).
 Exit: a case for each, gate green.
+Done 2026-10-28: paste numbering, plus what measuring it turned up on 2.1.310 (a paste is sent inside `<pasted_content id=…>` tags and echoed without them, the `/clear` row one row too low in pi), case `m15-paste` (mock-served), core edits 95-101; README ledger, Paste. Left: the ctrl+o transcript keys, the sticky-row click and hover, the shells list and `x`, the loose list, the compaction screen, the bang fold.
 
 ## M16 — Tools Claude has and pi lacks (time box: 3 sessions)
 

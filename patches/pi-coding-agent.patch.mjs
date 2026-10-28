@@ -453,6 +453,34 @@ const EDITS = [
 		'content:[{type:"text",text:bashExecutionToText2(m2)}]',
 		'content:globalThis.__claudeBangBlocks?.(m2,messages)??[{type:"text",text:bashExecutionToText2(m2)}]',
 	],
+	[
+		'pastes=new Map;pasteCounter=0;pasteBuffer=""',
+		'pastes=new Map;get pasteCounter(){return globalThis.__claudePasteCount??0}set pasteCounter(count){globalThis.__claudePasteCount=Math.max(count,globalThis.__claudePasteCount??0)}pasteBuffer=""',
+	],
+	[
+		"if(isPastedSegmented){let targetId=Number(isPastedSegmented[1]);",
+		"if(isPastedSegmented&&(this.pastes.delete(Number(isPastedSegmented[1])),!1)){let targetId=Number(isPastedSegmented[1]);",
+	],
+	[
+		"submitValue(){this.cancelAutocomplete();let result=this.expandPasteMarkers(this.state.lines.join(`\n`)).trim();",
+		"submitValue(){this.cancelAutocomplete();let result=globalThis.__claudePasteSubmit?.(this.state.lines.join(`\n`).trim(),this.pastes)??this.expandPasteMarkers(this.state.lines.join(`\n`)).trim();",
+	],
+	[
+		"addToHistory(text){let trimmed=text.trim();",
+		"addToHistory(text){let trimmed=(globalThis.__claudePasteShown?.(text)??text).trim();",
+	],
+	[
+		"restoreQueuedMessagesToEditor(options){let{steering,followUp}=this.clearAllQueues(),allQueued=[...steering,...followUp];",
+		"restoreQueuedMessagesToEditor(options){let{steering,followUp}=this.clearAllQueues(),allQueued=[...steering,...followUp].map(text=>globalThis.__claudePasteShown?.(text)??text);",
+	],
+	[
+		"onSubmit=async text=>{if(text=text.trim(),!!text){",
+		"onSubmit=async text=>{if(text=globalThis.__claudePasteKept?.(text)??text.trim(),!!text){",
+	],
+	[
+		'if((await this.runtimeHost.newSession()).cancelled)return;this.chatContainer.addChild(new Spacer(1)),this.chatContainer.addChild(new UserMessageComponent(this.clearCommandText??"/new"))',
+		'if((await this.runtimeHost.newSession()).cancelled)return;this.chatContainer.addChild(new UserMessageComponent(this.clearCommandText??"/new"))',
+	],
 ];
 
 const check = process.argv.includes("--check");

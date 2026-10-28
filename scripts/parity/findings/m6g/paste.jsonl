@@ -1,0 +1,5 @@
+{"type": "session", "version": 3, "id": "7d0c4f2e-5a61-4b8e-9c3a-15e0a2b7c901", "timestamp": "2026-10-28T10:00:00.000Z", "cwd": "C:\\Users\\cuong\\.pi\\sandbox\\agent\\scripts\\parity\\findings\\m6g"}
+{"type": "message", "id": "a1500000", "parentId": null, "timestamp": "2026-10-28T10:00:00.000Z", "message": {"role": "user", "content": [{"type": "text", "text": "M15 paste run."}], "timestamp": 1790650000000}}
+{"type": "message", "id": "a1500001", "parentId": "a1500000", "timestamp": "2026-10-28T10:00:00.500Z", "message": {"role": "assistant", "content": [{"type": "text", "text": "ready"}], "stopReason": "stop", "usage": {"input": 10, "output": 5}, "timestamp": 1790650000500}}
+{"type": "message", "id": "a1510000", "parentId": "a1500001", "timestamp": "2026-10-28T10:00:02.000Z", "message": {"role": "user", "content": [{"type": "text", "text": "f1\nf2\nf3\nf4"}], "timestamp": 1790650002000}}
+{"type": "message", "id": "a1510001", "parentId": "a1510000", "timestamp": "2026-10-28T10:00:02.500Z", "message": {"role": "assistant", "content": [{"type": "text", "text": "pasteseen"}], "stopReason": "stop", "usage": {"input": 10, "output": 5}, "timestamp": 1790650002500}}

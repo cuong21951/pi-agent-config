@@ -1,0 +1,26 @@
+{
+ "prompt": "",
+ "bypass": true,
+ "rows": 30,
+ "steps": [
+  {"keys": "\u001b[200~a1\na2\na3\na4\u001b[201~"}, {"sleep": 1}, {"snap": "first"},
+  {"keys": "\u0003"}, {"sleep": 1}, {"snap": "cleared"},
+  {"keys": "\u001b[200~b1\nb2\nb3\nb4\nb5\u001b[201~"}, {"sleep": 1}, {"snap": "after-clear"},
+  {"keys": " and "}, {"sleep": 0.5},
+  {"keys": "\u001b[200~c1\nc2\nc3\nc4\u001b[201~"}, {"sleep": 1}, {"snap": "two-markers"},
+  {"keys": "\u007f"}, {"sleep": 1}, {"snap": "deleted-last"},
+  {"keys": "\u001b[200~d1\nd2\nd3\nd4\u001b[201~"}, {"sleep": 1}, {"snap": "after-delete"},
+  {"keys": "\u0001\u001b[C\u001b[C\u001b[C\u001b[C\u001b[C\u001b[C\u001b[C\u001b[C\u001b[C\u001b[C\u001b[C\u001b[C\u001b[C\u001b[C\u001b[C\u001b[C\u001b[C\u001b[C\u001b[C\u001b[C\u001b[C\u001b[C\u001b[C\u001b[C\u001b[C\u007f"}, {"sleep": 1}, {"snap": "deleted-first"},
+  {"keys": "\u001b[200~e1\ne2\ne3\ne4\u001b[201~"}, {"sleep": 1}, {"snap": "after-delete-first"},
+  {"keys": "\u0003"}, {"sleep": 1},
+  {"keys": "Reply with exactly: ok. No other text. "}, {"sleep": 0.5},
+  {"keys": "\u001b[200~f1\nf2\nf3\nf4\u001b[201~"}, {"sleep": 1}, {"snap": "before-submit"},
+  {"keys": "\r"}, {"until": "✻ \\S+ for [^\\n]*· done", "timeout": 90}, {"sleep": 1.5},
+  {"keys": "\u001b[200~g1\ng2\ng3\ng4\u001b[201~"}, {"sleep": 1}, {"snap": "after-submit"},
+  {"keys": "\u0003"}, {"sleep": 1},
+  {"keys": "/clear"}, {"sleep": 1}, {"keys": "\r"}, {"sleep": 3},
+  {"keys": "\u001b[200~h1\nh2\nh3\nh4\u001b[201~"}, {"sleep": 1}, {"snap": "after-clear-cmd"},
+  {"keys": "\u0003"}, {"sleep": 1}
+ ],
+ "end": "."
+}

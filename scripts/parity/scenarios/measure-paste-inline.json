@@ -1,0 +1,19 @@
+{
+ "prompt": "",
+ "bypass": true,
+ "rows": 40,
+ "steps": [
+  {"keys": "Reply with exactly: ok. "}, {"sleep": 0.5},
+  {"keys": "\u001b[200~this pasted line is long enough~\u001b[201~"}, {"sleep": 1}, {"snap": "inline-box"},
+  {"keys": " tail"}, {"sleep": 0.5},
+  {"keys": "\r"}, {"until": "✻ \\S+ for [^\\n]*· done", "timeout": 90}, {"sleep": 1.5}, {"snap": "inline"},
+  {"keys": "Reply with exactly: ok. "}, {"sleep": 0.5},
+  {"keys": "\u001b[200~short paste\u001b[201~"}, {"sleep": 1},
+  {"keys": "\r"}, {"until": "(?s)(✻ \\S+ for [^\\n]*· done.*){2}", "timeout": 90}, {"sleep": 1.5}, {"snap": "short"},
+  {"keys": "\u001b[200~x1\nx2\nx3\nx4\u001b[201~"}, {"sleep": 1},
+  {"keys": "\r"}, {"until": "(?s)(✻ \\S+ for [^\\n]*· done.*){3}", "timeout": 90}, {"sleep": 1.5}, {"snap": "only-paste"},
+  {"keys": "Reply with exactly: ok. <pasted_content id=\"abcd\"> typed"}, {"sleep": 0.5},
+  {"keys": "\r"}, {"until": "(?s)(✻ \\S+ for [^\\n]*· done.*){4}", "timeout": 90}, {"sleep": 1.5}, {"snap": "typed-tag"}
+ ],
+ "end": "."
+}
