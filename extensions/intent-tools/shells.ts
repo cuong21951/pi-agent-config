@@ -40,7 +40,7 @@ export const BASH_BACKGROUND_GUIDANCE =
 	"\n - If your command is long running and you would like to be notified when it finishes — use `run_in_background`. No sleep needed." +
 	"\n - If waiting for a background task you started with `run_in_background`, you will be notified when it completes — do not poll.";
 export const STOP_DESCRIPTION =
-	"\n- Stops a running background task by its ID\n- Takes a task_id parameter identifying the task to stop\n- To stop an agent-team teammate, pass its agent ID (\"name@team\") or bare teammate name as task_id\n- To stop a background agent spawned with a name, pass that name as task_id\n- Returns a success or failure status\n- Use this tool when you need to terminate a long-running task\n";
+	"\n- Stops a running background task by its ID\n- Takes a task_id parameter identifying the task to stop\n- To stop an agent-team teammate, pass its agent ID or bare teammate name as task_id\n- To stop a background agent spawned with a name, pass that name as task_id\n- Returns a success or failure status\n- Use this tool when you need to terminate a long-running task\n";
 
 const ID_ALPHABET = "0123456789abcdefghijklmnopqrstuvwxyz";
 const NOTIFICATION_PREAMBLE =

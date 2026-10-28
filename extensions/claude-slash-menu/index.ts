@@ -155,6 +155,8 @@ const DEFAULT_FG = "\x1b[39m";
 const BOLD = "\x1b[1m";
 const NOT_BOLD = "\x1b[22m";
 const INDENT = "  ";
+const POINTER = "❯ ";
+const NO_POINTER = "  ";
 const NAME_GAP = 2;
 const MIN_DESCRIPTION_WIDTH = 10;
 
@@ -187,12 +189,14 @@ export function menuRow(item: { value: string }, selected: boolean, width: numbe
 	const query = typed.slice(1).toLowerCase();
 	const columnWidth = Math.max(1, Math.min(nameColumn, width - INDENT.length - 4));
 	const bare = item.value.startsWith("/") ? item.value.slice(1) : item.value;
-	const name = clip(bare, Math.max(0, Math.max(1, columnWidth - NAME_GAP) - 1), "");
+	const gutter = selected ? POINTER : NO_POINTER;
+	const nameRoom = columnWidth - NAME_GAP - (description ? gutter.length : 0);
+	const name = clip(bare, Math.max(0, Math.max(1, nameRoom) - 1), "");
 	const nameWidth = 1 + visibleWidth(name);
-	const spacing = " ".repeat(Math.max(1, columnWidth - nameWidth));
-	const descriptionStart = INDENT.length + nameWidth + spacing.length;
+	const spacing = " ".repeat(Math.max(1, columnWidth - gutter.length - nameWidth));
+	const descriptionStart = INDENT.length + gutter.length + nameWidth + spacing.length;
 	const descriptionWidth = width - descriptionStart;
-	const head = `${color}${INDENT}/${paintMatches(name, query, selected, false)}`;
+	const head = `${color}${INDENT}${gutter}/${paintMatches(name, query, selected, false)}`;
 	if (!description || descriptionWidth <= MIN_DESCRIPTION_WIDTH) return [head + DEFAULT_FG];
 	const [first, second] = wrapDescription(description, descriptionWidth);
 	const firstLine = head + spacing + paintMatches(first, query, selected, true) + DEFAULT_FG;
@@ -311,30 +315,30 @@ if (process.env.CLAUDE_SLASH_MENU_SELFTEST) {
 	const SHOW_ME = "Help the user understand the current topic visually with concise diagrams, code-shape sketches, and focused HTML artifacts. (user)";
 	check(
 		same(menuRow({ value: "show-me" }, true, 130, SHOW_ME, 30, "/show"), [
-			`${SELECTED}  /${BOLD}show${NOT_BOLD}-me${" ".repeat(22)}Help the user understand the current topic visually with concise diagrams, code-shape sketches,${DEFAULT_FG}`,
+			`${SELECTED}  ${POINTER}/${BOLD}show${NOT_BOLD}-me${" ".repeat(20)}Help the user understand the current topic visually with concise diagrams, code-shape sketches,${DEFAULT_FG}`,
 			`${SELECTED}${" ".repeat(32)}and focused HTML artifacts. (user)${DEFAULT_FG}`,
 		]),
-		"the selected row is 99ccff with the typed text bold, description wrapped under column 32 and ending two columns short of the terminal's 132 (Claude 2.1.283, '/show'; the list itself is drawn 130 wide, inside claude-input's prompt)",
+		"the selected row is 99ccff with the typed text bold, description wrapped under column 32 and ending two columns short of the terminal's 132 (Claude 2.1.310 draws a two-column pointer gutter inside the 32-column name lane, '/show'; the list itself is drawn 130 wide, inside claude-input's prompt)",
 	);
 	check(
 		same(menuRow({ value: "resume" }, false, 130, "Resume a previous conversation", 30, "/resme"), [
-			`${UNSELECTED}  /${DEFAULT_FG}${BOLD}res${NOT_BOLD}${UNSELECTED}u${DEFAULT_FG}${BOLD}me${NOT_BOLD}${UNSELECTED}${" ".repeat(23)}Resume a previous conversation${DEFAULT_FG}`,
+			`${UNSELECTED}  ${NO_POINTER}/${DEFAULT_FG}${BOLD}res${NOT_BOLD}${UNSELECTED}u${DEFAULT_FG}${BOLD}me${NOT_BOLD}${UNSELECTED}${" ".repeat(21)}Resume a previous conversation${DEFAULT_FG}`,
 		]),
-		"an unselected row is 999999 with its matched characters bold in the default colour (Claude 2.1.283, '/resme')",
+		"an unselected row is 999999 with its matched characters bold in the default colour (Claude 2.1.310, '/resme'; a row without the pointer keeps a blank two-column gutter)",
 	);
 	const DIAGRAMMING = "Diagramming know-how for Artifacts - when a picture earns its place, how to draw one that shows the real mechanism, and the inline-SVG mechanics that keep it legible in both themes.";
 	check(
 		same(menuRow({ value: "artifact-diagramming" }, false, 130, DIAGRAMMING, 30, "/show"), [
-			`${UNSELECTED}  /artifact-diagramming${" ".repeat(9)}Diagramming know-how for Artifacts - when a picture earns its place, how to draw one that ${DEFAULT_FG}${BOLD}show${NOT_BOLD}${UNSELECTED}s${DEFAULT_FG}`,
+			`${UNSELECTED}  ${NO_POINTER}/artifact-diagramming${" ".repeat(7)}Diagramming know-how for Artifacts - when a picture earns its place, how to draw one that ${DEFAULT_FG}${BOLD}show${NOT_BOLD}${UNSELECTED}s${DEFAULT_FG}`,
 			`${UNSELECTED}${" ".repeat(32)}the real mechanism, and the inline-SVG mechanics that keep it legible in both themes.${DEFAULT_FG}`,
 		]),
 		"an unselected row bolds the typed text inside its description (Claude 2.1.283, '/show' on /artifact-diagramming)",
 	);
-	check(same(menuRow({ value: "clear" }, false, 130, undefined, 30, "/"), [`${UNSELECTED}  /clear${DEFAULT_FG}`]), "a bare slash bolds nothing, and a row without a description is the name alone");
+	check(same(menuRow({ value: "clear" }, false, 130, undefined, 30, "/"), [`${UNSELECTED}  ${NO_POINTER}/clear${DEFAULT_FG}`]), "a bare slash bolds nothing, and a row without a description is the name alone");
 	const EXPLAIN = "Explain a solution, bug, design or concept the Feynman way — one concrete picture carried all the way through, the tempting wrong answers and why they fail, no jargon without a plain-word twin, an honest section at the end";
 	check(
 		same(menuRow({ value: "explain" }, true, 130, EXPLAIN, 30, "/expl"), [
-			`${SELECTED}  /${BOLD}expl${NOT_BOLD}ain${" ".repeat(22)}${BOLD}Expl${NOT_BOLD}ain a solution, bug, design or concept the Feynman way — one concrete picture carried all the${DEFAULT_FG}`,
+			`${SELECTED}  ${POINTER}/${BOLD}expl${NOT_BOLD}ain${" ".repeat(20)}${BOLD}Expl${NOT_BOLD}ain a solution, bug, design or concept the Feynman way — one concrete picture carried all the${DEFAULT_FG}`,
 			`${SELECTED}${" ".repeat(32)}way through, the tempting wrong answers and why they fail, no jargon without a plain-word twin, a…${DEFAULT_FG}`,
 		]),
 		"a description past two lines ends in an ellipsis drawn in the row's own colour (Claude 2.1.283, '/expl')",

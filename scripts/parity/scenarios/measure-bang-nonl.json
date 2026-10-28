@@ -1,0 +1,89 @@
+{
+ "prompt": "M13 bang run.",
+ "fixture": "findings/m6g/fixture",
+ "pi_mock": true,
+ "session": "findings/m6g/bang.jsonl",
+ "end": "endseen[\\s\\S]*✻ \\S+ for [^\n]*· done",
+ "steps": [
+  {
+   "until": "ready[\\s\\S]*✻ \\S+ for [^\\n]*· done",
+   "timeout": 60
+  },
+  {
+   "keys": "!echo m13-one"
+  },
+  {
+   "sleep": 1
+  },
+  {
+   "snap": "typed"
+  },
+  {
+   "keys": "\r"
+  },
+  {
+   "until": "oneseen[\\s\\S]*✻ \\S+ for [^\\n]*· done",
+   "timeout": 60
+  },
+  {
+   "sleep": 1
+  },
+  {
+   "snap": "one"
+  },
+  {
+   "keys": "!python -c \"import sys; sys.stdout.write('boom'); sys.exit(3)\""
+  },
+  {
+   "sleep": 1
+  },
+  {
+   "keys": "\r"
+  },
+  {
+   "until": "failseen[\\s\\S]*✻ \\S+ for [^\\n]*· done",
+   "timeout": 60
+  },
+  {
+   "sleep": 1
+  },
+  {
+   "snap": "fail"
+  },
+  {
+   "keys": "!python -c \"import sys; sys.stdout.buffer.write(b'a\\nb\\nc\\nd\\ne\\n')\""
+  },
+  {
+   "sleep": 1
+  },
+  {
+   "keys": "\r"
+  },
+  {
+   "until": "longseen[\\s\\S]*✻ \\S+ for [^\\n]*· done",
+   "timeout": 60
+  },
+  {
+   "sleep": 1
+  },
+  {
+   "keys": "!echo m13-end"
+  },
+  {
+   "sleep": 1
+  },
+  {
+   "keys": "\r"
+  },
+  {
+   "until": "endseen[\\s\\S]*✻ \\S+ for [^\n]*· done",
+   "timeout": 60
+  },
+  {
+   "sleep": 1
+  },
+  {
+   "snap": "long"
+  }
+ ]
+}

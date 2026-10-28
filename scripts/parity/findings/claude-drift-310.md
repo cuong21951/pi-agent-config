@@ -143,14 +143,23 @@ platform, `measure` needs an on-screen capture of 2.1.310 to know.
 10. Row 7, send-now timing (measure): ctrl+enter after the first response bytes, then `m6a-sendnow`.
 Then rows 9, 10, 43 (wrap/tables, agents view, `/tasks` title), 11, 12, 13, 14.
 
-## Verdicts (not yet measured on 2.1.310)
+## Verdicts on 2.1.310 (M14, 2026-10-28)
 
-| Item | Verdict | Evidence |
+Measured by the suite on 2.1.310 (`m14-g2`, `m14-g3`, 83/83 twice) and by the first run's differences (8/83).
+
+| Rows | Verdict | Evidence |
 | --- | --- | --- |
-| Fork directive (307) | port | changelog |
-| `Waiting to be delivered` under ctrl+o (309) | port | literal |
-| Up recovers Ctrl+C-cleared prompt (292) | port | web |
-| Question auto-continue after editor close (310) | port | web |
-| `❯` pointer, `← for agents`, bundled skill descriptions, outside-cwd paths, dim text, send-now, wrap/tables, agents view, compaction row, notifications, plan-mode note, held-prompt Enter, `/tasks` title, denial reason, tab stops, footer pill | measure | see rows 3-14, 40, 43-46 |
-| Idle compaction, hints, wakeups, MCP consent, Workflow, `/focus`, Monitor, auto-mode rows, compaction-size dialog | new | rows 15-22, 47-53, 58, 62 |
-| Account, platform, remote, hook, mod, vim and error-string bullets | n/a | rows 23-39, 54-57, 59-61 |
+| 1 | ported | fork directive and own-launch result text, `m6g-fork` `reqdiff` clean |
+| 40 | ported | first run: every slash-menu case differed on `❯ ` and the two-blank gutter; now clean |
+| 3 | matched (named exception stays) | `← for agents` in 13 short replays on Claude's side, gone after 10 s in the other 70; diff.py's agents-view rule covers it, pi draws none |
+| 4, 7, 10, 12, 13 | matched | `slash-skill`, `m6a-sendnow`, `m6f-view`, the m6g notification cases and `plan` clean on 2.1.310; `bypass permissions is available` in no capture |
+| 5, 8, 14, 43, 44 | matched where the suite reaches | `edit-create-replay`, `m2-edit-permission`, `m4d-decline-edit` clean; the outside-cwd path form, a mid-check cut-off and a held prompt are not driven by any case |
+| 9, 45 | carried to M15 | no CJK/emoji-beside-Latin or tab case in the suite; wrap cases clean |
+| 6 | carried to M17 | ANSI and 16-colour dim handling, theme work |
+| 2, 11, 41, 42, 46 | carried to M15 | ctrl+o waiting messages, resumed compaction row, Up after Ctrl+C, question timeout after the editor, footer-pill typing |
+| 18, 22, 53 | carried to M16 | ScheduleWakeup and `/loop`, Workflow, Monitor (`m16-monitor-cron.md`, `m16-workflow-btw.md`) |
+| 62 | carried to M15 | Ctrl+Y hint (`m15-bundle.md`) |
+| 15-17, 19-21, 47-52, 58 | not in scope | idle compaction, agent-view pickers, `/auto-mode-setup`, MCP consent (Cuong's decision), auto-mode rows, `/focus`, `/copy` quoting, compaction-size dialog: pi has no counterpart |
+| 23-39, 54-57, 59-61 | n/a | account, platform, remote, hook, mod, vim and error-string bullets |
+
+Also changed on 2.1.310 and ported, found by the first run rather than the notes: the Agent tool's `effort` parameter, SendMessage's queued-result text, TaskStop's `task_id` text, `/usage`'s `1m 3s` wall time, a failed `!` command's trailing blank row, and tool search turned on for every endpoint (README, Not matched).

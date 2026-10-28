@@ -41,8 +41,10 @@ export default function (pi: ExtensionAPI) {
 		hooks.__claudeBang = (bang, width) => {
 			const since = started.get(bang) ?? Date.now();
 			started.set(bang, since);
-			const rows = bangRows(bang, width, paint, { elapsedMs: Date.now() - since, hint: SHELLS in globalThis ? HINT : undefined });
-			return hooks.__claudeMode?.chatContainer.children[0] === bang ? rows.slice(1) : rows;
+			const children = hooks.__claudeMode?.chatContainer.children ?? [];
+			const newest = children.findLast((child) => typeof child === "object" && child !== null && "outputLines" in child) === bang;
+			const rows = bangRows(bang, width, paint, { elapsedMs: Date.now() - since, hint: SHELLS in globalThis ? HINT : undefined }, newest);
+			return children[0] === bang ? rows.slice(1) : rows;
 		};
 		if (hooks.__claudeMode) installBangMode(hooks.__claudeMode, paint);
 	});
