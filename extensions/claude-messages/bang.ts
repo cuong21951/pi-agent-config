@@ -65,8 +65,14 @@ function runningRows(lines: string[], width: number, paint: Paint, running: Runn
 	return [...tail.map((line, i) => paint("muted", (i === 0 ? ELBOW : INDENT) + line)), paint("muted", `${INDENT}${hidden > 0 ? `+${hidden} lines ` : ""}${elapsed}`), ...hint];
 }
 
-export function outputRows(bang: Bang, width: number, paint: Paint, running: Running = IDLE): string[] {
+export function outputRows(bang: Bang, width: number, paint: Paint, running: Running = IDLE, newest = false): string[] {
 	const lines = printed(bang.outputLines);
+	const rows = settledRows(bang, lines, width, paint, running);
+	const keepsNewline = newest && bang.status === "error" && lines.length > 0 && bang.outputLines.at(-1) === "";
+	return keepsNewline ? [...rows, ""] : rows;
+}
+
+function settledRows(bang: Bang, lines: string[], width: number, paint: Paint, running: Running): string[] {
 	if (bang.status === "running") return runningRows(lines, width, paint, running);
 	const failed = bang.status === "error";
 	if (lines.length === 0) return failed ? [paint("muted", `${ELBOW}(No output)`)] : [`${paint("muted", ELBOW)}(Bash completed with no output)`];
@@ -79,8 +85,8 @@ export function outputRows(bang: Bang, width: number, paint: Paint, running: Run
 	return [...shown.map((line, i) => (i === 0 ? paint("muted", ELBOW) : INDENT) + tone(line)), ...more];
 }
 
-export function bangRows(bang: Bang, width: number, paint: Paint, running: Running = IDLE): string[] {
-	return bang.status === "cancelled" ? [] : ["", ...commandRows(bang.command, width, paint), ...outputRows(bang, width, paint, running)];
+export function bangRows(bang: Bang, width: number, paint: Paint, running: Running = IDLE, newest = false): string[] {
+	return bang.status === "cancelled" ? [] : ["", ...commandRows(bang.command, width, paint), ...outputRows(bang, width, paint, running, newest)];
 }
 
 export function bangBlocks(message: BangMessage, first: boolean): { type: "text"; text: string }[] {
@@ -116,6 +122,9 @@ if (process.env.CLAUDE_MESSAGES_SELFTEST) {
 	check(outputRows(bang("complete", "one two three four"), 20, plain).join("|") === "  ⎿  one two th|     ree four", "the cut is by column, not at a word: Claude breaks a path mid-name (measure-bang-ctrlb)");
 	check(outputRows(bang("complete", "界".repeat(8)), 20, plain).join("|") === `  ⎿  ${"界".repeat(5)}|     ${"界".repeat(3)}`, "a wide character counts two columns, so no row overruns the terminal");
 	check(outputRows(bang("error", "boom"), 80, tagged).join("|") === "<muted>  ⎿  </muted><error>boom</error>", "a failed command's output is ff6666, with no exit-code row");
+	check(outputRows(bang("error", "boom\n"), 80, plain, IDLE, true).join("|") === `${ELBOW}boom|`, "the newest failed command keeps its trailing newline as a blank row (2.1.310, m13-bang fail vs measure-bang-nonl)");
+	check(outputRows(bang("error", "boom"), 80, plain, IDLE, true).length === 1 && outputRows(bang("error", "boom\n"), 80, plain).length === 1, "not without the newline, and not once a newer command ran");
+	check(outputRows(bang("complete", "hi\n"), 80, plain, IDLE, true).length === 1, "a successful command never keeps it");
 	check(outputRows(bang("error", lines(5)), 80, tagged)[3] === `     <error>${DIM}… +2 lines${UNDIM}</error>`, "and so is its count row");
 	check(outputRows(bang("complete"), 80, tagged).join("|") === "<muted>  ⎿  </muted>(Bash completed with no output)", "no output, exit 0");
 	check(outputRows(bang("error"), 80, tagged).join("|") === "<muted>  ⎿  (No output)</muted>", "no output, non-zero exit");

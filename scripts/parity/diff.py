@@ -114,7 +114,7 @@ def load(name, side, applied, keep=None):
     return without_menu_filler(kept)
 
 
-MENU_ROW = re.compile(r"^  /[a-z]")
+MENU_ROW = re.compile(r"^  (?:❯| ) /[a-z]")
 
 
 def without_menu_filler(lines):
@@ -128,7 +128,7 @@ def without_menu_filler(lines):
 
 
 MENU_INVENTORY = "slash-menu inventory: each harness lists its own commands for a query, so only the rows both menus show are compared; the blank rows above an open menu follow its height and are not compared"
-MENU_NAME = re.compile(r"^  (/[a-z][\w:.-]*)")
+MENU_NAME = re.compile(r"^  (?:❯| ) (/[a-z][\w:.-]*)")
 MENU_FOLLOWER = re.compile(r"^ {32}\S")
 
 

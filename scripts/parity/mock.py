@@ -264,6 +264,14 @@ def blocks_for_claude(reply, claude_tools, plan_file=None, schemas=None):
     return blocks
 
 
+DEFERRED_MCP_TOOL = re.compile(r"^(mcp__[\w-]+__[\w-]+)$", re.M)
+
+
+def deferred_mcp_tools(body):
+    texts = [b.get("text", "") for m in body.get("messages", []) for b in ([{"type": "text", "text": m["content"]}] if isinstance(m.get("content"), str) else m.get("content") or []) if b.get("type") == "text"]
+    return list(dict.fromkeys(name for text in texts for name in DEFERRED_MCP_TOOL.findall(text)))
+
+
 QUEUED_IN_RESULT = re.compile(r"The user sent a new message while you were working:\n(.*?)\n\nThis is how", re.S)
 
 
@@ -398,7 +406,7 @@ class Handler(BaseHTTPRequestHandler):
             return self.send_json(529, {"type": "error", "error": {"type": "overloaded_error", "message": error.get("errorMessage") or "Overloaded"}})
         reply = entry["message"]
         schemas = {t.get("name"): t.get("input_schema") for t in body.get("tools", [])}
-        blocks = blocks_for_claude(reply, tools, plan_file_of(body), schemas) or [{"type": "text", "text": ""}]
+        blocks = blocks_for_claude(reply, tools + deferred_mcp_tools(body), plan_file_of(body), schemas) or [{"type": "text", "text": ""}]
         blocks = [dict(b, input=with_claude_task_id(b["input"], body)) if b.get("name") == "TaskStop" else b for b in blocks]
         blocks = [dict(b, input=with_first_agent(b["input"], body)) if b.get("type") == "tool_use" else b for b in blocks]
         log({"kind": "reply", "step": step, "blocks": [b["type"] + (":" + b["name"] if b["type"] == "tool_use" else "") for b in blocks]})

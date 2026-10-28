@@ -127,9 +127,10 @@ export function createUsageTracker(): UsageTracker {
 export function fmtDuration(ms: number): string {
 	const totalSeconds = Math.round(ms / 1000);
 	if (totalSeconds < 60) return `${totalSeconds}s`;
-	const minutes = Math.floor(totalSeconds / 60);
+	const hours = Math.floor(totalSeconds / 3600);
+	const minutes = Math.floor(totalSeconds / 60) % 60;
 	const seconds = totalSeconds % 60;
-	return `${minutes}m${seconds}s`;
+	return hours > 0 ? `${hours}h ${minutes}m ${seconds}s` : `${minutes}m ${seconds}s`;
 }
 
 export function fmtCost(usd: number): string {
@@ -292,7 +293,7 @@ if (process.env.CLAUDE_PANELS_USAGE_SELFTEST) {
 	check(snap.linesAdded === 6 && snap.linesRemoved === 2, "code changes accumulate across every edit/write in the session");
 
 	check(fmtDuration(0) === "0s" && fmtDuration(14_000) === "14s", "Claude's exact captured readings for a near-empty session");
-	check(fmtDuration(90_000) === "1m30s", "past a minute it switches to the XmYs form");
+	check(fmtDuration(63_000) === "1m 3s", "matches Claude 2.1.310's captured wall row past a minute");
 	check(fmtCost(0) === "$0.0000" && fmtCost(0.012345) === "$0.0123", "four decimal places, matching Claude's $0.0000 reading on an empty session");
 
 	const sessionRows = sessionBlockRows({ costUsd: 0, apiMs: 0, wallMs: 14_000, linesAdded: 0, linesRemoved: 0, totals: emptyUsageTotals() }, plain, bold);

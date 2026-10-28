@@ -19,7 +19,7 @@ ap.add_argument("--session", default=None, help="replay this pi session to Claud
 ap.add_argument("--replay", default=None, help="no model at all: pi re-renders this saved session and Claude replays it")
 ap.add_argument("--prompt", default=None)
 ap.add_argument("--claude", default=os.environ.get("PARITY_CLAUDE") or os.path.join(os.environ["USERPROFILE"], ".local", "bin", "claude.exe"))
-ap.add_argument("--claude-model", default="haiku")
+ap.add_argument("--claude-model", default="claude-haiku-4-5-20251001")
 ap.add_argument("--pi-model", default="github-copilot/claude-haiku-4.5")
 ap.add_argument("--rows", type=int, default=100)
 ap.add_argument("--cols", type=int, default=132)
@@ -225,7 +225,7 @@ if a.only in (None, "claude"):
         permission = "--dangerously-skip-permissions" if bypass else "--permission-mode default --allow-dangerously-skip-permissions"
         try:
             command = f'"{slash(a.claude)}" --model {a.claude_model} {permission} {scenario.get("claude_args", "")}'
-            claude_env = [f"ANTHROPIC_BASE_URL=http://127.0.0.1:{a.port}", "ANTHROPIC_AUTH_TOKEN=parity-mock", "ENABLE_CLAUDEAI_MCP_SERVERS=false", "CLAUDE_CODE_ALWAYS_ENABLE_EFFORT=1", "DISABLE_AUTOUPDATER=1", f"CLAUDE_CONFIG_DIR={os.environ['CLAUDE_CONFIG_DIR']}", *scenario.get("claude_env", [])]
+            claude_env = [f"ANTHROPIC_BASE_URL=http://127.0.0.1:{a.port}", "ANTHROPIC_AUTH_TOKEN=parity-mock", "ENABLE_CLAUDEAI_MCP_SERVERS=false", "CLAUDE_CODE_ALWAYS_ENABLE_EFFORT=1", "DISABLE_AUTOUPDATER=1", "ENABLE_TOOL_SEARCH=false", f"CLAUDE_CONFIG_DIR={os.environ['CLAUDE_CONFIG_DIR']}", *scenario.get("claude_env", [])]
             if a.replay and not a.fresh_claude:
                 capture("claude", ["--cmd", command], claude_env, steps=[{"until": ready, "timeout": 90}, {"sleep": 1.5}, {"keys": prompt}, {"sleep": 1.5}, {"keys": "\r"}, {"until": SUBMITTED, "timeout": 6, "retries": 2, "retry_keys": "\r"}], until=DONE, out=os.path.join(a.out, "claude-live"))
                 resumed = steps_for("claude", typed=False) if scenario.get("steps") else [{"until": ready, "timeout": 90}, {"sleep": 1.5}]

@@ -187,6 +187,25 @@ const DOWN = "\x1b[B";
 }
 
 {
+  const contract = await jiti.import(path.join(here, "../npm/node_modules/@tintinweb/pi-subagents/src/claude-contract.ts"));
+  const { resolveAgentInvocationConfig } = await jiti.import(path.join(here, "../npm/node_modules/@tintinweb/pi-subagents/src/invocation-config.ts"));
+  const alone = contract.forkLaunchResult([{ id: "a", name: "Agent" }], "a");
+  assert.equal(alone.get("a"), "Fork started — that fork is you.");
+  const together = contract.forkLaunchResult([{ id: "a", name: "Read" }, { id: "b", name: "Agent" }, { id: "c", name: "Agent" }], "c");
+  assert.equal(together.get("a"), "This is the parent's call, not yours. It may not have run yet, and its result goes to the parent.");
+  assert.equal(together.get("b"), together.get("a"));
+  assert.equal(together.get("c"), alone.get("a"));
+  assert.equal(contract.forkLaunchResult([{ id: "w", name: "Workflow" }], "w").get("w"), "This call started a fork, and that fork is you. The call's other work and its result belong to the parent.");
+  assert.ok(contract.messageQueued("x").endsWith("at its next tool round. If it finishes first, it is resumed with the message and notifies again, so wait for that notification before resending."));
+  const effort = (name: "Agent" | "AgentNoFork") => contract.CLAUDE_TOOLS[name].input_schema.properties.effort;
+  assert.deepEqual(effort("Agent").enum, ["low", "medium", "high", "xhigh", "max"]);
+  assert.ok(effort("Agent").description.endsWith(' Ignored for subagent_type: "fork": a fork runs at your own effort.') && !effort("AgentNoFork").description.includes("fork"));
+  assert.equal(resolveAgentInvocationConfig(undefined, { effort: "high" }).thinking, "high");
+  assert.equal(contract.CLAUDE_TOOLS.TaskStop.description.includes("name@team"), false);
+  console.log("PASS: forks launched together are told which launch is theirs (Claude 2.1.310 XEo: the lone or launching Agent call reads \"that fork is you\", its siblings \"not yours\"), a queued SendMessage says it resumes a finished agent, Agent takes Claude 2.1.310's effort, TaskStop drops \"(name@team)\"");
+}
+
+{
   const { withoutReminders } = await jiti.import(path.join(here, "../npm/node_modules/@tintinweb/pi-subagents/src/ui/fleet-list.ts"));
   const shown = withoutReminders({ role: "user", content: [{ type: "text", text: "<system-reminder>\n# Environment\nx\n</system-reminder>\n<system-reminder>\nToday's date is 2026-09-29.\n</system-reminder>\nDo the task." }] });
   assert.equal(shown.content[0].text, "Do the task.");
