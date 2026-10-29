@@ -64,6 +64,8 @@ PYTHONIOENCODING=utf-8 py -3.12 scripts\subf2m_vie.py --title "the last of us" -
 - `--list` shows entries (id, episode coverage, uploader, sample files). Prefer entries whose filenames match the release type (HMAX WEB-DL for WEB-DL downloads, BluRay Remux for REMUX).
 - Then download+place: `--id <id>` (drop `--list`). Place = each .srt copied next to its matching .mkv (same base name) — players auto-load same-name subs. Files land in subfolders; the script matches recursively.
 - Timing note: WEB-DL subs ≈ WEB-DL videos; BluRay Remux subs ≈ REMUX videos.
+- If search returns HTTP 500, probe slugs with curl (`https://subf2m.co/subtitles/<slug>/vietnamese` → 200) and pass `--slug`. Newer shows use `<title>-<year>` (Fallout = `fallout-2024`), not `-first-season`.
+- Subs can be placed while the download runs: mkv files are preallocated, so the matcher already finds them.
 
 ## Step 7 — Play
 

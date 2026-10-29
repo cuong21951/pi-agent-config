@@ -17,8 +17,8 @@ Backend: Apps Script project `timesheet-api` in the work account, deployed as we
    - A lone ADO state change is the weakest signal, never the tiebreaker.
    - Build artifacts (.cache, .dll, obj/, bin/) are noise, not volume.
    - 00:00-04:00 activity belongs to the previous workday; post-21:00 evidence counts for less.
-   - No evidence at all → leave the row empty and report `NO EVIDENCE - ask Cuong`. Never invent a ticket.
-4. `logwork.py log yyyy-MM-dd <workitem-id>` → prints `total X -> Y`; Y must be X+8. The script refuses already-filled rows and holiday rows (`--force` only when Cuong explicitly asks to overwrite).
+   - Every OPEN row must be filled, never left empty. No evidence at all → log the work item of the nearest earlier done row and report `NO EVIDENCE - carried <id> from <date>, check`.
+4. `logwork.py log yyyy-MM-dd <workitem-id>` → writes column C, keeps the hours Cuong pre-filled in column D (8 if blank), re-reads the row and prints `verified`. The total may not move when the hours were pre-filled. The script refuses rows whose column C is already filled and holiday rows (`--force` only when Cuong explicitly asks to overwrite).
 5. Report one line per date: date, row, work item, alternatives passed over and why.
 
 ## Day off

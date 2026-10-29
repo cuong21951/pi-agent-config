@@ -89,9 +89,13 @@ root-cause-over-symptom, and the `ponytail:` marker — not repeated here.
 
 # Model routing
 
-1. The model is Claude Opus 5.5 on GitHub Copilot (`github-copilot/claude-opus-5.5`), for all work. No other model.
+1. The main thread is Claude Opus 5.5 on GitHub Copilot (`github-copilot/claude-opus-5.5`). Subagents run on a cheaper Copilot model. Pass `model` in full and always pass `thinking` on `Agent({ model, thinking })` — bare names like `sonnet` fuzzy-resolve to another provider and are rejected by `scopeModels`. Copilot bills per token at list price, so the rung matters: Haiku is 40x cheaper than Opus, Sonnet 2x.
+   - `github-copilot/claude-haiku-5.5`, `thinking: "medium"` (`"high"` for a longer agent task) — narrowly scoped, read-only or mechanical: grep sweeps, inventories, "find every call site of X", log scraping, digesting a big file, renames, a single-file edit where the exact change is spelled out. Not for deciding what to change, cross-file reasoning or debugging. Never `low` (stops early, reports done unchecked) and never `xhigh`/`max`. Brief it to return `path:line` or command output for every claim and to keep the report short.
+   - `github-copilot/claude-sonnet-5.5`, `thinking: "medium"` (`"high"` for harder or longer work) — writes real code from a spec you can state: multi-file implementation, tests, straightforward refactor; it matches Opus there. Also the finder half of review and debugging: reproduce, narrow, list candidates. Not for naming the root cause of a hard bug or for design and contract choices. Never `xhigh`/`max`: at that point Opus is both cheaper and better.
+   - No Opus subagents; root cause, design judgment and the final review stay on the main thread.
+   - Haiku returns a guess instead of a `path:line` → rerun on Sonnet. Sonnet's result doesn't survive your check → do it on the main thread, not Sonnet at higher thinking.
 2. A subagent re-establishes context, re-explores, reports back, and you re-read the report. Delegate only when the payoff clearly exceeds that cost. A few file reads, one search, a short edit, a single check — do those inline.
-3. Don't fan out several subagents on one small task, and don't spawn one to double-check work you can verify inline.
+3. Don't fan out several subagents on one small task, and don't spawn one to double-check work you can verify inline. Independent sweeps are the exception: several Haiku agents in one response is cheap.
 4. Brief a subagent like a colleague who just walked in: file paths, line numbers, the actual question. Terse command-style prompts produce shallow work.
    - Wrong: "based on your findings, implement it"
    - Right: "In `src/Scheduling/SlotResolver.cs:120-180`, DST transitions shift slots by an hour. Find why and propose the minimal fix; don't edit."

@@ -447,6 +447,7 @@ export class VoiceRecorder {
 	private errorTimer?: ReturnType<typeof setTimeout>;
 	private hintTimer?: ReturnType<typeof setTimeout>;
 	private finishing = false;
+	private closed = false;
 	private ffmpegOk = false;
 	private unavailableReason: string | null = null;
 	private devices: string[] = [];
@@ -500,6 +501,7 @@ export class VoiceRecorder {
 	// A loaded terminal hands several key-repeat spaces over in one chunk; each still counts as a repeat.
 	onInput(data: string): { consume: true } | undefined {
 		if (process.env.VOICE_TRACE) logVoice(`input ${JSON.stringify(data)} state=${this.state} warmup=${this.warmup.length}`);
+		if (this.closed) return undefined;
 		this.scheduleHint();
 		if (this.state === "recording") return this.recordingInput(data);
 		if (this.state !== "idle" || !this.config.enabled || !this.ffmpegOk) return undefined;
@@ -801,6 +803,7 @@ export class VoiceRecorder {
 	}
 
 	shutdown(): void {
+		this.closed = true;
 		this.clearTimers();
 		clearTimeout(this.errorTimer);
 		clearTimeout(this.hintTimer);
@@ -820,6 +823,7 @@ type Rows = { render(width: number): string[] };
 
 export default function (pi: ExtensionAPI) {
 	let current: VoiceRecorder | null = null;
+	let unsubscribe: (() => void) | undefined;
 	const config = loadVoiceConfig();
 
 	const persist = (ctx: { ui: { notify: (m: string, l: "error") => void } }) => {
@@ -844,21 +848,22 @@ export default function (pi: ExtensionAPI) {
 		}
 		let tui: { requestRender: () => void } | null = null;
 		const ui: VoiceUi = {
-			paint: (role, text) => ctx.ui.theme.fg(role, text),
-			setSlot: (text) => ctx.ui.setStatus("voice", text),
-			getEditorText: () => ctx.ui.getEditorText(),
-			setEditorText: (text) => ctx.ui.setEditorText(text),
-			submit: (text) => pi.sendUserMessage(text),
-			requestRender: () => tui?.requestRender(),
+			paint: (role, text) => (live() ? ctx.ui.theme.fg(role, text) : text),
+			setSlot: (text) => live() && ctx.ui.setStatus("voice", text),
+			getEditorText: () => (live() ? ctx.ui.getEditorText() : ""),
+			setEditorText: (text) => live() && ctx.ui.setEditorText(text),
+			submit: (text) => live() && pi.sendUserMessage(text),
+			requestRender: () => live() && tui?.requestRender(),
 		};
 		const recorder = new VoiceRecorder(ui, config, ctx.cwd);
 		current = recorder;
-		const subscribe = (ctx.ui as unknown as { onTerminalInput?: (fn: (data: string) => { consume: true } | undefined) => void }).onTerminalInput;
+		const live = () => current === recorder;
+		const subscribe = (ctx.ui as unknown as { onTerminalInput?: (fn: (data: string) => { consume: true } | undefined) => () => void }).onTerminalInput;
 		if (typeof subscribe !== "function") {
 			ctx.ui.notify("Voice disabled: this pi build lacks the terminal input hook", "error");
 			return;
 		}
-		subscribe((data) => recorder.onInput(data));
+		unsubscribe = subscribe((data) => recorder.onInput(data));
 		const previous = ctx.ui.getEditorComponent();
 		ctx.ui.setEditorComponent((t, theme, keybindings) => {
 			tui = t;
@@ -871,6 +876,8 @@ export default function (pi: ExtensionAPI) {
 	});
 
 	pi.on("session_shutdown", async () => {
+		unsubscribe?.();
+		unsubscribe = undefined;
 		current?.shutdown();
 		current = null;
 	});
